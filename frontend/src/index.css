@@ -1,0 +1,78 @@
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+.page-container {
+  padding: 24px;
+}
+
+.text-center {
+  text-align: center;
+}
+
+.flex-container {
+  display: flex;
+}
+
+.flex-grow {
+  flex-grow: 1;
+}
+
+.flex-column {
+  flex-direction: column;
+}
+
+.align-center {
+  align-items: center;
+}
+
+.justify-center {
+  justify-content: center;
+}
+
+.mt-2 {
+  margin-top: 16px;
+}
+
+.mb-2 {
+  margin-bottom: 16px;
+}
+
+.mr-2 {
+  margin-right: 16px;
+}
+
+.ml-2 {
+  margin-left: 16px;
+}
+
+.full-width {
+  width: 100%;
+}
+
+/* 班表顏色 */
+.shift-D {
+  background-color: #bbdefb !important; /* 白班 - 淺藍色 */
+}
+
+.shift-A {
+  background-color: #c8e6c9 !important; /* 小夜班 - 淺綠色 */
+}
+
+.shift-N {
+  background-color: #d1c4e9 !important; /* 大夜班 - 淺紫色 */
+}
+
+.shift-O {
+  background-color: #ffecb3 !important; /* 休假 - 淺黃色 */
+} 
