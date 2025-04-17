@@ -23,8 +23,8 @@ class NurseFormulaAssignment(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"))
     formula_id = Column(Integer, ForeignKey("formula_schedules.id"))
-    start_cycle = Column(Integer, default=1)  # 從哪個週期開始
-    sort_order = Column(Integer)  # 排序順序
+    group_number = Column(Integer, default=1)  # 將 start_cycle 改為 group_number
+    # sort_order = Column(Integer)  # 移除此欄位以匹配資料庫
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
@@ -38,7 +38,9 @@ class FormulaSchedulePattern(Base):
     id = Column(Integer, primary_key=True, index=True)
     formula_id = Column(Integer, ForeignKey("formula_schedules.id"))
     group_number = Column(Integer)
+    day_offset = Column(Integer)  # 添加 day_offset 以匹配資料庫
     pattern = Column(String)  # 班別排列字串，例如 "DDOAONN"
+    shift_type = Column(String(5)) # 添加 shift_type 以匹配資料庫
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 

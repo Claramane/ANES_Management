@@ -107,17 +107,19 @@ async def read_formula_schedules(
                 group_number = row[2]  # group_number 在第三列
                 if group_number not in patterns_dict:
                     pattern = FormulaSchedulePattern(
-                        id=row[0],
-                        formula_id=row[1], 
-                        group_number=group_number,
-                        pattern=row[3],
-                        created_at=row[4],
-                        updated_at=row[5]
+                        id=row[0],             # Correct index
+                        formula_id=row[1],     # Correct index
+                        group_number=row[2],   # Correct index
+                        day_offset=row[3],     # NEW - Index 3 is day_offset
+                        pattern=row[4],        # UPDATED - Index 4 is pattern
+                        shift_type=row[5],     # NEW - Index 5 is shift_type
+                        created_at=row[6],     # UPDATED - Index 6 is created_at
+                        updated_at=row[7]      # UPDATED - Index 7 is updated_at
                     )
                     patterns_dict[group_number] = pattern
-                    print(f" - 添加 group_number={group_number}, pattern={row[3]}, id={row[0]}")
+                    print(f" - 添加 group_number={group_number}, pattern={row[4]}, id={row[0]}") # Update print statement index
                 else:
-                    print(f" - 忽略重複的 group_number={group_number}, pattern={row[3]}, id={row[0]}")
+                    print(f" - 忽略重複的 group_number={group_number}, pattern={row[4]}, id={row[0]}") # Update print statement index
             
             # 將字典轉換為列表
             patterns = list(patterns_dict.values())
@@ -171,17 +173,19 @@ async def read_formula_schedule(
         group_number = row[2]  # group_number 在第三列
         if group_number not in patterns_dict:
             pattern = FormulaSchedulePattern(
-                id=row[0],
-                formula_id=row[1],
-                group_number=group_number,
-                pattern=row[3],
-                created_at=row[4],
-                updated_at=row[5]
+                id=row[0],             # Correct index
+                formula_id=row[1],     # Correct index
+                group_number=row[2],   # Correct index
+                day_offset=row[3],     # NEW - Index 3 is day_offset
+                pattern=row[4],        # UPDATED - Index 4 is pattern
+                shift_type=row[5],     # NEW - Index 5 is shift_type
+                created_at=row[6],     # UPDATED - Index 6 is created_at
+                updated_at=row[7]      # UPDATED - Index 7 is updated_at
             )
             patterns_dict[group_number] = pattern
-            print(f" - 添加 group_number={group_number}, pattern={row[3]}, id={row[0]}")
+            print(f" - 添加 group_number={group_number}, pattern={row[4]}, id={row[0]}") # Update print statement index
         else:
-            print(f" - 忽略重複的 group_number={group_number}, pattern={row[3]}, id={row[0]}")
+            print(f" - 忽略重複的 group_number={group_number}, pattern={row[4]}, id={row[0]}") # Update print statement index
     
     # 將字典轉換為列表
     patterns = list(patterns_dict.values())
@@ -238,6 +242,7 @@ async def update_formula_schedule(
     # 添加操作日誌
     log = Log(
         user_id=current_user.id,
+        action="更新公式班表",
         operation_type="update_formula_schedule",
         description=f"更新公式班表: {db_formula.name} (ID: {formula_id})"
     )

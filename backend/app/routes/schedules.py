@@ -1,18 +1,21 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List, Any, Dict
+from typing import List, Any, Dict, Optional
 from datetime import datetime, date
 import calendar
+import json
+import copy
 
 from ..core.database import get_db
 from ..core.security import get_current_active_user, get_head_nurse_user, get_current_user
 from ..models.user import User
-from ..models.schedule import MonthlySchedule, ScheduleVersion
+from ..models.schedule import MonthlySchedule, ScheduleVersion, ScheduleVersionDiff
 from ..models.formula_schedule import FormulaSchedule, NurseFormulaAssignment
 from ..models.log import Log
 from ..schemas.schedule import (
     MonthlyScheduleCreate, MonthlyScheduleUpdate, MonthlySchedule as MonthlyScheduleSchema,
     ScheduleVersionCreate, ScheduleVersionUpdate, ScheduleVersion as ScheduleVersionSchema,
+    ScheduleVersionDiffCreate, ScheduleVersionDiff as ScheduleVersionDiffSchema,
     GenerateMonthScheduleRequest
 )
 
@@ -58,6 +61,7 @@ async def generate_monthly_schedule(
                 MonthlySchedule.version_id == existing_version.id
             ).delete()
             version = existing_version
+            version.is_base_version = request.as_base_version  # 設置是否為基準版本
         else:
             # 創建新版本
             version = ScheduleVersion(
@@ -65,7 +69,8 @@ async def generate_monthly_schedule(
                 month=month_str,
                 notes=request.description or f"{request.year}年{request.month}月排班表",
                 is_published=False,
-                published_by=current_user.id
+                published_by=current_user.id,
+                is_base_version=request.as_base_version  # 設置是否為基準版本
             )
             db.add(version)
             db.commit()
@@ -161,7 +166,6 @@ async def generate_monthly_schedule(
             if nurse.group_data:
                 try:
                     # 解析group_data JSON
-                    import json
                     group_data = json.loads(nurse.group_data)
                     
                     # group_data應是["公式ID", "起始組別"]格式的數組
@@ -302,6 +306,7 @@ async def generate_monthly_schedule(
         # 添加操作日誌
         log = Log(
             user_id=current_user.id,
+            action="generate_schedule",
             operation_type="generate_schedule",
             description=f"生成 {request.year}年{request.month}月排班表，共 {len(schedule_entries)} 條記錄"
         )
@@ -476,6 +481,7 @@ async def update_schedule(
     # 添加操作日誌
     log = Log(
         user_id=current_user.id,
+        action="update_schedule",
         operation_type="update_schedule",
         description=f"更新排班記錄: ID {schedule_id}, 護理師ID {db_schedule.user_id}, 日期 {db_schedule.date}"
     )
@@ -512,6 +518,7 @@ async def publish_schedule_version(
     # 添加操作日誌
     log = Log(
         user_id=current_user.id,
+        action="publish_schedule",
         operation_type="publish_schedule",
         description=f"發布排班表版本: {db_version.version_number}, 月份 {db_version.month}"
     )
@@ -520,26 +527,535 @@ async def publish_schedule_version(
     
     return db_version
 
-@router.get("/schedules/details/{year}/{month}")
-async def get_monthly_schedule_details(
-    year: int,
-    month: int,
+@router.post("/schedules/versions/compare")
+async def compare_versions(
+    version_id1: int,
+    version_id2: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """獲取月排班表的詳細信息（包含ID映射）"""
+    """比較兩個版本之間的差異"""
     try:
-        # 驗證年月的有效性
-        if year < 2000 or year > 2100 or month < 1 or month > 12:
-            raise ValueError("無效的年月")
+        # 檢查兩個版本是否存在
+        version1 = db.query(ScheduleVersion).filter(ScheduleVersion.id == version_id1).first()
+        version2 = db.query(ScheduleVersion).filter(ScheduleVersion.id == version_id2).first()
         
-        # 構建月份字符串，例如 "202304"
+        if not version1 or not version2:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="找不到指定的版本"
+            )
+        
+        # 檢查兩個版本是否屬於同一個月份
+        if version1.month != version2.month:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="只能比較相同月份的版本"
+            )
+        
+        # 獲取兩個版本的排班記錄
+        version1_schedules = db.query(MonthlySchedule).filter(MonthlySchedule.version_id == version_id1).all()
+        version2_schedules = db.query(MonthlySchedule).filter(MonthlySchedule.version_id == version_id2).all()
+        
+        # 將排班記錄轉換為字典，方便比較
+        version1_dict = {}
+        for schedule in version1_schedules:
+            key = f"{schedule.user_id}_{schedule.date}"
+            version1_dict[key] = {
+                "id": schedule.id,
+                "user_id": schedule.user_id,
+                "date": schedule.date.isoformat(),
+                "shift_type": schedule.shift_type,
+                "area_code": schedule.area_code,
+                "work_time": schedule.work_time
+            }
+        
+        version2_dict = {}
+        for schedule in version2_schedules:
+            key = f"{schedule.user_id}_{schedule.date}"
+            version2_dict[key] = {
+                "id": schedule.id,
+                "user_id": schedule.user_id,
+                "date": schedule.date.isoformat(),
+                "shift_type": schedule.shift_type,
+                "area_code": schedule.area_code,
+                "work_time": schedule.work_time
+            }
+        
+        # 計算差異
+        diff_items = []
+        all_keys = set(list(version1_dict.keys()) + list(version2_dict.keys()))
+        
+        for key in all_keys:
+            if key in version1_dict and key in version2_dict:
+                v1 = version1_dict[key]
+                v2 = version2_dict[key]
+                
+                if (v1["shift_type"] != v2["shift_type"] or 
+                    v1["area_code"] != v2["area_code"] or 
+                    v1["work_time"] != v2["work_time"]):
+                    
+                    user = db.query(User).filter(User.id == v1["user_id"]).first()
+                    user_name = user.full_name if user else None
+                    
+                    diff_items.append({
+                        "type": "modified",
+                        "user_id": v1["user_id"],
+                        "user_name": user_name,
+                        "date": v1["date"],
+                        "version1_value": v1["shift_type"],
+                        "version2_value": v2["shift_type"]
+                    })
+            elif key in version1_dict:
+                v1 = version1_dict[key]
+                user = db.query(User).filter(User.id == v1["user_id"]).first()
+                user_name = user.full_name if user else None
+                
+                diff_items.append({
+                    "type": "deleted",
+                    "user_id": v1["user_id"],
+                    "user_name": user_name,
+                    "date": v1["date"],
+                    "version1_value": v1["shift_type"],
+                    "version2_value": None
+                })
+            else:  # key in version2_dict
+                v2 = version2_dict[key]
+                user = db.query(User).filter(User.id == v2["user_id"]).first()
+                user_name = user.full_name if user else None
+                
+                diff_items.append({
+                    "type": "added",
+                    "user_id": v2["user_id"],
+                    "user_name": user_name,
+                    "date": v2["date"],
+                    "version1_value": None,
+                    "version2_value": v2["shift_type"]
+                })
+        
+        # 按日期排序
+        diff_items.sort(key=lambda x: x["date"])
+        
+        # 返回比較結果
+        return {
+            "version1": {
+                "id": version1.id,
+                "version_number": version1.version_number,
+                "published_at": version1.published_at
+            },
+            "version2": {
+                "id": version2.id,
+                "version_number": version2.version_number,
+                "published_at": version2.published_at
+            },
+            "diff": {
+                "items": diff_items,
+                "added": [item for item in diff_items if item["type"] == "added"],
+                "modified": [item for item in diff_items if item["type"] == "modified"],
+                "deleted": [item for item in diff_items if item["type"] == "deleted"]
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"比較版本時出錯: {str(e)}"
+        )
+
+@router.post("/schedules/updateShift", response_model=Dict[str, Any])
+async def update_shift(
+    shift_data: Dict[str, Any],
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_head_nurse_user)  # 只允許護理長和管理員更新
+):
+    """更新單一護理師的單日班次，不創建新版本"""
+    
+    # 驗證請求數據
+    user_id = shift_data.get("user_id")
+    date_str = shift_data.get("date")
+    shift_type = shift_data.get("shift_type")
+    create_version = shift_data.get("create_version", False)
+    
+    if not user_id or not date_str or not shift_type:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="缺少必要數據：user_id、date 或 shift_type"
+        )
+    
+    try:
+        # 轉換日期字符串為日期對象
+        schedule_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="日期格式錯誤，應為YYYY-MM-DD"
+        )
+    
+    # 檢查用戶是否存在
+    nurse = db.query(User).filter(User.id == user_id).first()
+    if not nurse:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"未找到ID為 {user_id} 的護理師"
+        )
+    
+    # 獲取年月
+    year = schedule_date.year
+    month = schedule_date.month
+    month_str = f"{year}{month:02d}"
+    
+    # 查找當前最新版本
+    latest_version = db.query(ScheduleVersion).filter(
+        ScheduleVersion.month == month_str
+    ).order_by(ScheduleVersion.id.desc()).first()
+    
+    if not latest_version:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"未找到 {year}年{month}月 的排班表，請先生成排班表"
+        )
+    
+    # 查找現有排班記錄
+    schedule_entry = db.query(MonthlySchedule).filter(
+        MonthlySchedule.user_id == user_id,
+        MonthlySchedule.date == schedule_date,
+        MonthlySchedule.version_id == latest_version.id
+    ).first()
+    
+    # 更新記錄日誌
+    log_action = "更新"
+    old_shift_type = None
+    
+    if schedule_entry:
+        old_shift_type = schedule_entry.shift_type
+        schedule_entry.shift_type = shift_type
+        schedule_entry.updated_at = datetime.now()
+        
+        # 如果有area_code，更新它
+        if "area_code" in shift_data and shift_data["area_code"] is not None:
+            schedule_entry.area_code = shift_data["area_code"]
+    else:
+        # 創建新記錄
+        log_action = "創建"
+        schedule_entry = MonthlySchedule(
+            user_id=user_id,
+            date=schedule_date,
+            shift_type=shift_type,
+            area_code=shift_data.get("area_code"),
+            version_id=latest_version.id
+        )
+        db.add(schedule_entry)
+    
+    # 創建日誌記錄
+    log_entry = Log(
+        action=f"{log_action}排班記錄",
+        description=f"護理師: {nurse.full_name}, 日期: {date_str}, 班次: {old_shift_type if old_shift_type else '無'} -> {shift_type}",
+        user_id=current_user.id
+    )
+    db.add(log_entry)
+    
+    db.commit()
+    db.refresh(schedule_entry)
+    
+    return {
+        "success": True,
+        "message": f"成功{log_action}排班記錄",
+        "data": {
+            "id": schedule_entry.id,
+            "user_id": schedule_entry.user_id,
+            "date": schedule_entry.date.strftime('%Y-%m-%d'),
+            "shift_type": schedule_entry.shift_type,
+            "area_code": schedule_entry.area_code
+        }
+    }
+
+@router.post("/schedules/saveMonth", response_model=Dict[str, Any])
+async def save_monthly_schedule(
+    schedule_data: Dict[str, Any],
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_head_nurse_user)  # 只允許護理長和管理員保存
+):
+    """保存月度排班表並創建新版本"""
+    
+    # 驗證請求數據
+    year = schedule_data.get("year")
+    month = schedule_data.get("month")
+    schedule_data_list = schedule_data.get("schedule_data", [])
+    timestamp = schedule_data.get("timestamp")
+    version_note = schedule_data.get("version_note")
+    create_version = schedule_data.get("create_version", True)
+    
+    if not year or not month or not schedule_data_list:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="缺少必要數據：year、month 或 schedule_data"
+        )
+    
+    # 格式化年月字符串
+    month_str = f"{year}{month:02d}"
+    
+    # 查找當前最新版本
+    latest_version = db.query(ScheduleVersion).filter(
+        ScheduleVersion.month == month_str
+    ).order_by(ScheduleVersion.id.desc()).first()
+    
+    if not latest_version:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"未找到 {year}年{month}月 的排班表，請先生成排班表"
+        )
+    
+    # 創建新版本（如果需要）
+    if create_version:
+        # 獲取現有版本數量
+        version_count = db.query(ScheduleVersion).filter(
+            ScheduleVersion.month == month_str
+        ).count()
+        
+        # 創建新版本號
+        new_version_number = f"v{version_count + 1}.0_{month_str}"
+        
+        # 使用默認版本說明（如果未提供）
+        if not version_note:
+            version_note = f"{current_user.full_name}於{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}保存的{year}年{month}月排班表"
+        
+        # 創建新版本
+        new_version = ScheduleVersion(
+            version_number=new_version_number,
+            month=month_str,
+            published_at=datetime.now(),
+            notes=version_note,
+            is_published=True,  # 直接發布
+            published_by=current_user.id,
+            is_base_version=False
+        )
+        db.add(new_version)
+        db.commit()
+        db.refresh(new_version)
+        
+        # 將所有排班記錄複製到新版本
+        for schedule_item in schedule_data_list:
+            user_id = schedule_item.get("user_id")
+            shifts = schedule_item.get("shifts", [])
+            area_codes = schedule_item.get("area_codes", [])
+            
+            # 檢查用戶是否存在
+            nurse = db.query(User).filter(User.id == user_id).first()
+            if not nurse:
+                continue  # 跳過無效用戶
+            
+            # 為每天創建排班記錄
+            for day, shift in enumerate(shifts, 1):
+                try:
+                    # 創建日期
+                    schedule_date = date(year, month, day)
+                    
+                    # 獲取area_code（如果有）
+                    area_code = area_codes[day-1] if len(area_codes) >= day else None
+                    
+                    # 創建排班記錄
+                    schedule_entry = MonthlySchedule(
+                        user_id=user_id,
+                        date=schedule_date,
+                        shift_type=shift,
+                        area_code=area_code,
+                        version_id=new_version.id
+                    )
+                    db.add(schedule_entry)
+                except Exception as e:
+                    print(f"處理護理師 {user_id} 於 {year}-{month}-{day} 的排班記錄時出錯: {str(e)}")
+                    continue
+        
+        # 創建日誌記錄
+        log_entry = Log(
+            action="保存月度排班表",
+            description=f"{current_user.full_name}保存了{year}年{month}月排班表，創建了新版本 {new_version_number}",
+            user_id=current_user.id
+        )
+        db.add(log_entry)
+        
+        db.commit()
+        
+        # 計算與基礎版本的差異並保存（如果有基礎版本）
+        base_version = db.query(ScheduleVersion).filter(
+            ScheduleVersion.month == month_str,
+            ScheduleVersion.is_base_version == True
+        ).first()
+        
+        if base_version and base_version.id != new_version.id:
+            try:
+                # 調用計算差異的函數
+                await calculate_and_save_version_diff(
+                    version_id=new_version.id,
+                    base_version_id=base_version.id,
+                    db=db,
+                    current_user=current_user
+                )
+            except Exception as e:
+                print(f"計算版本差異時出錯: {str(e)}")
+                # 不阻止保存過程繼續
+        
+        return {
+            "success": True,
+            "message": f"已成功保存{year}年{month}月排班表並創建新版本 {new_version_number}",
+            "data": {
+                "version_id": new_version.id,
+                "version_number": new_version.version_number,
+                "published_at": new_version.published_at
+            }
+        }
+    else:
+        # 不創建新版本，直接更新現有版本
+        # 清空現有排班記錄
+        db.query(MonthlySchedule).filter(
+            MonthlySchedule.version_id == latest_version.id
+        ).delete()
+        
+        # 重新創建排班記錄
+        for schedule_item in schedule_data_list:
+            user_id = schedule_item.get("user_id")
+            shifts = schedule_item.get("shifts", [])
+            area_codes = schedule_item.get("area_codes", [])
+            
+            # 檢查用戶是否存在
+            nurse = db.query(User).filter(User.id == user_id).first()
+            if not nurse:
+                continue  # 跳過無效用戶
+            
+            # 為每天創建排班記錄
+            for day, shift in enumerate(shifts, 1):
+                try:
+                    # 創建日期
+                    schedule_date = date(year, month, day)
+                    
+                    # 獲取area_code（如果有）
+                    area_code = area_codes[day-1] if len(area_codes) >= day else None
+                    
+                    # 創建排班記錄
+                    schedule_entry = MonthlySchedule(
+                        user_id=user_id,
+                        date=schedule_date,
+                        shift_type=shift,
+                        area_code=area_code,
+                        version_id=latest_version.id
+                    )
+                    db.add(schedule_entry)
+                except Exception as e:
+                    print(f"處理護理師 {user_id} 於 {year}-{month}-{day} 的排班記錄時出錯: {str(e)}")
+                    continue
+        
+        # 創建日誌記錄
+        log_entry = Log(
+            action="更新月度排班表",
+            description=f"{current_user.full_name}更新了{year}年{month}月排班表，但未創建新版本",
+            user_id=current_user.id
+        )
+        db.add(log_entry)
+        
+        db.commit()
+        
+        return {
+            "success": True,
+            "message": f"已成功更新{year}年{month}月排班表",
+            "data": {
+                "version_id": latest_version.id,
+                "version_number": latest_version.version_number
+            }
+        } 
+
+@router.post("/schedules/resetAreaCodes", response_model=Dict[str, Any])
+async def reset_area_codes(
+    data: Dict[str, int],
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_head_nurse_user)  # 只允許護理長和管理員操作
+):
+    """批量重置指定月份所有排班記錄的area_code為NULL"""
+    try:
+        # 從請求體中獲取年月
+        year = data.get("year")
+        month = data.get("month")
+        
+        if not year or not month:
+            raise ValueError("缺少必要參數：year和month")
+        
+        # 確保年月有效
+        if month < 1 or month > 12:
+            raise ValueError("月份必須在1至12之間")
+        
         month_str = f"{year}{month:02d}"
         
         # 獲取該月份的排班版本
         version = db.query(ScheduleVersion).filter(
             ScheduleVersion.month == month_str
         ).first()
+        
+        if not version:
+            return {
+                "success": False,
+                "message": f"找不到 {year}年{month}月的排班表",
+                "reset_count": 0
+            }
+        
+        # 使用批量SQL更新所有排班記錄的area_code
+        # 使用SQLAlchemy的更新語法進行批量更新
+        from sqlalchemy import update
+        stmt = update(MonthlySchedule).where(
+            MonthlySchedule.version_id == version.id
+        ).values(area_code=None)
+        
+        result = db.execute(stmt)
+        reset_count = result.rowcount
+        
+        # 添加操作日誌
+        log = Log(
+            user_id=current_user.id,
+            action="reset_area_codes",
+            operation_type="update_schedule",
+            description=f"批量重置 {year}年{month}月 {reset_count} 條排班記錄的工作分配"
+        )
+        db.add(log)
+        db.commit()
+        
+        return {
+            "success": True,
+            "message": f"成功重置 {year}年{month}月的工作分配",
+            "reset_count": reset_count
+        }
+        
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=str(e)
+        )
+    except Exception as e:
+        import traceback
+        print(f"重置工作分配時發生錯誤: {str(e)}")
+        print(traceback.format_exc())
+        raise HTTPException(
+            status_code=500,
+            detail=f"重置工作分配時發生錯誤: {str(e)}"
+        )
+
+@router.get("/schedules/details", response_model=Dict[str, Any])
+async def get_monthly_schedule_details(
+    year: int,
+    month: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """獲取特定月份的排班詳細記錄，包含所有字段"""
+    try:
+        # 確保年月有效
+        if month < 1 or month > 12:
+            raise ValueError("月份必須在1至12之間")
+        
+        month_str = f"{year}{month:02d}"
+        
+        # 獲取該月份的排班版本
+        version = db.query(ScheduleVersion).filter(
+            ScheduleVersion.month == month_str
+        ).order_by(ScheduleVersion.id.desc()).first()
         
         if not version:
             return {
@@ -553,10 +1069,10 @@ async def get_monthly_schedule_details(
             MonthlySchedule.version_id == version.id
         ).all()
         
-        # 構建詳細信息列表
-        schedule_details = []
+        # 轉換為字典列表
+        result_data = []
         for schedule in schedules:
-            schedule_details.append({
+            result_data.append({
                 "id": schedule.id,
                 "user_id": schedule.user_id,
                 "date": schedule.date.isoformat(),
@@ -567,10 +1083,10 @@ async def get_monthly_schedule_details(
         
         return {
             "success": True,
-            "message": f"成功獲取 {year}年{month}月排班詳細信息",
-            "data": schedule_details
+            "message": f"成功獲取 {year}年{month}月排班表詳細記錄",
+            "data": result_data
         }
-        
+    
     except ValueError as e:
         raise HTTPException(
             status_code=400,
@@ -578,9 +1094,121 @@ async def get_monthly_schedule_details(
         )
     except Exception as e:
         import traceback
-        print(f"獲取排班詳細信息時發生錯誤: {str(e)}")
+        print(f"獲取排班詳細記錄時發生錯誤: {str(e)}")
         print(traceback.format_exc())
         raise HTTPException(
             status_code=500,
-            detail=f"獲取排班詳細信息時發生錯誤: {str(e)}"
+            detail=f"獲取排班詳細記錄時發生錯誤: {str(e)}"
+        ) 
+
+@router.post("/schedules/bulkUpdateAreaCodes", response_model=Dict[str, Any])
+async def bulk_update_area_codes(
+    updates: List[Dict[str, Any]],
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_head_nurse_user)  # 只允許護理長和管理員操作
+):
+    """批量更新多條排班記錄的area_code"""
+    try:
+        if not updates:
+            return {
+                "success": True,
+                "message": "沒有需要更新的記錄",
+                "updated_count": 0
+            }
+        
+        # 從請求中提取所有的year-month組合
+        date_patterns = set()
+        for update in updates:
+            date_str = update.get("date")
+            if date_str:
+                try:
+                    dt = datetime.strptime(date_str, "%Y-%m-%d")
+                    date_patterns.add(f"{dt.year}{dt.month:02d}")
+                except ValueError:
+                    continue
+        
+        # 獲取所有相關月份的最新版本ID
+        version_ids = {}
+        for month_str in date_patterns:
+            version = db.query(ScheduleVersion).filter(
+                ScheduleVersion.month == month_str
+            ).order_by(ScheduleVersion.id.desc()).first()
+            
+            if version:
+                version_ids[month_str] = version.id
+        
+        updated_count = 0
+        failed_count = 0
+        
+        # 更新每條記錄
+        for update in updates:
+            try:
+                user_id = update.get("user_id")
+                date_str = update.get("date")
+                area_code = update.get("area_code")
+                
+                if not user_id or not date_str:
+                    failed_count += 1
+                    continue
+                
+                try:
+                    dt = datetime.strptime(date_str, "%Y-%m-%d")
+                    schedule_date = dt.date()
+                    month_str = f"{dt.year}{dt.month:02d}"
+                except ValueError:
+                    failed_count += 1
+                    continue
+                
+                # 獲取對應月份的版本ID
+                version_id = version_ids.get(month_str)
+                if not version_id:
+                    failed_count += 1
+                    continue
+                
+                # 找到對應的排班記錄
+                schedule = db.query(MonthlySchedule).filter(
+                    MonthlySchedule.user_id == user_id,
+                    MonthlySchedule.date == schedule_date,
+                    MonthlySchedule.version_id == version_id
+                ).first()
+                
+                if not schedule:
+                    failed_count += 1
+                    continue
+                
+                # 更新area_code
+                schedule.area_code = area_code
+                updated_count += 1
+                
+            except Exception as e:
+                print(f"更新記錄時發生錯誤: {str(e)}")
+                failed_count += 1
+        
+        # 提交所有更新
+        db.commit()
+        
+        # 添加操作日誌
+        log = Log(
+            user_id=current_user.id,
+            action="bulk_update_area_codes",
+            operation_type="update_schedule",
+            description=f"批量更新 {updated_count} 條排班記錄的工作分配"
+        )
+        db.add(log)
+        db.commit()
+        
+        return {
+            "success": True,
+            "message": f"成功更新 {updated_count} 條排班記錄的工作分配",
+            "updated_count": updated_count,
+            "failed_count": failed_count
+        }
+        
+    except Exception as e:
+        import traceback
+        print(f"批量更新工作分配時發生錯誤: {str(e)}")
+        print(traceback.format_exc())
+        raise HTTPException(
+            status_code=500,
+            detail=f"批量更新工作分配時發生錯誤: {str(e)}"
         ) 

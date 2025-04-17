@@ -5,7 +5,7 @@ from .config import settings
 
 # 創建SQLAlchemy引擎
 engine = create_engine(
-    settings.DATABASE_URL, connect_args={"check_same_thread": False} if settings.DATABASE_URL.startswith("sqlite") else {}
+    settings.DATABASE_URL
 )
 
 # 創建SessionLocal類

@@ -1,6 +1,6 @@
 # 麻醉科護理班表管理系統
 
-![Version](https://img.shields.io/badge/version-1.0.0-blue)
+![Version](https://img.shields.io/badge/version-0.5.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 這是一個專為麻醉科部門設計的護理班表管理系統，旨在簡化護理長排班和護理師查詢班表的流程。系統支援麻醉科、恢復室等專科護理師的特殊排班需求，提供直覺化的界面和高效的排班工具。
@@ -133,7 +133,7 @@ frontend/
 - **SQLAlchemy**: ORM數據庫操作
 - **Pydantic**: 數據驗證和schema定義
 - **JWT**: JSON Web Token認證
-- **SQLite/MySQL**: 數據存儲
+- **PostgreSQL**: 數據存儲
 - **Bcrypt**: 密碼加密
 
 ### 核心設計邏輯
@@ -174,7 +174,7 @@ frontend/
 ### 環境需求
 - Python 3.8+ (後端)
 - Node.js 14+ (前端)
-- SQLite3 或 MySQL (數據庫)
+- PostgreSQL (數據庫)
 
 ### 後端安裝
 ```bash
@@ -186,6 +186,12 @@ pip install -r requirements.txt
 
 # 複製環境變數範例檔並修改配置
 cp .env.example .env
+
+# 配置PostgreSQL數據庫
+# 請確保PostgreSQL已安裝且運行中
+# 創建數據庫和用戶
+# createuser anes_user -P
+# createdb anes_db -O anes_user
 
 # 初始化數據庫
 python init_db.py
@@ -295,3 +301,25 @@ npm start
 ## 詳細文檔
 
 更多詳細使用說明，請參考 [USAGE.md](USAGE.md) 文件。 
+
+## 數據庫遷移說明
+
+本系統已從SQLite遷移至PostgreSQL，以提供更佳的性能和多用戶支持。主要變更包括：
+
+### 數據庫架構
+- 主數據庫：PostgreSQL
+- 連接地址：`postgresql://anes_user:anes_password@localhost/anes_db`
+- 已移除所有SQLite相關文件和配置
+
+### 遷移檔案
+系統保留了以下遷移相關檔案作為參考：
+- `migrate_to_postgres.py`：SQLite到PostgreSQL的數據遷移工具
+- `check_migration.py`：檢查遷移完整性的工具
+- `migration_check_results.json`：遷移檢查結果
+- `postgresql_maintenance_guide.md`：PostgreSQL維護指南
+
+### 使用須知
+1. 系統現在僅支持PostgreSQL數據庫
+2. 請確保PostgreSQL服務已正確設置並運行
+3. 遵循安裝指南中的PostgreSQL配置步驟
+4. 數據庫參數可在`backend/.env`文件中調整 

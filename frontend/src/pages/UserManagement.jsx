@@ -433,7 +433,11 @@ const UserManagement = () => {
           <Table>
             <TableHead>
               <TableRow>
-                {editMode && <TableCell width="100px">排序</TableCell>}
+                {editMode && (
+                  <TableCell width="100px" align="center">
+                    排序
+                  </TableCell>
+                )}
                 <TableCell>員工編號</TableCell>
                 <TableCell>姓名</TableCell>
                 <TableCell>電子郵件</TableCell>
@@ -453,40 +457,30 @@ const UserManagement = () => {
                 >
                   {editMode && (
                     <TableCell>
-                      <Tooltip title="上移">
-                        <IconButton 
-                          size="small" 
-                          onClick={() => handleMoveUp(index)}
-                          disabled={index === 0 || user.role === 'head_nurse' || user.role === 'admin'}
-                        >
-                          <ArrowUpwardIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
+                      <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+                        <Tooltip title="上移">
+                          <IconButton 
+                            size="small" 
+                            onClick={() => handleMoveUp(index)}
+                            disabled={index === 0 || user.role === 'head_nurse' || user.role === 'admin'}
+                          >
+                            <ArrowUpwardIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="下移">
+                          <IconButton 
+                            size="small" 
+                            onClick={() => handleMoveDown(index)}
+                            disabled={index === sortableUsers.length - 1 || user.role === 'head_nurse' || user.role === 'admin'}
+                          >
+                            <ArrowDownwardIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </Box>
                     </TableCell>
                   )}
-                  <TableCell>
-                    <Tooltip title="下移">
-                      <IconButton 
-                        size="small" 
-                        onClick={() => handleMoveDown(index)}
-                        disabled={index === sortableUsers.length - 1 || user.role === 'head_nurse' || user.role === 'admin'}
-                      >
-                        <ArrowDownwardIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  </TableCell>
                   <TableCell>{user.username}</TableCell>
-                  <TableCell>
-                    {editMode && user.role !== 'head_nurse' && user.role !== 'admin' ? (
-                      <TextField
-                        size="small"
-                        value={user.full_name || ''}
-                        onChange={(e) => handleSelectChange(user.id, 'full_name', e.target.value)}
-                      />
-                    ) : (
-                      user.full_name
-                    )}
-                  </TableCell>
+                  <TableCell>{user.full_name}</TableCell>
                   <TableCell>
                     {editMode && user.role !== 'head_nurse' && user.role !== 'admin' ? (
                       <TextField

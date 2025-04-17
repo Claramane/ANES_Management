@@ -883,7 +883,8 @@ const FormulaSchedule = () => {
       
       {errorMessage && (
         <Alert severity="error" sx={{ mb: 2 }}>
-          {errorMessage}
+          {typeof errorMessage === 'string' ? errorMessage : 
+           (errorMessage?.message || '操作過程中發生錯誤')}
         </Alert>
       )}
       

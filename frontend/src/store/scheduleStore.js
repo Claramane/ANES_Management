@@ -234,7 +234,9 @@ export const useScheduleStore = create(
         } catch (error) {
           console.error('載入排班表失敗，完整錯誤:', error);
           set({ 
-            error: error.response?.data?.detail || '載入排班表失敗', 
+            error: error.response?.data?.detail || 
+                  (typeof error === 'string' ? error : 
+                   (error?.message || '載入排班表失敗')), 
             isLoading: false 
           });
           throw error;
@@ -348,7 +350,9 @@ export const useScheduleStore = create(
         } catch (error) {
           console.error('保存排班表失敗:', error);
           set({ 
-            error: error.response?.data?.detail || '保存排班表失敗', 
+            error: error.response?.data?.detail || 
+                  (typeof error === 'string' ? error : 
+                   (error?.message || '保存排班表失敗')), 
             isLoading: false 
           });
           throw error;
@@ -452,72 +456,119 @@ export const useScheduleStore = create(
         return get().formulaSchedules[type] || defaultSchedules[type] || null;
       },
 
-      // 生成月班表
+      // 生成月度排班表
       generateMonthlySchedule: async () => {
         set({ isLoading: true, error: null });
         try {
           const { selectedDate } = get();
-          // 確保selectedDate是有效的Date對象
           const validDate = ensureValidDate(selectedDate);
           const year = validDate.getFullYear();
-          const month = validDate.getMonth() + 1;
+          const month = validDate.getMonth() + 1; // 月份需要+1，因為JS的月份是0-11
           
-          console.log(`正在請求生成 ${year}年${month}月排班表...`);
+          console.log(`正在生成 ${year}年${month}月 的排班表...`);
           
-          // 調用後端API生成月班表
+          // 呼叫API生成排班表
           const response = await apiService.schedule.generateMonth(year, month);
           
-          if (response && response.data && response.data.success) {
-            console.log('後端成功生成月班表:', response.data);
-            
-            // 生成完成後立即獲取生成的排班表
-            const scheduleResponse = await get().fetchMonthlySchedule();
-            
-            return {
-              success: true,
-              message: response.data.message || '成功生成月班表',
-              entries_count: response.data.entries_count || 0
-            };
-          } else {
-            throw new Error(response?.data?.message || '生成月班表失敗');
+          // 檢查API回應
+          if (!response || !response.data) {
+            throw new Error('API回應中缺少數據');
           }
-        } catch (error) {
-          console.error('生成月班表時發生錯誤:', error);
+          
+          console.log('生成排班表API回應:', response);
+          
+          // 將生成的排班表存入store
           set({ 
-            error: error.message || '生成月班表失敗', 
-            isLoading: false 
+            monthlySchedule: response.data || [],
+            isLoading: false
+          });
+          
+          // 重新獲取最新排班表數據
+          await get().fetchMonthlySchedule();
+          
+          return response.data;
+        } catch (error) {
+          console.error('生成月班表失敗:', error);
+          set({ 
+            error: typeof error === 'string' ? error : 
+                  (error?.message || '生成月班表失敗'),
+            isLoading: false
           });
           throw error;
         }
       },
       
-      // 保存月班表 (單一班次更新)
-      saveMonthlySchedule: async (scheduleId, updateData) => {
+      // 保存月度排班表
+      saveMonthlySchedule: async () => {
         set({ isLoading: true, error: null });
         try {
-          // 更新單一班次
-          console.log('正在通過API更新班次...', scheduleId, updateData);
-          const response = await apiService.schedule.updateSchedule(scheduleId, updateData);
+          const { monthlySchedule, selectedDate } = get();
           
-          // 在本地更新班次
-          const updatedSchedule = response.data;
-          set(state => {
-            const newSchedule = [...state.monthlySchedule];
-            // 尋找對應的班次並更新
-            const scheduleIndex = newSchedule.findIndex(s => s.id === scheduleId);
-            if (scheduleIndex >= 0) {
-              newSchedule[scheduleIndex] = updatedSchedule;
+          if (!monthlySchedule || monthlySchedule.length === 0) {
+            throw new Error('沒有排班數據可保存');
+          }
+          
+          // 檢查當前用戶角色，只有護理長和管理員可以保存
+          const authStorage = localStorage.getItem('auth-storage');
+          let userId = null;
+          let userName = null;
+          let canSave = false;
+          
+          if (authStorage) {
+            const { state } = JSON.parse(authStorage);
+            if (state.user) {
+              const userRole = state.user.role;
+              userId = state.user.id;
+              userName = state.user.full_name || state.user.username;
+              canSave = userRole === 'head_nurse' || userRole === 'admin';
             }
-            return { monthlySchedule: newSchedule, isLoading: false };
+          }
+          
+          if (!canSave) {
+            throw new Error('只有護理長和管理員可以保存班表');
+          }
+          
+          const year = selectedDate.getFullYear();
+          const month = selectedDate.getMonth() + 1;
+          
+          console.log(`正在保存 ${year}年${month}月 的排班表...`);
+          
+          // 創建時間戳記
+          const timestamp = new Date().toISOString();
+          
+          // 轉換為API需要的格式
+          const scheduleData = {
+            year,
+            month,
+            created_by: userId,
+            creator_name: userName,
+            timestamp: timestamp,
+            version_note: `${userName} 於 ${new Date().toLocaleString('zh-TW')} 儲存的版本`,
+            schedule_data: monthlySchedule.map(nurse => ({
+              user_id: nurse.id,
+              shifts: nurse.shifts,
+              area_codes: nurse.area_codes || Array(nurse.shifts.length).fill(null)
+            })),
+            create_version: true // 創建新版本
+          };
+          
+          // 呼叫API保存排班表
+          const response = await apiService.schedule.saveMonth(scheduleData);
+          
+          console.log('保存排班表成功:', response);
+          
+          set({ 
+            isLoading: false,
+            error: null
           });
           
-          console.log('成功更新班次:', updatedSchedule);
-          return updatedSchedule;
+          return response.data;
         } catch (error) {
-          console.error('更新班次時發生錯誤:', error);
+          console.error('保存排班表失敗:', error);
           set({ 
-            error: error.response?.data?.detail || error.message || '更新班次失敗', 
-            isLoading: false 
+            isLoading: false, 
+            error: typeof error === 'string' ? error : 
+                  (error.response?.data?.detail || error?.message || '保存排班表失敗')
           });
           throw error;
         }
@@ -550,39 +601,36 @@ export const useScheduleStore = create(
               
               console.log(`解析出schedule數組，包含 ${scheduleList.length} 條記錄`);
               
-              // 獲取所有護理師的排班詳情以獲取area_code
-              console.log('正在獲取排班詳情以獲取area_code...');
-              const detailsResponse = await apiService.schedule.getScheduleDetails(year, month);
-              
-              // area_code映射: { "用戶ID-日期": area_code }
-              const areaCodeMap = {};
-              
-              if (detailsResponse.data && detailsResponse.data.success) {
-                const details = detailsResponse.data.data || [];
-                console.log(`解析排班詳情，包含 ${details.length} 條記錄`);
-                
-                // 構建area_code映射
-                details.forEach(item => {
-                  const dateObj = new Date(item.date);
-                  const day = dateObj.getDate() - 1; // 轉為0-based索引
-                  const key = `${item.user_id}-${day}`;
-                  areaCodeMap[key] = item.area_code;
-                });
-              }
-              
-              // 直接使用API返回的格式，確保shifts是字符串數組而非對象數組
+              // 確保每個護理師的數據結構正確
               const formattedSchedule = scheduleList.map(nurse => {
-                const nurseId = nurse.id;
-                // 為每個護理師創建area_codes數組
-                const area_codes = nurse.shifts.map((shift, dayIndex) => {
-                  const key = `${nurseId}-${dayIndex}`;
-                  return areaCodeMap[key] || null;
-                });
+                // 確保 shifts 是一個有效的陣列
+                let shifts = [];
+                if (Array.isArray(nurse.shifts)) {
+                  shifts = [...nurse.shifts]; // 淺拷貝shifts數組
+                } else if (nurse.shifts) {
+                  // 如果不是陣列但有值，嘗試轉換
+                  console.warn(`護理師 ${nurse.name} (ID: ${nurse.id}) 的 shifts 不是陣列:`, nurse.shifts);
+                  try {
+                    shifts = JSON.parse(nurse.shifts);
+                    if (!Array.isArray(shifts)) {
+                      shifts = Array(31).fill(''); // 填充默認空值
+                    }
+                  } catch (e) {
+                    console.error(`解析護理師 ${nurse.name} 的 shifts 失敗:`, e);
+                    shifts = Array(31).fill('');
+                  }
+                } else {
+                  // 如果沒有 shifts，創建默認空陣列
+                  shifts = Array(31).fill('');
+                }
+                
+                // 為每個護理師創建初始的area_codes數組，暫時為null
+                const area_codes = Array(shifts.length).fill(null);
                 
                 return {
                   ...nurse,
-                  shifts: Array.isArray(nurse.shifts) ? nurse.shifts : [], // 確保shifts是數組
-                  area_codes: area_codes // 添加area_codes到每個護理師數據中
+                  shifts: shifts,
+                  area_codes: area_codes // 添加空的area_codes以保持數據結構一致
                 };
               });
               
@@ -673,52 +721,71 @@ export const useScheduleStore = create(
       // 更新單個班次
       updateShift: async ({ nurseIndex, dayIndex, newShift }) => {
         try {
-          const { monthlySchedule } = get();
-          console.log('updateShift - 當前班表數據:', monthlySchedule);
-          console.log(`嘗試更新: nurseIndex=${nurseIndex}, dayIndex=${dayIndex}, newShift=${newShift}`);
+          // 先更新本地狀態
+          const { monthlySchedule, selectedDate } = get();
+          const updatedSchedule = [...monthlySchedule];
           
-          // 檢查索引是否有效
-          if (nurseIndex < 0 || nurseIndex >= monthlySchedule.length) {
-            throw new Error('護士索引無效');
+          if (updatedSchedule[nurseIndex]) {
+            updatedSchedule[nurseIndex].shifts[dayIndex] = newShift;
+          } else {
+            console.error(`找不到索引為 ${nurseIndex} 的護理師`);
           }
           
-          const nurse = monthlySchedule[nurseIndex];
-          if (dayIndex < 0 || dayIndex >= nurse.shifts.length) {
-            throw new Error('日期索引無效');
-          }
+          set({ monthlySchedule: updatedSchedule });
           
-          // 在本地立即更新班次顯示 (不論後端API是否成功)
-          set(state => {
-            const newSchedule = [...state.monthlySchedule];
-            // 更新特定班次
-            if (nurseIndex >= 0 && nurseIndex < newSchedule.length) {
-              if (dayIndex >= 0 && dayIndex < newSchedule[nurseIndex].shifts.length) {
-                // 直接更新字符串数组
-                newSchedule[nurseIndex].shifts[dayIndex] = newShift;
-              }
+          // 檢查當前用戶角色，決定是否實時更新數據庫
+          // 從localStorage取得權限資訊
+          const authStorage = localStorage.getItem('auth-storage');
+          let canUpdateDB = false;
+          let userId = null;
+          
+          if (authStorage) {
+            const { state } = JSON.parse(authStorage);
+            if (state.user) {
+              const userRole = state.user.role;
+              userId = state.user.id;
+              // 只有護理長和管理員可以實時更新數據庫
+              canUpdateDB = userRole === 'head_nurse' || userRole === 'admin';
             }
-            return { monthlySchedule: newSchedule };
-          });
+          }
           
-          // 獲取當前日期年月
-          const { selectedDate } = get();
-          const year = selectedDate.getFullYear();
-          const month = selectedDate.getMonth() + 1;
-          const day = dayIndex + 1; // 轉為1-based天數
+          if (canUpdateDB) {
+            // 透過API保存更新
+            const nurse = monthlySchedule[nurseIndex];
+            if (!nurse || !nurse.id) {
+              console.error('護理師數據無效:', nurse);
+              throw new Error('護理師數據無效');
+            }
+            
+            const year = selectedDate.getFullYear();
+            const month = selectedDate.getMonth() + 1;
+            const day = dayIndex + 1;
+            const date = new Date(year, month - 1, day);
+            
+            // 構建完整的更新請求
+            const requestData = {
+              user_id: nurse.id,
+              updated_by: userId,
+              date: date.toISOString().split('T')[0], // 格式化為 YYYY-MM-DD
+              shift_type: newShift,
+              create_version: true // 啟用版本控制
+            };
+            
+            // 發送更新請求到API
+            await apiService.schedule.updateShift(requestData);
+            console.log(`實時更新數據庫: ${nurse.name} 在 ${date.toISOString().split('T')[0]} 的班次更新為 ${newShift}`);
+          } else {
+            console.log('班表變更已保存在本地，但未同步到數據庫，因為當前用戶不是護理長或管理員');
+          }
           
-          // 準備日期字符串 (YYYY-MM-DD)
-          const dateStr = `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
-          
-          console.log(`將更新日期 ${dateStr} 的班次為 ${newShift}`);
-          
-          // 這裡應該調用實際的API來更新資料庫中的班次
-          // TODO: 實現實際的API調用來保存更改
-          
-          return true;
         } catch (error) {
-          console.error('更新班次時發生錯誤:', error);
-          set({ error: error.message || '更新班次失敗' });
-          return false;
+          console.error('更新班次失敗:', error);
+          set({ 
+            error: error.response?.data?.detail || 
+                  (typeof error === 'string' ? error : 
+                   (error?.message || '更新班次失敗')),
+          });
+          throw error;
         }
       },
       
@@ -726,7 +793,43 @@ export const useScheduleStore = create(
       getIsLoading: () => get().isLoading,
       
       // 設置錯誤訊息
-      setError: (errorMsg) => set({ error: errorMsg })
+      setError: (errorMsg) => set({ error: errorMsg }),
+
+      // 重置排班表
+      resetSchedule: async (date) => {
+        set({ isLoading: true, error: null });
+        try {
+          if (!date) throw new Error('Date is required');
+          // 從選擇的日期獲取年和月
+          const year = date.getFullYear();
+          const month = date.getMonth() + 1; // 0-indexed，需 +1
+          
+          console.log(`正在重置 ${year}年${month}月的排班表...`);
+          
+          // 從API請求重置
+          await apiService.schedule.resetMonthlySchedule(year, month);
+          
+          // 重新從API獲取排班表
+          const updatedSchedule = await apiService.schedule.getMonthlySchedule(year, month);
+          
+          // 更新Store中的排班表
+          set({
+            monthlySchedule: updatedSchedule.data || [],
+            isLoading: false
+          });
+          
+          return updatedSchedule.data || [];
+        } catch (error) {
+          console.error('重置排班表失敗:', error);
+          set({ 
+            error: error.response?.data?.detail || 
+                  (typeof error === 'string' ? error : 
+                   (error?.message || '重置排班表失敗')),
+            isLoading: false 
+          });
+          throw error;
+        }
+      }
     }),
     {
       name: 'schedule-storage', // 存儲的名稱

@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     
     # 數據庫配置
-    DATABASE_URL: str = "sqlite:///./anes.db"
+    DATABASE_URL: str = "postgresql://anes_user:anes_password@localhost/anes_db"
     
     # CORS設置
     BACKEND_CORS_ORIGINS: List[str] = ["http://localhost", "http://localhost:3000"]

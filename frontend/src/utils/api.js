@@ -77,7 +77,11 @@ const apiService = {
     getMonthlySchedule: (year, month) => api.get(`/schedules/monthly/${year}/${month}`),
     updateSchedule: (scheduleId, data) => api.put(`/schedules/${scheduleId}`, data),
     publishSchedule: (versionId) => api.post(`/schedules/versions/${versionId}/publish`),
-    getScheduleDetails: (year, month) => api.get(`/schedules/details/${year}/${month}`)
+    saveMonth: (data) => api.post('/schedules/saveMonth', data),
+    updateShift: (shiftData) => api.post('/schedules/updateShift', shiftData),
+    resetAreaCodes: (year, month) => api.post('/schedules/resetAreaCodes', { year, month }),
+    bulkUpdateAreaCodes: (updates) => api.post('/schedules/bulkUpdateAreaCodes', updates),
+    getScheduleDetails: (year, month) => api.get(`/schedules/details?year=${year}&month=${month}`)
   },
   
   // 換班相關

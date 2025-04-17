@@ -101,6 +101,7 @@ const WeeklySchedule = () => {
   
   const [currentWeek, setCurrentWeek] = useState(1);
   const [success, setSuccess] = useState(null);
+  const [localError, setLocalError] = useState(null);
   const [showShiftTime, setShowShiftTime] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [missionValues, setMissionValues] = useState({});
@@ -116,8 +117,8 @@ const WeeklySchedule = () => {
                'instanceof Date:', storeSelectedDate instanceof Date);
     try {
       return ensureValidDate(storeSelectedDate);
-    } catch (error) {
-      console.error('處理日期時出錯:', error);
+    } catch (err) {
+      console.error('處理日期時出錯:', err);
       return new Date();
     }
   }, [storeSelectedDate]);
@@ -126,8 +127,8 @@ const WeeklySchedule = () => {
   const daysInMonth = useMemo(() => {
     try {
       return getDaysInMonth(selectedDate);
-    } catch (error) {
-      console.error('獲取月份天數失敗:', error);
+    } catch (err) {
+      console.error('獲取月份天數失敗:', err);
       return 30; // 默認返回30天
     }
   }, [selectedDate]);
@@ -137,8 +138,8 @@ const WeeklySchedule = () => {
     try {
       const day = getDay(startOfMonth(selectedDate));
       return day === 0 ? 7 : day; // 將週日(0)轉換為7，以便於計算
-    } catch (error) {
-      console.error('獲取月份第一天星期失敗:', error);
+    } catch (err) {
+      console.error('獲取月份第一天星期失敗:', err);
       return 1;
     }
   }, [selectedDate]);
@@ -153,8 +154,8 @@ const WeeklySchedule = () => {
     try {
       if (!isValid(selectedDate)) return '無效日期';
       return format(selectedDate, 'yyyy年MM月');
-    } catch (error) {
-      console.error('格式化日期失敗:', error);
+    } catch (err) {
+      console.error('格式化日期失敗:', err);
       return '無效日期';
     }
   }, [selectedDate]);
@@ -186,9 +187,9 @@ const WeeklySchedule = () => {
         if (!nursesByIdentity[nurse.identity]) {
           nursesByIdentity[nurse.identity] = [];
         }
-        nursesByIdentity[nurse.identity].push(nurse);
+        nursesByIdentity[nurse.identity].push({...nurse}); // 使用展開運算符創建新對象
       } else {
-        unknownIdentity.push(nurse);
+        unknownIdentity.push({...nurse}); // 使用展開運算符創建新對象
       }
     });
     
@@ -251,7 +252,7 @@ const WeeklySchedule = () => {
       const weekSchedule = sortedNurses.map(nurse => {
         const startIndex = week * 7 - (firstDayOfMonth - 1);
         const endIndex = startIndex + 7;
-        const weekShifts = nurse.shifts.slice(Math.max(0, startIndex), endIndex);
+        const weekShifts = nurse.shifts ? nurse.shifts.slice(Math.max(0, startIndex), endIndex) : [];
         
         // 從 nurse 中獲取 area_codes，如果沒有則創建空數組
         const weekAreaCodes = nurse.area_codes 
@@ -342,53 +343,45 @@ const WeeklySchedule = () => {
     
     try {
       setIsSaving(true);
-      let resetCount = 0;
-      let errorCount = 0;
 
       // 取得當前年月
       const year = selectedDate.getFullYear();
       const month = selectedDate.getMonth() + 1;
       
-      // 獲取排班詳細數據
-      const scheduleDetails = await apiService.schedule.getScheduleDetails(year, month);
-      if (!scheduleDetails.data?.success) {
-        throw new Error("無法獲取排班詳細數據");
-      }
+      // 使用新的批量重置API
+      const response = await apiService.schedule.resetAreaCodes(year, month);
       
-      // 取得所有需要重置的排班記錄
-      const details = scheduleDetails.data.data || [];
-      const recordsWithAreaCode = details.filter(item => item.area_code !== null && item.area_code !== undefined);
-      
-      // 清除所有area_code
-      for (const record of recordsWithAreaCode) {
-        try {
-          await apiService.schedule.updateSchedule(record.id, {
-            area_code: null
-          });
-          resetCount++;
-        } catch (err) {
-          console.error(`重置工作分配失敗 (ID: ${record.id}):`, err);
-          errorCount++;
-        }
+      if (!response.data.success) {
+        throw new Error(response.data.message || "重置工作分配失敗");
       }
       
       // 重置本地狀態
       setMissionValues({});
       
       setIsSaving(false);
-      if (errorCount === 0) {
-        setSuccess(`成功重置 ${resetCount} 個工作分配`);
-      } else {
-        setSuccess(`重置了 ${resetCount} 個工作分配，但有 ${errorCount} 個失敗`);
-      }
+      setSuccess(`成功重置 ${response.data.reset_count} 個工作分配`);
       
       // 重新獲取數據，確保顯示最新數據
       await fetchMonthlySchedule();
       
       setTimeout(() => setSuccess(null), 3000);
-    } catch (error) {
+    } catch (err) {
       setIsSaving(false);
-      console.error('重置工作分配失敗:', error);
+      console.error('重置工作分配失敗:', err);
+      
+      // 避免直接渲染錯誤對象，而是顯示錯誤信息字串
+      let errorMessage = '重置工作分配失敗，請稍後重試';
+      
+      if (typeof err === 'string') {
+        errorMessage = err;
+      } else if (err && typeof err.message === 'string') {
+        errorMessage = err.message;
+      } else if (err && err.data && typeof err.data.message === 'string') {
+        errorMessage = err.data.message;
+      }
+      
+      setLocalError(errorMessage);
+      setTimeout(() => setLocalError(null), 5000);
     }
   };
 
@@ -396,14 +389,12 @@ const WeeklySchedule = () => {
   const saveWorkAssignments = async () => {
     try {
       setIsSaving(true);
-      let savedCount = 0;
-      let errorCount = 0;
 
       // 取得當前年月
       const year = selectedDate.getFullYear();
       const month = selectedDate.getMonth() + 1;
       
-      // 獲取排班詳細數據，找出 ID 映射
+      // 獲取排班詳細數據
       const scheduleDetails = await apiService.schedule.getScheduleDetails(year, month);
       if (!scheduleDetails.data?.success) {
         throw new Error("無法獲取排班詳細數據");
@@ -421,6 +412,9 @@ const WeeklySchedule = () => {
         scheduleMapping[key] = item.id;
       });
       
+      // 準備批量更新數據
+      const bulkUpdates = [];
+      
       // 找出所有需要更新的工作分配
       for (const [key, mission] of Object.entries(missionValues)) {
         // 解析鍵值 `${nurseId}-${currentWeek}-${dayIndex}`
@@ -431,36 +425,72 @@ const WeeklySchedule = () => {
         const dayOfMonth = parseInt(getDateOfWeek(parseInt(weekNum) - 1, parseInt(dayIndex) + 1));
         if (!dayOfMonth) continue;
         
-        // 查找此日期和用戶的排班ID
-        const scheduleKey = `${nurseId}-${dayOfMonth}`;
-        const scheduleId = scheduleMapping[scheduleKey];
+        // 格式化日期字符串
+        const dateString = `${year}-${month < 10 ? '0' + month : month}-${dayOfMonth < 10 ? '0' + dayOfMonth : dayOfMonth}`;
         
-        if (scheduleId) {
-          try {
-            // 更新 area_code
-            await apiService.schedule.updateSchedule(scheduleId, {
-              area_code: mission
-            });
-            savedCount++;
-          } catch (err) {
-            console.error(`更新工作分配失敗 (${nurseId}-${dayOfMonth}):`, err);
-            errorCount++;
-          }
+        // 添加到批量更新列表
+        bulkUpdates.push({
+          user_id: parseInt(nurseId),
+          date: dateString,
+          area_code: mission === null ? null : mission.toString()
+        });
+      }
+      
+      // 執行批量更新
+      if (bulkUpdates.length > 0) {
+        const response = await apiService.schedule.bulkUpdateAreaCodes(bulkUpdates);
+        if (!response.data.success) {
+          throw new Error(response.data.message || "批量更新工作分配失敗");
         }
+        
+        setSuccess(`成功儲存 ${response.data.updated_count} 個工作分配`);
+        if (response.data.failed_count > 0) {
+          setSuccess(`成功儲存 ${response.data.updated_count} 個工作分配，但有 ${response.data.failed_count} 個失敗`);
+        }
+      } else {
+        setSuccess("沒有需要更新的工作分配");
       }
       
       setIsSaving(false);
+      setEditMode(false);
       
       // 重新獲取數據，確保顯示最新數據
       await fetchMonthlySchedule();
-    } catch (error) {
+      
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err) {
       setIsSaving(false);
-      console.error('保存工作分配失敗:', error);
+      console.error('保存工作分配失敗:', err);
+      
+      // 避免直接渲染錯誤對象，而是顯示錯誤信息字串
+      let errorMessage = '保存工作分配失敗，請稍後重試';
+      
+      if (typeof err === 'string') {
+        errorMessage = err;
+      } else if (err && typeof err.message === 'string') {
+        errorMessage = err.message;
+      } else if (err && err.data && typeof err.data.message === 'string') {
+        errorMessage = err.data.message;
+      }
+      
+      setLocalError(errorMessage);
+      setTimeout(() => setLocalError(null), 5000);
     }
   };
 
   // 获取任务按钮
   const getMissionButtons = (identity, nurseId, dayIndex) => {
+    // 查找該護理師該天的班次
+    const nurseData = currentWeekSchedule.find(n => n.id === nurseId);
+    if (!nurseData) return null;
+    
+    const shift = nurseData.shifts[dayIndex];
+    
+    // 確保只有A班才顯示工作分區按鈕
+    if (shift !== 'A') {
+      return null;
+    }
+    
     // 計算當前是星期幾 (0-6)
     const currentDate = parseInt(getDateOfWeek(currentWeek - 1, dayIndex + 1));
     if (!currentDate) return null; // 如果日期無效，不顯示按鈕
@@ -808,7 +838,19 @@ const WeeklySchedule = () => {
 
   // 處理工作分配變更
   const handleMissionChange = async (nurseId, dayIndex, value) => {
-    // 生成包含週次的鍵，確保不同週的相同日索引有不同的鍵值
+    // 查找該護理師該天的班次
+    const nurseData = currentWeekSchedule.find(n => n.id === nurseId);
+    if (!nurseData) return;
+    
+    const shift = nurseData.shifts[dayIndex];
+    
+    // 確保只有A班才能修改工作分區
+    if (shift !== 'A') {
+      console.log(`只有A班才能修改工作分區，當前班次為 ${shift}`);
+      return;
+    }
+    
+    // 任務值的key
     const key = `${nurseId}-${currentWeek}-${dayIndex}`;
     
     // 克隆当前的任务值对象
@@ -894,48 +936,48 @@ const WeeklySchedule = () => {
       const dayOfMonth = parseInt(getDateOfWeek(currentWeek - 1, dayIndex + 1));
       if (!dayOfMonth) return;
       
-      // 獲取排班詳細資料以找出ID
+      // 獲取年月日
       const year = selectedDate.getFullYear();
       const month = selectedDate.getMonth() + 1;
+      const dateString = `${year}-${month < 10 ? '0' + month : month}-${dayOfMonth < 10 ? '0' + dayOfMonth : dayOfMonth}`;
       
-      // 獲取排班詳細數據
-      const scheduleDetails = await apiService.schedule.getScheduleDetails(year, month);
-      if (!scheduleDetails.data?.success) {
-        console.error("無法獲取排班詳細數據");
-        return;
-      }
+      // 直接使用updateShift API更新area_code
+      await apiService.schedule.updateShift({
+        user_id: nurseId,
+        date: dateString,
+        shift_type: 'A', // 確保是A班
+        area_code: value
+      });
       
-      // 尋找對應的排班ID
-      const details = scheduleDetails.data.data || [];
-      for (const item of details) {
-        const dateObj = new Date(item.date);
-        const day = dateObj.getDate();
-        if (item.user_id === nurseId && day === dayOfMonth) {
-          // 找到對應的排班ID，更新area_code
-          try {
-            await apiService.schedule.updateSchedule(item.id, {
-              area_code: value
-            });
-            console.log(`成功更新 user_id=${nurseId}, date=${dayOfMonth} 的area_code為${value}`);
-            
-            // 更新本地數據，避免重新載入整個頁面
-            // 但不更新missionValues，因為那是編輯中的暫存狀態
-            const updatedSchedule = [...monthlySchedule];
-            const nurseIndex = updatedSchedule.findIndex(nurse => nurse.id === nurseId);
-            if (nurseIndex >= 0) {
-              if (!updatedSchedule[nurseIndex].area_codes) {
-                updatedSchedule[nurseIndex].area_codes = Array(31).fill(null);
-              }
-              updatedSchedule[nurseIndex].area_codes[dayOfMonth - 1] = value;
-            }
-          } catch (err) {
-            console.error(`更新工作分配失敗 (${nurseId}-${dayOfMonth}):`, err);
-          }
-          break;
+      console.log(`成功更新 user_id=${nurseId}, date=${dayOfMonth} 的area_code為${value}`);
+      
+      // 更新本地數據，避免重新載入整個頁面
+      // 但不更新missionValues，因為那是編輯中的暫存狀態
+      const updatedSchedule = [...monthlySchedule];
+      const nurseIndex = updatedSchedule.findIndex(nurse => nurse.id === nurseId);
+      if (nurseIndex >= 0) {
+        if (!updatedSchedule[nurseIndex].area_codes) {
+          updatedSchedule[nurseIndex].area_codes = Array(31).fill(null);
         }
+        updatedSchedule[nurseIndex].area_codes[dayOfMonth - 1] = value;
       }
-    } catch (error) {
-      console.error('更新area_code失敗:', error);
+      
+    } catch (err) {
+      console.error('更新area_code失敗:', err);
+      
+      // 避免直接渲染錯誤對象，而是顯示錯誤信息字串
+      let errorMessage = '更新工作分配失敗，請稍後重試';
+      
+      if (typeof err === 'string') {
+        errorMessage = err;
+      } else if (err && typeof err.message === 'string') {
+        errorMessage = err.message;
+      } else if (err && err.data && typeof err.data.message === 'string') {
+        errorMessage = err.data.message;
+      }
+      
+      setLocalError(errorMessage);
+      setTimeout(() => setLocalError(null), 5000);
     }
   };
 
@@ -997,10 +1039,29 @@ const WeeklySchedule = () => {
       // 隱藏PDF內容
       element.style.display = 'none';
       
-      setSuccess('PDF已生成');
+      setSuccess('PDF 文件已生成');
       setTimeout(() => setSuccess(null), 3000);
-    } catch (error) {
-      console.error('生成PDF失敗:', error);
+    } catch (err) {
+      console.error('生成PDF失敗:', err);
+      
+      // 避免直接渲染錯誤對象，而是顯示錯誤信息字串
+      let errorMessage = '生成PDF失敗，請稍後重試';
+      
+      if (typeof err === 'string') {
+        errorMessage = err;
+      } else if (err && typeof err.message === 'string') {
+        errorMessage = err.message;
+      } else if (err && err.data && typeof err.data.message === 'string') {
+        errorMessage = err.data.message;
+      }
+      
+      setLocalError(errorMessage);
+      setTimeout(() => setLocalError(null), 5000);
+      
+      // 確保PDF內容被隱藏
+      if (element) {
+        element.style.display = 'none';
+      }
     }
   };
 
@@ -1075,6 +1136,28 @@ const WeeklySchedule = () => {
     return nurses.map(nurse => nurse.name);
   };
 
+  // 計算未安排工作的A班(白班)人員
+  const getUnassignedAShiftNurses = (dayIndex) => {
+    if (!currentWeekSchedule || currentWeekSchedule.length === 0) return [];
+    
+    // 計算實際日期
+    const dayOfMonth = parseInt(getDateOfWeek(currentWeek - 1, dayIndex + 1));
+    if (!dayOfMonth) return [];
+    
+    // 收集所有排A班但沒有工作分配的護理師
+    const nurses = currentWeekSchedule.filter(nurse => {
+      const shift = nurse.shifts[dayIndex];
+      if (shift !== 'A') return false; // 只考慮A班
+      
+      const missionKey = `${nurse.id}-${currentWeek}-${dayIndex}`;
+      const mission = missionValues[missionKey] || nurse.area_codes?.[dayIndex];
+      return !mission; // 返回沒有工作分配的護理師
+    });
+    
+    // 返回護理師名字
+    return nurses.map(nurse => nurse.name);
+  };
+
   // 初始加載用戶和班表數據
   useEffect(() => {
     const loadData = async () => {
@@ -1087,12 +1170,12 @@ const WeeklySchedule = () => {
         
         try {
           await fetchMonthlySchedule();
-        } catch (scheduleError) {
-          console.error('獲取排班數據失敗，但將繼續載入界面:', scheduleError);
+        } catch (scheduleErr) {
+          console.error('獲取排班數據失敗，但將繼續載入界面:', scheduleErr);
           // 這裡不需要額外處理，因為store已經在函數內部設置了錯誤狀態和空數據
         }
-      } catch (error) {
-        console.error('加載數據失敗:', error);
+      } catch (err) {
+        console.error('加載數據失敗:', err);
         // 錯誤處理已移至store內
       }
     };
@@ -1105,8 +1188,8 @@ const WeeklySchedule = () => {
     if (isValid(selectedDate)) {
       try {
         fetchMonthlySchedule();
-      } catch (error) {
-        console.error('日期變更後獲取班表失敗:', error);
+      } catch (err) {
+        console.error('日期變更後獲取班表失敗:', err);
         // 錯誤已在fetchMonthlySchedule內部處理
       }
     }
@@ -1136,56 +1219,55 @@ const WeeklySchedule = () => {
     
     if (!shift) return '';
     
-    // A班且處於編輯模式
-    if (shift === 'A' && editMode && hasEditPermission) {
-      return (
-        <Box sx={{ 
-          display: 'flex', 
-          flexDirection: 'column', 
-          alignItems: 'center', 
-          p: 0, 
-          m: 0, 
-          height: '22px', // 確保固定高度
-          maxHeight: '22px',
-          minHeight: '22px',
-          backgroundColor: '#f9f9f9',  // 添加淺灰色背景，突出編輯區域
-          overflow: 'hidden', // 確保內容不會溢出
-          whiteSpace: 'nowrap', // 防止換行
-          textOverflow: 'ellipsis' // 顯示省略號
-        }}>
-          {getMissionButtons(nurse.identity, nurse.id, dayIndex)}
-        </Box>
-      );
-    }
-    
-    // 優先顯示 mission 值 (非編輯模式下使用粗體顯示)
-    if (mission) {
-      // 如果是A班且有工作分配，使用深一點的背景色
-      const bgColor = shift === 'A' ? '#B3CFC1' : 'transparent'; // A班有工作分配時使用更深的綠色
-      
-      return (
-        <Box component="span" sx={{ 
-          fontWeight: 'bold', // 非編輯模式下顯示area_code時使用粗體
-          whiteSpace: 'nowrap', 
-          overflow: 'hidden', 
-          textOverflow: 'ellipsis',
-          width: '100%',
-          display: 'block',
-          fontSize: '0.85rem',
-          height: '22px',
-          lineHeight: '22px',
-          backgroundColor: bgColor, // 使用條件背景色
-          border: '2px solid #96BB9C', // 添加明顯但淺色的邊框
-          borderRadius: '3px', // 輕微圓角
-          margin: '-1px', // 調整邊距以適應邊框增加的尺寸
-        }}>
-          {mission}
-        </Box>
-      );
-    }
-    
-    // A班但沒有工作分配，使用灰色顯示，讓使用者容易看出還沒有工作分配
+    // 僅當班次為'A'時才顯示編輯按鈕和使用area_code
     if (shift === 'A') {
+      // A班且處於編輯模式
+      if (editMode && hasEditPermission) {
+        return (
+          <Box sx={{ 
+            display: 'flex', 
+            flexDirection: 'column', 
+            alignItems: 'center', 
+            p: 0, 
+            m: 0, 
+            height: '22px', // 確保固定高度
+            maxHeight: '22px',
+            minHeight: '22px',
+            backgroundColor: '#f9f9f9',  // 添加淺灰色背景，突出編輯區域
+            overflow: 'hidden', // 確保內容不會溢出
+            whiteSpace: 'nowrap', // 防止換行
+            textOverflow: 'ellipsis' // 顯示省略號
+          }}>
+            {getMissionButtons(nurse.identity, nurse.id, dayIndex)}
+          </Box>
+        );
+      }
+      
+      // 優先顯示 mission 值 (非編輯模式下使用粗體顯示)
+      if (mission) {
+        // A班且有工作分配，使用深一點的背景色
+        return (
+          <Box component="span" sx={{ 
+            fontWeight: 'bold', // 非編輯模式下顯示area_code時使用粗體
+            whiteSpace: 'nowrap', 
+            overflow: 'hidden', 
+            textOverflow: 'ellipsis',
+            width: '100%',
+            display: 'block',
+            fontSize: '0.85rem',
+            height: '22px',
+            lineHeight: '22px',
+            backgroundColor: '#B3CFC1', // 使用條件背景色
+            border: '2px solid #96BB9C', // 添加明顯但淺色的邊框
+            borderRadius: '3px', // 輕微圓角
+            margin: '-1px', // 調整邊距以適應邊框增加的尺寸
+          }}>
+            {mission}
+          </Box>
+        );
+      }
+      
+      // A班但沒有工作分配，使用灰色顯示，讓使用者容易看出還沒有工作分配
       return (
         <Box component="span" sx={{ 
           color: '#9e9e9e', // 灰色字體
@@ -1203,7 +1285,7 @@ const WeeklySchedule = () => {
       );
     }
     
-    // 其他班次
+    // 非A班的班次，直接顯示shift_type
     return (
       <Box component="span" sx={{ 
         whiteSpace: 'nowrap', 
@@ -1301,9 +1383,10 @@ const WeeklySchedule = () => {
         </Box>
       )}
       
-      {error && (
+      {localError && (
         <Alert severity="error" sx={{ mb: 2 }}>
-          {error}
+          {typeof localError === 'string' ? localError : 
+           (localError?.message || '操作過程中發生錯誤')}
         </Alert>
       )}
       
@@ -1539,6 +1622,52 @@ const WeeklySchedule = () => {
                     </TableRow>
                   ))
                 }
+                
+                {/* 未安排白班人員統計 */}
+                <TableRow sx={{ borderTop: '2px solid #bbb' }}>
+                  <TableCell sx={{ 
+                    fontSize: '0.8rem', 
+                    backgroundColor: '#fce4ec', 
+                    color: '#c2185b',
+                    fontWeight: 'bold'
+                  }}>
+                    未安排白班人員
+                  </TableCell>
+                  {Array.from({ length: 7 }).map((_, dayIndex) => {
+                    const unassignedNurses = getUnassignedAShiftNurses(dayIndex);
+                    const count = unassignedNurses.length;
+                    const hasValue = count > 0;
+                    
+                    return (
+                      <TableCell 
+                        key={dayIndex} 
+                        align="center" 
+                        sx={{ 
+                          fontSize: '0.8rem',
+                          fontWeight: hasValue ? 'bold' : 'normal',
+                          color: hasValue ? '#c2185b' : '#9e9e9e',
+                          backgroundColor: hasValue ? 'rgba(194, 24, 91, 0.1)' : 'transparent',
+                          maxWidth: '120px',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: showNurseNames && unassignedNurses.length > 2 ? 'normal' : 'nowrap'
+                        }}
+                      >
+                        {hasValue ? (
+                          showNurseNames ? (
+                            <Tooltip title={unassignedNurses.join(', ')} arrow placement="top">
+                              <span>{unassignedNurses.join(', ')}</span>
+                            </Tooltip>
+                          ) : (
+                            count
+                          )
+                        ) : (
+                          showNurseNames ? '-' : '0'
+                        )}
+                      </TableCell>
+                    );
+                  })}
+                </TableRow>
               </TableBody>
             </Table>
           </TableContainer>

@@ -419,44 +419,43 @@ const MonthlySchedule = () => {
   useEffect(() => {
     const loadData = async () => {
       try {
-        // 在第一次加載時確保store已初始化
-        if (typeof useScheduleStore.getState().initialize === 'function') {
-          useScheduleStore.getState().initialize();
-        }
-        await fetchUsers();
+        setError(null);
+        const responseData = await fetchMonthlySchedule();
+        console.log('获取的原始排班数据:', responseData);
         
-        try {
-          const response = await fetchMonthlySchedule();
-          console.log('获取的原始排班数据:', response);
+        if (responseData) {
+          const year = selectedDate.getFullYear();
+          const month = selectedDate.getMonth() + 1;
           
-          // 尝试直接从返回的响应中提取数据
-          if (response) {
-            const year = selectedDate.getFullYear();
-            const month = selectedDate.getMonth() + 1;
+          if (responseData[year] && 
+              responseData[year][month] && 
+              responseData[year][month].schedule) {
             
-            if (response[year] && 
-                response[year][month] && 
-                response[year][month].schedule) {
-              
-              const extractedData = response[year][month].schedule;
-              console.log('直接从API响应提取的排班数据:', extractedData);
-              setScheduleData(extractedData);
-            }
+            const extractedData = responseData[year][month].schedule;
+            console.log('直接从API响应提取的排班数据:', extractedData);
+            setScheduleData(extractedData);
           }
-        } catch (scheduleError) {
-          console.error('獲取排班數據失敗，但將繼續載入界面:', scheduleError);
-          // 這裡只顯示錯誤，但不阻止界面載入
-          setError('排班數據暫時無法獲取，但您仍可以使用其他功能');
-          setTimeout(() => setError(null), 5000);
         }
       } catch (error) {
-        console.error('加载数据失败:', error);
-        setError('數據加載失敗，請稍後重試');
+        console.error('獲取排班數據失敗，但將繼續載入界面:', error);
+        // 避免直接渲染錯誤對象，而是顯示錯誤信息字串
+        let errorMessage = '排班數據暫時無法獲取，但您仍可以使用其他功能';
+        
+        if (typeof error === 'string') {
+          errorMessage = error;
+        } else if (error && typeof error.message === 'string') {
+          errorMessage = error.message;
+        } else if (error && error.data && typeof error.data.message === 'string') {
+          errorMessage = error.data.message;
+        }
+        
+        setError(errorMessage);
+        setTimeout(() => setError(null), 5000);
       }
     };
     
     loadData();
-  }, [fetchUsers, fetchMonthlySchedule, selectedDate]);
+  }, [fetchMonthlySchedule, selectedDate]);
 
   // 處理班表生成功能
   const handleGenerateSchedule = async () => {
@@ -467,7 +466,18 @@ const MonthlySchedule = () => {
       setTimeout(() => setSuccess(null), 3000);
     } catch (error) {
       console.error('生成月班表失敗:', error);
-      setError('生成月班表失敗，但您仍可以使用其他功能');
+      // 避免直接渲染錯誤對象，而是顯示錯誤信息字串
+      let errorMessage = '生成月班表失敗，請稍後重試';
+      
+      if (typeof error === 'string') {
+        errorMessage = error;
+      } else if (error && typeof error.message === 'string') {
+        errorMessage = error.message;
+      } else if (error && error.data && typeof error.data.message === 'string') {
+        errorMessage = error.data.message;
+      }
+      
+      setError(errorMessage);
       setTimeout(() => setError(null), 5000);
     }
   };
@@ -480,6 +490,19 @@ const MonthlySchedule = () => {
       setTimeout(() => setSuccess(null), 3000);
     } catch (error) {
       console.error('保存月班表失敗:', error);
+      // 避免直接渲染錯誤對象，而是顯示錯誤信息字串
+      let errorMessage = '保存月班表失敗，請稍後重試';
+      
+      if (typeof error === 'string') {
+        errorMessage = error;
+      } else if (error && typeof error.message === 'string') {
+        errorMessage = error.message;
+      } else if (error && error.data && typeof error.data.message === 'string') {
+        errorMessage = error.data.message;
+      }
+      
+      setError(errorMessage);
+      setTimeout(() => setError(null), 5000);
     }
   };
 
@@ -555,7 +578,8 @@ const MonthlySchedule = () => {
       
       {storeError && (
         <Alert severity="error" sx={{ mb: 2 }}>
-          {storeError}
+          {typeof storeError === 'string' ? storeError : 
+           (storeError?.message || '操作過程中發生錯誤')}
         </Alert>
       )}
       
@@ -567,7 +591,8 @@ const MonthlySchedule = () => {
       
       {error && (
         <Alert severity="error" sx={{ mb: 2 }}>
-          {error}
+          {typeof error === 'string' ? error : 
+           (error?.message || '操作過程中發生錯誤')}
         </Alert>
       )}
       

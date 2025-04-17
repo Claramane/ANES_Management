@@ -82,10 +82,5 @@ echo "===== 啟動後端服務 ====="
 echo "後端服務將在 http://localhost:8000 運行"
 echo ""
 
-echo "默認帳號:"
-echo "護理長: admin / changeme"
-echo "護理師: nurse / password"
-echo ""
-
 echo "正在啟動後端..."
 $PYTHON_CMD run.py 

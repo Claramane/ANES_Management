@@ -16,6 +16,7 @@ import ShiftSwapPage from './pages/ShiftSwap';
 import AnnouncementPage from './pages/Announcement';
 import UserManagement from './pages/UserManagement';
 import SettingsPage from './pages/Settings';
+import VersionHistory from './pages/VersionHistory';
 import NotFound from './pages/NotFound';
 
 // 自訂Hook
@@ -95,6 +96,7 @@ function App() {
             <Route path="big-schedule" element={<BigSchedule />} />
             <Route path="shift-swap" element={<ShiftSwapPage />} />
             <Route path="announcements" element={<AnnouncementPage />} />
+            <Route path="version-history" element={<VersionHistory />} />
             
             {/* 護理長專用路由 */}
             <Route path="formula-schedule" element={
