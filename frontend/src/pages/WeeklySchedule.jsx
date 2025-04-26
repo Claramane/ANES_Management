@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Box, 
   Typography, 
@@ -17,7 +17,9 @@ import {
   IconButton,
   Tooltip,
   Switch,
-  FormControlLabel
+  FormControlLabel,
+  Chip,
+  Badge
 } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
@@ -43,7 +45,8 @@ const ShiftCell = styled(TableCell)(({ shift }) => {
     'E': '#FFB6C1', // 半班(Leader/書記)
     'B': '#FFDAB9', // 日班(書記)
     'O': '#FFFFFF', // 休假 - 白底
-    'V': '#FFFFFF'  // 休假 - 白底
+    'V': '#FFFFFF',  // 休假 - 白底
+    'R': '#FFFFFF'  // 靜養假 - 白底
   };
   
   return {
@@ -316,7 +319,8 @@ const WeeklySchedule = () => {
       'C': '10-18',
       'F': '12-20',
       'O': 'OFF',
-      'V': 'OFF'
+      'V': 'OFF',
+      'R': 'REPO'
     };
     return shiftTimes[shift] || shift;
   };
@@ -358,11 +362,22 @@ const WeeklySchedule = () => {
       // 重置本地狀態
       setMissionValues({});
       
+      // 在本地立即更新area_codes，將所有護理師的area_codes設為null
+      const updatedSchedule = [...monthlySchedule];
+      
+      // 更新本地數據，將所有area_codes重置為null
+      updatedSchedule.forEach(nurse => {
+        nurse.area_codes = Array(31).fill(null);
+      });
+      
+      // 更新store中的數據
+      useScheduleStore.setState({ monthlySchedule: updatedSchedule });
+      
       setIsSaving(false);
       setSuccess(`成功重置 ${response.data.reset_count} 個工作分配`);
       
-      // 重新獲取數據，確保顯示最新數據
-      await fetchMonthlySchedule();
+      // 不需要重新獲取數據，因為我們已經在上面更新了本地數據
+      // await fetchMonthlySchedule();
       
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
@@ -443,6 +458,30 @@ const WeeklySchedule = () => {
           throw new Error(response.data.message || "批量更新工作分配失敗");
         }
         
+        // 在本地立即更新area_codes，無需等待重新獲取數據
+        const updatedSchedule = [...monthlySchedule];
+        
+        // 更新本地數據
+        for (const update of bulkUpdates) {
+          const nurseId = update.user_id;
+          const dateObj = new Date(update.date);
+          const day = dateObj.getDate() - 1; // 轉為0-based索引
+          
+          const nurseIndex = updatedSchedule.findIndex(nurse => nurse.id === nurseId);
+          if (nurseIndex >= 0) {
+            if (!updatedSchedule[nurseIndex].area_codes) {
+              updatedSchedule[nurseIndex].area_codes = Array(31).fill(null);
+            }
+            
+            if (day >= 0 && day < 31) {
+              updatedSchedule[nurseIndex].area_codes[day] = update.area_code;
+            }
+          }
+        }
+        
+        // 更新store中的數據
+        useScheduleStore.setState({ monthlySchedule: updatedSchedule });
+        
         setSuccess(`成功儲存 ${response.data.updated_count} 個工作分配`);
         if (response.data.failed_count > 0) {
           setSuccess(`成功儲存 ${response.data.updated_count} 個工作分配，但有 ${response.data.failed_count} 個失敗`);
@@ -454,8 +493,11 @@ const WeeklySchedule = () => {
       setIsSaving(false);
       setEditMode(false);
       
-      // 重新獲取數據，確保顯示最新數據
-      await fetchMonthlySchedule();
+      // 清空暫存的編輯值
+      setMissionValues({});
+      
+      // 不需要重新獲取數據，因為我們已經在上面更新了本地數據
+      // await fetchMonthlySchedule();
       
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
@@ -960,6 +1002,9 @@ const WeeklySchedule = () => {
           updatedSchedule[nurseIndex].area_codes = Array(31).fill(null);
         }
         updatedSchedule[nurseIndex].area_codes[dayOfMonth - 1] = value;
+        
+        // 同時更新store中的數據
+        useScheduleStore.setState({ monthlySchedule: updatedSchedule });
       }
       
     } catch (err) {
@@ -1068,8 +1113,19 @@ const WeeklySchedule = () => {
   // 處理日期變更
   const handleDateChange = (newDate) => {
     if (newDate && newDate instanceof Date && !isNaN(newDate.getTime())) {
+      // 如果新日期和當前日期是同一個月，則不重新加載資料
+      const isSameMonth = 
+        selectedDate.getFullYear() === newDate.getFullYear() && 
+        selectedDate.getMonth() === newDate.getMonth();
+      
+      // 更新日期並設置週次
       updateSelectedDate(newDate);
       setCurrentWeek(1);
+      
+      // 清空舊的 missionValues
+      setMissionValues({});
+      
+      console.log(`日期變更: ${format(newDate, 'yyyy-MM-dd')}, 是否同月: ${isSameMonth}`);
     } else {
       console.error('嘗試設置無效的日期:', newDate);
       updateSelectedDate(new Date());
@@ -1167,33 +1223,85 @@ const WeeklySchedule = () => {
           useScheduleStore.getState().initialize();
         }
         await fetchUsers();
-        
-        try {
-          await fetchMonthlySchedule();
-        } catch (scheduleErr) {
-          console.error('獲取排班數據失敗，但將繼續載入界面:', scheduleErr);
-          // 這裡不需要額外處理，因為store已經在函數內部設置了錯誤狀態和空數據
-        }
       } catch (err) {
-        console.error('加載數據失敗:', err);
-        // 錯誤處理已移至store內
+        console.error('加載用戶數據失敗:', err);
       }
     };
     
     loadData();
-  }, [fetchUsers, fetchMonthlySchedule]);
+  }, [fetchUsers]); // 只依賴fetchUsers，避免重複執行
 
-  // 日期變更時重新獲取班表
+  // 處理班表和工作分配數據加載，整合到一個useEffect中
   useEffect(() => {
-    if (isValid(selectedDate)) {
+    // 確保日期有效
+    if (!isValid(selectedDate)) return;
+    
+    // 設置標記防止重複請求
+    let isMounted = true;
+    
+    const loadScheduleData = async () => {
       try {
-        fetchMonthlySchedule();
+        console.log('開始加載班表數據...');
+        
+        // 獲取當前年月
+        const year = selectedDate.getFullYear();
+        const month = selectedDate.getMonth() + 1;
+        
+        // 先獲取月班表數據
+        await fetchMonthlySchedule();
+        
+        // 如果組件已卸載，不繼續執行
+        if (!isMounted) return;
+        
+        // 再獲取工作分配數據
+        try {
+          console.log('開始加載工作分配數據...');
+          const scheduleDetails = await apiService.schedule.getScheduleDetails(year, month);
+          
+          // 如果組件已卸載，不繼續執行
+          if (!isMounted) return;
+          
+          if (scheduleDetails.data?.success) {
+            // 將工作分配資料更新到排班資料中
+            const monthlyData = [...useScheduleStore.getState().monthlySchedule];
+            const details = scheduleDetails.data.data || [];
+            
+            // 遍歷每個排班記錄，更新area_code
+            details.forEach(item => {
+              const nurseIndex = monthlyData.findIndex(nurse => nurse.id === item.user_id);
+              if (nurseIndex >= 0) {
+                const dateObj = new Date(item.date);
+                const day = dateObj.getDate() - 1; // 轉換為0-based索引
+                
+                if (!monthlyData[nurseIndex].area_codes) {
+                  monthlyData[nurseIndex].area_codes = Array(31).fill(null);
+                }
+                
+                if (day >= 0 && day < 31) {
+                  monthlyData[nurseIndex].area_codes[day] = item.area_code;
+                }
+              }
+            });
+            
+            // 更新store中的數據
+            useScheduleStore.setState({ monthlySchedule: monthlyData });
+            console.log('工作分配數據加載完成');
+          }
+        } catch (areaCodeErr) {
+          console.error('獲取工作分配資料失敗:', areaCodeErr);
+        }
       } catch (err) {
         console.error('日期變更後獲取班表失敗:', err);
-        // 錯誤已在fetchMonthlySchedule內部處理
       }
-    }
-  }, [selectedDate, fetchMonthlySchedule]);
+    };
+    
+    loadScheduleData();
+    
+    // 清理函數，組件卸載時設置標記
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedDate, fetchMonthlySchedule]); // 只在selectedDate或fetchMonthlySchedule變化時執行
 
   // 渲染單元格內容
   const renderCellContent = (nurse, dayIndex) => {
@@ -1333,15 +1441,17 @@ const WeeklySchedule = () => {
           ))}
         </ButtonGroup>
         
-        <Button 
-          variant="contained" 
-          color="warning"
-          onClick={generatePDF}
-          disabled={!monthlySchedule.length}
-          sx={{ ml: 2 }}
-        >
-          生成 PDF
-        </Button>
+        {hasEditPermission && ( // 僅在有編輯權限時顯示
+          <Button 
+            variant="contained" 
+            color="warning"
+            onClick={generatePDF}
+            disabled={!monthlySchedule.length}
+            sx={{ ml: 2 }}
+          >
+            生成 PDF
+          </Button>
+        )}
         
         <Button 
           variant="contained" 

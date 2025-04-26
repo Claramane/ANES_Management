@@ -42,7 +42,7 @@ class UserInDB(UserBase):
     updated_at: Optional[datetime] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class User(UserBase):
     id: int
@@ -52,7 +52,7 @@ class User(UserBase):
     updated_at: Optional[datetime] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # 令牌數據
 class Token(BaseModel):

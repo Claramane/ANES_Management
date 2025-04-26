@@ -49,32 +49,40 @@ async def generate_monthly_schedule(
         # 計算月份的第一天是星期幾 (0-6 代表週一到週日)
         first_day_weekday = first_day.weekday()
         
-        # 檢查是否已有該月份的排班表
-        month_str = f"{request.year}{request.month:02d}"
-        existing_version = db.query(ScheduleVersion).filter(
-            ScheduleVersion.month == month_str
-        ).first()
+        # 檢查請求中是否包含 temporary 參數
+        is_temporary = getattr(request, 'temporary', False)
         
-        if existing_version:
-            # 刪除現有排班記錄
-            db.query(MonthlySchedule).filter(
-                MonthlySchedule.version_id == existing_version.id
-            ).delete()
-            version = existing_version
-            version.is_base_version = request.as_base_version  # 設置是否為基準版本
-        else:
-            # 創建新版本
-            version = ScheduleVersion(
-                version_number=f"v1.0_{month_str}",
-                month=month_str,
-                notes=request.description or f"{request.year}年{request.month}月排班表",
-                is_published=False,
-                published_by=current_user.id,
-                is_base_version=request.as_base_version  # 設置是否為基準版本
-            )
-            db.add(version)
-            db.commit()
-            db.refresh(version)
+        # 如果是臨時生成，不修改資料庫中的數據，只在內存中計算並返回結果
+        version_id = None
+        if not is_temporary:
+            # 檢查是否已有該月份的排班表
+            month_str = f"{request.year}{request.month:02d}"
+            existing_version = db.query(ScheduleVersion).filter(
+                ScheduleVersion.month == month_str
+            ).first()
+            
+            if existing_version:
+                # 刪除現有排班記錄
+                db.query(MonthlySchedule).filter(
+                    MonthlySchedule.version_id == existing_version.id
+                ).delete()
+                version = existing_version
+                version.is_base_version = request.as_base_version  # 設置是否為基準版本
+            else:
+                # 創建新版本
+                version = ScheduleVersion(
+                    version_number=f"v1.0_{month_str}",
+                    month=month_str,
+                    notes=request.description or f"{request.year}年{request.month}月排班表",
+                    is_published=False,
+                    published_by=current_user.id,
+                    is_base_version=request.as_base_version  # 設置是否為基準版本
+                )
+                db.add(version)
+                db.commit()
+                db.refresh(version)
+            
+            version_id = version.id
         
         # 獲取所有公式班表及其patterns
         from ..models.formula_schedule import FormulaSchedulePattern
@@ -121,6 +129,7 @@ async def generate_monthly_schedule(
         
         # 生成月度排班
         schedule_entries = []
+        temporary_schedule = []  # 臨時存儲生成的排班數據，用於臨時模式
         
         # 身份與公式ID對應關係
         identity_to_formula = {
@@ -132,6 +141,9 @@ async def generate_monthly_schedule(
         
         # 處理每個護理師的排班
         for nurse in all_nurses:
+            # 收集這位護理師的排班信息，用於臨時模式
+            nurse_shifts = ['O'] * days_in_month  # 預設全休假
+            
             # 護理長特殊處理：週一至週五為A班，週六日為O休假
             if nurse.role == 'head_nurse':
                 print(f"護理長 {nurse.full_name} (ID: {nurse.id}) 使用特殊班表: 週一至週五A班，週六日休假")
@@ -146,17 +158,32 @@ async def generate_monthly_schedule(
                     # 週一至週五為A班，週六日為O休假
                     shift_type = 'A' if day_of_week < 5 else 'O'
                     
-                    # 創建排班記錄
-                    schedule_entry = MonthlySchedule(
-                        user_id=nurse.id,
-                        date=entry_date,
-                        shift_type=shift_type,
-                        area_code=nurse.identity,
-                        version_id=version.id
-                    )
-                    schedule_entries.append(schedule_entry)
+                    # 更新臨時數組
+                    nurse_shifts[day-1] = shift_type
+                    
+                    # 如果不是臨時模式，創建排班記錄
+                    if not is_temporary:
+                        schedule_entry = MonthlySchedule(
+                            user_id=nurse.id,
+                            date=entry_date,
+                            shift_type=shift_type,
+                            area_code=nurse.identity,
+                            version_id=version_id
+                        )
+                        schedule_entries.append(schedule_entry)
                     
                 print(f"護理長 {nurse.full_name} 的排班已完成")
+                
+                # 對於臨時模式，添加到臨時排班表中
+                if is_temporary:
+                    temporary_schedule.append({
+                        "id": nurse.id,
+                        "name": nurse.full_name,
+                        "role": nurse.role,
+                        "identity": nurse.identity,
+                        "shifts": nurse_shifts
+                    })
+                
                 continue
                 
             # 檢查group_data是否有值
@@ -188,18 +215,30 @@ async def generate_monthly_schedule(
                 # group_data 為 null，直接生成全休假排班
                 print(f"護理師 {nurse.full_name} 的 group_data 為 null，生成全休假排班")
                 
+                # 對於臨時模式，添加到臨時排班表中
+                if is_temporary:
+                    temporary_schedule.append({
+                        "id": nurse.id,
+                        "name": nurse.full_name,
+                        "role": nurse.role,
+                        "identity": nurse.identity,
+                        "shifts": nurse_shifts
+                    })
+                    continue
+                
                 # 為這個護理師生成全休假排班
                 for day in range(1, days_in_month + 1):
                     entry_date = date(request.year, request.month, day)
                     
-                    schedule_entry = MonthlySchedule(
-                        user_id=nurse.id,
-                        date=entry_date,
-                        shift_type='O',  # 休假
-                        area_code=nurse.identity,
-                        version_id=version.id
-                    )
-                    schedule_entries.append(schedule_entry)
+                    if not is_temporary:
+                        schedule_entry = MonthlySchedule(
+                            user_id=nurse.id,
+                            date=entry_date,
+                            shift_type='O',  # 休假
+                            area_code=nurse.identity,
+                            version_id=version_id
+                        )
+                        schedule_entries.append(schedule_entry)
                 continue
             
             # 如果沒有從group_data獲取到，則根據護理師身份設置默認公式
@@ -211,18 +250,30 @@ async def generate_monthly_schedule(
             if formula_id is None or formula_id not in formula_patterns:
                 print(f"護理師 {nurse.full_name} 沒有有效的公式班表設定，生成全休假排班")
                 
+                # 對於臨時模式，添加到臨時排班表中
+                if is_temporary:
+                    temporary_schedule.append({
+                        "id": nurse.id,
+                        "name": nurse.full_name,
+                        "role": nurse.role,
+                        "identity": nurse.identity,
+                        "shifts": nurse_shifts
+                    })
+                    continue
+                
                 # 為這個護理師生成全休假排班
                 for day in range(1, days_in_month + 1):
                     entry_date = date(request.year, request.month, day)
                     
-                    schedule_entry = MonthlySchedule(
-                        user_id=nurse.id,
-                        date=entry_date,
-                        shift_type='O',  # 休假
-                        area_code=nurse.identity,
-                        version_id=version.id
-                    )
-                    schedule_entries.append(schedule_entry)
+                    if not is_temporary:
+                        schedule_entry = MonthlySchedule(
+                            user_id=nurse.id,
+                            date=entry_date,
+                            shift_type='O',  # 休假
+                            area_code=nurse.identity,
+                            version_id=version_id
+                        )
+                        schedule_entries.append(schedule_entry)
                 continue
             
             # 獲取該公式班表的所有patterns
@@ -231,18 +282,30 @@ async def generate_monthly_schedule(
             if not patterns:
                 print(f"警告: 公式班表ID {formula_id} ({formula_id_to_name.get(formula_id, '未知')}) 沒有pattern定義，將使用默認休假排班")
                 
+                # 對於臨時模式，添加到臨時排班表中
+                if is_temporary:
+                    temporary_schedule.append({
+                        "id": nurse.id,
+                        "name": nurse.full_name,
+                        "role": nurse.role,
+                        "identity": nurse.identity,
+                        "shifts": nurse_shifts
+                    })
+                    continue
+                
                 # 為這個護理師生成默認排班
                 for day in range(1, days_in_month + 1):
                     entry_date = date(request.year, request.month, day)
                     
-                    schedule_entry = MonthlySchedule(
-                        user_id=nurse.id,
-                        date=entry_date,
-                        shift_type='O',  # 休假
-                        area_code=nurse.identity,
-                        version_id=version.id
-                    )
-                    schedule_entries.append(schedule_entry)
+                    if not is_temporary:
+                        schedule_entry = MonthlySchedule(
+                            user_id=nurse.id,
+                            date=entry_date,
+                            shift_type='O',  # 休假
+                            area_code=nurse.identity,
+                            version_id=version_id
+                        )
+                        schedule_entries.append(schedule_entry)
                 continue
             
             # 計算pattern的最大組別數
@@ -289,36 +352,62 @@ async def generate_monthly_schedule(
                         # 如果pattern字串不夠長，默認休假
                         print(f"警告: 日期 {entry_date} 的星期 {day_of_week+1} 超出pattern長度 {len(pattern_str)}")
                 
-                # 創建排班記錄
-                schedule_entry = MonthlySchedule(
-                    user_id=nurse.id,
-                    date=entry_date,
-                    shift_type=shift_type,
-                    area_code=nurse.identity,
-                    version_id=version.id
-                )
-                schedule_entries.append(schedule_entry)
+                # 更新臨時模式的班表
+                if is_temporary:
+                    nurse_shifts[day-1] = shift_type
+                
+                # 如果不是臨時模式，創建排班記錄
+                if not is_temporary:
+                    # 創建排班記錄
+                    schedule_entry = MonthlySchedule(
+                        user_id=nurse.id,
+                        date=entry_date,
+                        shift_type=shift_type,
+                        area_code=nurse.identity,
+                        version_id=version_id
+                    )
+                    schedule_entries.append(schedule_entry)
+            
+            # 對於臨時模式，添加到臨時排班表中
+            if is_temporary:
+                temporary_schedule.append({
+                    "id": nurse.id,
+                    "name": nurse.full_name,
+                    "role": nurse.role,
+                    "identity": nurse.identity,
+                    "shifts": nurse_shifts
+                })
         
-        # 批量添加排班記錄
-        db.add_all(schedule_entries)
-        db.commit()
-        
-        # 添加操作日誌
-        log = Log(
-            user_id=current_user.id,
-            action="generate_schedule",
-            operation_type="generate_schedule",
-            description=f"生成 {request.year}年{request.month}月排班表，共 {len(schedule_entries)} 條記錄"
-        )
-        db.add(log)
-        db.commit()
-        
-        return {
-            "success": True,
-            "message": f"成功生成 {request.year}年{request.month}月排班表",
-            "version_id": version.id,
-            "entries_count": len(schedule_entries)
-        }
+        # 如果不是臨時模式，將排班記錄保存到資料庫
+        if not is_temporary:
+            # 批量添加排班記錄
+            db.add_all(schedule_entries)
+            db.commit()
+            
+            # 添加操作日誌
+            log = Log(
+                user_id=current_user.id,
+                action="generate_schedule",
+                operation_type="generate_schedule",
+                description=f"生成 {request.year}年{request.month}月排班表，共 {len(schedule_entries)} 條記錄"
+            )
+            db.add(log)
+            db.commit()
+            
+            return {
+                "success": True,
+                "message": f"成功生成 {request.year}年{request.month}月排班表",
+                "version_id": version_id,
+                "entries_count": len(schedule_entries)
+            }
+        else:
+            # 臨時模式，僅返回生成的排班數據，不修改資料庫
+            return {
+                "success": True,
+                "message": f"已生成 {request.year}年{request.month}月臨時排班表（未保存到資料庫）",
+                "schedule": temporary_schedule,
+                "is_temporary": True
+            }
         
     except ValueError as e:
         raise HTTPException(
@@ -349,10 +438,10 @@ async def get_monthly_schedule(
         
         month_str = f"{year}{month:02d}"
         
-        # 獲取該月份的排班版本
+        # 獲取該月份的排班版本，修改為獲取最新版本
         version = db.query(ScheduleVersion).filter(
             ScheduleVersion.month == month_str
-        ).first()
+        ).order_by(ScheduleVersion.id.desc()).first()
         
         if not version:
             # 返回新的格式結構，但保持為空
@@ -801,168 +890,85 @@ async def save_monthly_schedule(
     ).order_by(ScheduleVersion.id.desc()).first()
     
     if not latest_version:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"未找到 {year}年{month}月 的排班表，請先生成排班表"
-        )
-    
-    # 創建新版本（如果需要）
-    if create_version:
-        # 獲取現有版本數量
-        version_count = db.query(ScheduleVersion).filter(
-            ScheduleVersion.month == month_str
-        ).count()
-        
-        # 創建新版本號
-        new_version_number = f"v{version_count + 1}.0_{month_str}"
-        
-        # 使用默認版本說明（如果未提供）
+        # 如果沒有找到現有版本，則創建一個新版本
+        new_version_number = f"v1.0_{month_str}"
         if not version_note:
-            version_note = f"{current_user.full_name}於{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}保存的{year}年{month}月排班表"
+            version_note = f"{current_user.full_name}於{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}創建的{year}年{month}月排班表"
         
-        # 創建新版本
         new_version = ScheduleVersion(
             version_number=new_version_number,
             month=month_str,
             published_at=datetime.now(),
             notes=version_note,
-            is_published=True,  # 直接發布
+            is_published=True,
             published_by=current_user.id,
             is_base_version=False
         )
         db.add(new_version)
         db.commit()
         db.refresh(new_version)
+        latest_version = new_version
         
-        # 將所有排班記錄複製到新版本
-        for schedule_item in schedule_data_list:
-            user_id = schedule_item.get("user_id")
-            shifts = schedule_item.get("shifts", [])
-            area_codes = schedule_item.get("area_codes", [])
-            
-            # 檢查用戶是否存在
-            nurse = db.query(User).filter(User.id == user_id).first()
-            if not nurse:
-                continue  # 跳過無效用戶
-            
-            # 為每天創建排班記錄
-            for day, shift in enumerate(shifts, 1):
-                try:
-                    # 創建日期
-                    schedule_date = date(year, month, day)
-                    
-                    # 獲取area_code（如果有）
-                    area_code = area_codes[day-1] if len(area_codes) >= day else None
-                    
-                    # 創建排班記錄
-                    schedule_entry = MonthlySchedule(
-                        user_id=user_id,
-                        date=schedule_date,
-                        shift_type=shift,
-                        area_code=area_code,
-                        version_id=new_version.id
-                    )
-                    db.add(schedule_entry)
-                except Exception as e:
-                    print(f"處理護理師 {user_id} 於 {year}-{month}-{day} 的排班記錄時出錯: {str(e)}")
-                    continue
+        print(f"未找到 {year}年{month}月 的排班表，已創建新版本 {new_version_number}")
+    
+    # 無論是否創建新版本，總是需要清空現有排班記錄並重新創建
+    # 清空現有排班記錄
+    db.query(MonthlySchedule).filter(
+        MonthlySchedule.version_id == latest_version.id
+    ).delete()
+    
+    # 重新創建排班記錄
+    for schedule_item in schedule_data_list:
+        user_id = schedule_item.get("user_id")
+        shifts = schedule_item.get("shifts", [])
+        area_codes = schedule_item.get("area_codes", [])
         
-        # 創建日誌記錄
-        log_entry = Log(
-            action="保存月度排班表",
-            description=f"{current_user.full_name}保存了{year}年{month}月排班表，創建了新版本 {new_version_number}",
-            user_id=current_user.id
-        )
-        db.add(log_entry)
+        # 檢查用戶是否存在
+        nurse = db.query(User).filter(User.id == user_id).first()
+        if not nurse:
+            continue  # 跳過無效用戶
         
-        db.commit()
-        
-        # 計算與基礎版本的差異並保存（如果有基礎版本）
-        base_version = db.query(ScheduleVersion).filter(
-            ScheduleVersion.month == month_str,
-            ScheduleVersion.is_base_version == True
-        ).first()
-        
-        if base_version and base_version.id != new_version.id:
+        # 為每天創建排班記錄
+        for day, shift in enumerate(shifts, 1):
             try:
-                # 調用計算差異的函數
-                await calculate_and_save_version_diff(
-                    version_id=new_version.id,
-                    base_version_id=base_version.id,
-                    db=db,
-                    current_user=current_user
+                # 創建日期
+                schedule_date = date(year, month, day)
+                
+                # 獲取area_code（如果有）
+                area_code = area_codes[day-1] if len(area_codes) >= day else None
+                
+                # 創建排班記錄
+                schedule_entry = MonthlySchedule(
+                    user_id=user_id,
+                    date=schedule_date,
+                    shift_type=shift,
+                    area_code=area_code,
+                    version_id=latest_version.id
                 )
+                db.add(schedule_entry)
             except Exception as e:
-                print(f"計算版本差異時出錯: {str(e)}")
-                # 不阻止保存過程繼續
-        
-        return {
-            "success": True,
-            "message": f"已成功保存{year}年{month}月排班表並創建新版本 {new_version_number}",
-            "data": {
-                "version_id": new_version.id,
-                "version_number": new_version.version_number,
-                "published_at": new_version.published_at
-            }
+                print(f"處理護理師 {user_id} 於 {year}-{month}-{day} 的排班記錄時出錯: {str(e)}")
+                continue
+    
+    # 創建日誌記錄
+    log_entry = Log(
+        action="保存月度排班表",
+        description=f"{current_user.full_name}保存了{year}年{month}月排班表",
+        user_id=current_user.id
+    )
+    db.add(log_entry)
+    
+    # 提交所有更改
+    db.commit()
+    
+    return {
+        "success": True,
+        "message": f"已成功保存{year}年{month}月排班表",
+        "data": {
+            "version_id": latest_version.id,
+            "version_number": latest_version.version_number
         }
-    else:
-        # 不創建新版本，直接更新現有版本
-        # 清空現有排班記錄
-        db.query(MonthlySchedule).filter(
-            MonthlySchedule.version_id == latest_version.id
-        ).delete()
-        
-        # 重新創建排班記錄
-        for schedule_item in schedule_data_list:
-            user_id = schedule_item.get("user_id")
-            shifts = schedule_item.get("shifts", [])
-            area_codes = schedule_item.get("area_codes", [])
-            
-            # 檢查用戶是否存在
-            nurse = db.query(User).filter(User.id == user_id).first()
-            if not nurse:
-                continue  # 跳過無效用戶
-            
-            # 為每天創建排班記錄
-            for day, shift in enumerate(shifts, 1):
-                try:
-                    # 創建日期
-                    schedule_date = date(year, month, day)
-                    
-                    # 獲取area_code（如果有）
-                    area_code = area_codes[day-1] if len(area_codes) >= day else None
-                    
-                    # 創建排班記錄
-                    schedule_entry = MonthlySchedule(
-                        user_id=user_id,
-                        date=schedule_date,
-                        shift_type=shift,
-                        area_code=area_code,
-                        version_id=latest_version.id
-                    )
-                    db.add(schedule_entry)
-                except Exception as e:
-                    print(f"處理護理師 {user_id} 於 {year}-{month}-{day} 的排班記錄時出錯: {str(e)}")
-                    continue
-        
-        # 創建日誌記錄
-        log_entry = Log(
-            action="更新月度排班表",
-            description=f"{current_user.full_name}更新了{year}年{month}月排班表，但未創建新版本",
-            user_id=current_user.id
-        )
-        db.add(log_entry)
-        
-        db.commit()
-        
-        return {
-            "success": True,
-            "message": f"已成功更新{year}年{month}月排班表",
-            "data": {
-                "version_id": latest_version.id,
-                "version_number": latest_version.version_number
-            }
-        } 
+    }
 
 @router.post("/schedules/resetAreaCodes", response_model=Dict[str, Any])
 async def reset_area_codes(

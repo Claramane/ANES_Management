@@ -17,6 +17,7 @@ import AnnouncementPage from './pages/Announcement';
 import UserManagement from './pages/UserManagement';
 import SettingsPage from './pages/Settings';
 import VersionHistory from './pages/VersionHistory';
+import OvertimeStaff from './pages/OvertimeStaff';
 import NotFound from './pages/NotFound';
 
 // 自訂Hook
@@ -31,6 +32,16 @@ const theme = createTheme({
     secondary: {
       main: '#f50057',
     },
+    success: {
+      main: 'rgba(76, 175, 80, 0.85)',  // 淡化的成功綠色
+      light: 'rgba(76, 175, 80, 0.6)',
+      dark: 'rgba(56, 142, 60, 0.9)',
+    },
+    error: {
+      main: 'rgba(244, 67, 54, 0.85)',  // 淡化的錯誤紅色
+      light: 'rgba(244, 67, 54, 0.6)',
+      dark: 'rgba(211, 47, 47, 0.9)',
+    }
   },
   typography: {
     fontFamily: [
@@ -97,6 +108,7 @@ function App() {
             <Route path="shift-swap" element={<ShiftSwapPage />} />
             <Route path="announcements" element={<AnnouncementPage />} />
             <Route path="version-history" element={<VersionHistory />} />
+            <Route path="overtime-staff" element={<OvertimeStaff />} />
             
             {/* 護理長專用路由 */}
             <Route path="formula-schedule" element={

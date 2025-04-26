@@ -261,6 +261,39 @@ const FormulaSchedule = () => {
   const getUserNamesByGroup = (groupId) => {
     if (!currentUsers || currentUsers.length === 0) return '';
     
+    // 處理特殊分組類型，為麻醉專科護理師特殊班次顯示組員
+    if (currentFormulaType === FORMULA_TYPES.ANESTHESIA_SPECIALIST && 
+       (groupId === 'evening_shift' || groupId === 'night_shift')) {
+      
+      console.log(`獲取特殊分組 ${groupId} 的護理師`);
+      
+      // 篩選屬於該特殊分組的用戶
+      const specialShiftUsers = currentUsers.filter(user => {
+        if (!user.group_data) return false;
+        
+        try {
+          let groupData;
+          if (typeof user.group_data === 'string') {
+            groupData = JSON.parse(user.group_data);
+          } else if (typeof user.group_data === 'object') {
+            groupData = user.group_data;
+          } else {
+            return false;
+          }
+          
+          // 檢查用戶是否被分配到特定的特殊班次
+          return groupData[currentFormulaType] === groupId;
+        } catch (e) {
+          console.warn(`解析特殊班次用戶 ${user.id} 的 group_data 失敗:`, e);
+          return false;
+        }
+      });
+      
+      const names = specialShiftUsers.map(user => user.full_name).join(', ');
+      console.log(`特殊分組 ${groupId} 的護理師: ${names || '無'}`);
+      return names;
+    }
+    
     // 從 group_data 中提取當前類型的組別
     const groupNumber = parseInt(groupId, 10);
     console.log(`嘗試獲取組別 ${groupNumber} 的護理師，當前類型: ${currentFormulaType}`);
@@ -277,6 +310,13 @@ const FormulaSchedule = () => {
           } else if (typeof user.group_data === 'object') {
             groupData = user.group_data;
           } else {
+            return false;
+          }
+          
+          // 特殊分組的用戶不計入普通分組
+          if (currentFormulaType === FORMULA_TYPES.ANESTHESIA_SPECIALIST && 
+              (groupData[currentFormulaType] === 'evening_shift' || 
+               groupData[currentFormulaType] === 'night_shift')) {
             return false;
           }
           
@@ -483,8 +523,13 @@ const FormulaSchedule = () => {
       
       console.log(`更新用戶 ${userId} (${user.full_name}) 的組別: ${newGroup}`);
       
-      // 格式化 newGroup 為數字（或null）
-      const formattedGroup = newGroup === '' ? null : parseInt(newGroup, 10);
+      // 格式化 newGroup 為數字（或null），或保留特殊值（小夜班包班/大夜班包班）
+      let formattedGroup = newGroup === '' ? null : newGroup;
+      
+      // 如果不是特殊值且是數字字符串，轉換為數字
+      if (formattedGroup !== 'evening_shift' && formattedGroup !== 'night_shift' && !isNaN(formattedGroup)) {
+        formattedGroup = parseInt(formattedGroup, 10);
+      }
       
       // 準備 group_data
       let groupData = {};
@@ -514,7 +559,8 @@ const FormulaSchedule = () => {
       
       // 更新用戶數據
       const updateData = {
-        group: formattedGroup, // 保持向后兼容
+        // 只有當formattedGroup為數字時才更新常規group字段，保持向後兼容
+        group: typeof formattedGroup === 'number' ? formattedGroup : user.group,
         group_data: groupDataString
       };
       
@@ -527,13 +573,12 @@ const FormulaSchedule = () => {
         if (u.id === userId) {
           return { 
             ...u, 
-            group: formattedGroup,
+            group: typeof formattedGroup === 'number' ? formattedGroup : u.group,
             group_data: groupDataString
           };
         }
         return u;
       });
-      
       
       // 手動強制更新 UI
       setTimeout(() => {
@@ -927,6 +972,37 @@ const FormulaSchedule = () => {
                 <TableCell>{calculateWorkHours(schedule.shifts)}</TableCell>
               </TableRow>
             ))}
+            
+            {/* 僅當選擇麻醉專科護理師時顯示特殊班次分組 */}
+            {currentFormulaType === FORMULA_TYPES.ANESTHESIA_SPECIALIST && (
+              <>
+                <TableRow>
+                  <TableCell colSpan={10} sx={{ p: 0 }}>
+                    <Divider sx={{ my: 1 }} />
+                  </TableCell>
+                </TableRow>
+                
+                {/* 小夜班包班組 */}
+                <TableRow sx={{ backgroundColor: '#fff7e6' }}>
+                  <TableCell>小夜班包班</TableCell>
+                  <TableCell>{getUserNamesByGroup('evening_shift')}</TableCell>
+                  <TableCell colSpan={7} align="center">
+                    固定擔任小夜班（A: 8-16）
+                  </TableCell>
+                  <TableCell>-</TableCell>
+                </TableRow>
+                
+                {/* 大夜班包班組 */}
+                <TableRow sx={{ backgroundColor: '#e6f7ff' }}>
+                  <TableCell>大夜班包班</TableCell>
+                  <TableCell>{getUserNamesByGroup('night_shift')}</TableCell>
+                  <TableCell colSpan={7} align="center">
+                    固定擔任大夜班（N: 14-22）
+                  </TableCell>
+                  <TableCell>-</TableCell>
+                </TableRow>
+              </>
+            )}
           </TableBody>
         </StyledTable>
         
@@ -1029,6 +1105,14 @@ const FormulaSchedule = () => {
                                 {group}
                               </MenuItem>
                             ))}
+                            {/* 為麻醉專科護理師提供特殊班次選項 */}
+                            {currentFormulaType === FORMULA_TYPES.ANESTHESIA_SPECIALIST && (
+                              <>
+                                <Divider sx={{ my: 1 }} />
+                                <MenuItem value="evening_shift">小夜班包班</MenuItem>
+                                <MenuItem value="night_shift">大夜班包班</MenuItem>
+                              </>
+                            )}
                           </Select>
                         </FormControl>
                       </TableCell>

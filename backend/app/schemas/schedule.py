@@ -81,6 +81,7 @@ class GenerateMonthScheduleRequest(BaseModel):
     month: int
     description: Optional[str] = None
     as_base_version: Optional[bool] = False  # 是否作為基準版本
+    temporary: Optional[bool] = False  # 是否為臨時生成（不保存到資料庫）
 
 # 获取月度排班详情的响应
 class MonthlyScheduleResponse(BaseModel):

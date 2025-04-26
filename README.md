@@ -43,6 +43,14 @@
 - 換班匹配與驗證
 - 換班歷史紀錄
 
+### 加班管理
+- 自動識別月班表中的加班人員（A班）
+- 加班人員排序標記（A-F）
+- 加班記錄持久化存儲
+- 權限控制（僅護理長和管理員可編輯）
+- 批量更新和修改
+- 個人加班記錄查詢
+
 ### 公告專區
 - 公告發布與管理
 - 分類管理
@@ -62,6 +70,7 @@ backend/
 │   │   ├── formula_schedule.py # 公式班表模型
 │   │   ├── shift_swap.py # 換班模型
 │   │   ├── announcement.py # 公告模型
+│   │   ├── overtime.py # 加班記錄模型
 │   │   └── log.py     # 日誌模型
 │   ├── routes/        # API路由
 │   │   ├── users.py   # 用戶相關API
@@ -69,12 +78,14 @@ backend/
 │   │   ├── schedule.py # 班表相關API
 │   │   ├── formula_schedule.py # 公式班表相關API
 │   │   ├── shift_swap.py # 換班相關API
+│   │   ├── overtime.py # 加班記錄相關API
 │   │   └── announcement.py # 公告相關API
 │   ├── schemas/       # Pydantic模型（資料驗證）
 │   │   ├── user.py
 │   │   ├── schedule.py
 │   │   ├── formula_schedule.py
 │   │   ├── shift_swap.py
+│   │   ├── overtime.py
 │   │   └── announcement.py
 │   ├── utils/         # 工具函數
 │   └── main.py        # 主應用入口
@@ -103,6 +114,7 @@ frontend/
     │   ├── MonthlySchedule.jsx # 月班表
     │   ├── WeeklySchedule.jsx  # 週班表與工作分配
     │   ├── BigSchedule.jsx     # 大班表
+    │   ├── OvertimeStaff.jsx   # 加班人員管理
     │   ├── ShiftSwap.jsx       # 換班管理
     │   └── Announcement.jsx    # 公告管理
     ├── store/        # 狀態管理
@@ -331,4 +343,12 @@ npm start
 - 公告管理前端新增分頁功能，每頁顯示30則公告
 - 週班表前端移除API計數器並優化UI/UX工作分配界面
 - 修正多處後端API路由與模型屬性匹配問題，完善公告API端點
+
+## 當前進度 (v0.7.0)
+- 新增加班管理系統，支援從月班表自動識別A班加班人員
+- 實現加班人員排序標記功能，支援A-F六種排序標記
+- 開發加班記錄API與前端整合，實現資料持久化
+- 優化表格顯示，合併日期與星期欄位以節省空間
+- 完善權限管理，確保只有護理長和管理員可編輯加班記錄
+- 修復資料庫結構問題，確保加班記錄資料的正確儲存
   

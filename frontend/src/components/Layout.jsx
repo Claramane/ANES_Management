@@ -30,6 +30,7 @@ import {
   People as PeopleIcon,
   Logout as LogoutIcon,
   History as HistoryIcon,
+  Work as WorkIcon,
 } from '@mui/icons-material';
 
 import { useAuthStore } from '../store/authStore';
@@ -69,11 +70,12 @@ function Layout() {
     { text: '月班表', icon: <CalendarMonthIcon />, path: '/monthly-schedule' },
     { text: '大班表', icon: <EventIcon />, path: '/big-schedule' },
     { text: '換班申請', icon: <SyncIcon />, path: '/shift-swap' },
+    { text: '加班人員', icon: <WorkIcon />, path: '/overtime-staff' },
     { text: '公告專區', icon: <AnnouncementIcon />, path: '/announcements' },
     { text: '歷史紀錄', icon: <HistoryIcon />, path: '/version-history' },
   ];
 
-  // 護理長專用選單
+  // 護理長專用選單 
   const headNurseMenuItems = [
     { text: '公式班表', icon: <EventIcon />, path: '/formula-schedule' },
     { text: '用戶管理', icon: <PeopleIcon />, path: '/users' },

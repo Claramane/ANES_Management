@@ -58,6 +58,7 @@ export const useScheduleStore = create(
       isLoading: false,
       error: null,
       initialized: false,
+      isTemporarySchedule: false, // 新增: 標記當前排班表是否為臨時生成（未儲存到資料庫）
 
       // 初始化 store
       initialize: () => {
@@ -465,28 +466,61 @@ export const useScheduleStore = create(
           const year = validDate.getFullYear();
           const month = validDate.getMonth() + 1; // 月份需要+1，因為JS的月份是0-11
           
-          console.log(`正在生成 ${year}年${month}月 的排班表...`);
+          console.log(`正在生成 ${year}年${month}月 的臨時排班表...`);
           
-          // 呼叫API生成排班表
-          const response = await apiService.schedule.generateMonth(year, month);
+          // 呼叫API生成排班表，添加參數表示這是臨時的
+          const response = await apiService.schedule.generateMonth(year, month, { temporary: true });
           
           // 檢查API回應
           if (!response || !response.data) {
             throw new Error('API回應中缺少數據');
           }
           
-          console.log('生成排班表API回應:', response);
+          console.log('生成臨時排班表API回應:', response);
           
-          // 將生成的排班表存入store
+          // 獲取新生成的班表數據
+          const scheduleData = response.data;
+          
+          let formattedSchedule = [];
+          if (scheduleData && Array.isArray(scheduleData.schedule)) {
+            formattedSchedule = scheduleData.schedule.map(nurse => {
+              // 確保 shifts 是一個有效的陣列
+              let shifts = [];
+              if (Array.isArray(nurse.shifts)) {
+                shifts = [...nurse.shifts]; // 淺拷貝shifts數組
+              } else if (nurse.shifts) {
+                try {
+                  shifts = JSON.parse(nurse.shifts);
+                  if (!Array.isArray(shifts)) {
+                    shifts = Array(31).fill('O');
+                  }
+                } catch (e) {
+                  shifts = Array(31).fill('O');
+                }
+              } else {
+                shifts = Array(31).fill('O');
+              }
+              
+              // 為每個護理師創建area_codes數組
+              const area_codes = Array(shifts.length).fill(null);
+              
+              return {
+                ...nurse,
+                shifts,
+                area_codes
+              };
+            });
+          }
+          
+          // 將生成的排班表存入store，並標記為臨時的（未儲存）
           set({ 
-            monthlySchedule: response.data || [],
+            monthlySchedule: formattedSchedule,
+            isTemporarySchedule: true, // 標記為臨時生成的班表
             isLoading: false
           });
           
-          // 重新獲取最新排班表數據
-          await get().fetchMonthlySchedule();
-          
-          return response.data;
+          // 返回格式化後的結果用於前端展示
+          return formattedSchedule;
         } catch (error) {
           console.error('生成月班表失敗:', error);
           set({ 
@@ -557,9 +591,11 @@ export const useScheduleStore = create(
           
           console.log('保存排班表成功:', response);
           
+          // 保存成功後，清除臨時標記
           set({ 
             isLoading: false,
-            error: null
+            error: null,
+            isTemporarySchedule: false // 清除臨時標記
           });
           
           return response.data;
@@ -634,9 +670,11 @@ export const useScheduleStore = create(
                 };
               });
               
+              // 當從API加載班表時，標記為非臨時班表（已儲存）
               set({ 
                 monthlySchedule: formattedSchedule, 
-                isLoading: false 
+                isLoading: false,
+                isTemporarySchedule: false // 標記為已儲存的班表
               });
               
               // 返回格式化的結果
@@ -758,22 +796,30 @@ export const useScheduleStore = create(
             }
             
             const year = selectedDate.getFullYear();
-            const month = selectedDate.getMonth() + 1;
-            const day = dayIndex + 1;
-            const date = new Date(year, month - 1, day);
+            const month = selectedDate.getMonth() + 1; // JavaScript 月份從 0 開始
+            const day = dayIndex + 1; // 日期從 1 開始
+            
+            // 確保正確建立日期對象
+            // 注意 JavaScript 的 Date 構造函數中月份是 0-indexed (0-11)
+            const date = new Date(Date.UTC(year, selectedDate.getMonth(), day));
+            
+            // 格式化為 YYYY-MM-DD，確保使用 UTC 時間避免時區問題
+            const formattedDate = date.toISOString().split('T')[0];
+            
+            console.log(`updateShift - 選擇年: ${year}, 選擇月: ${selectedDate.getMonth()}, 日索引: ${dayIndex}, 計算日: ${day}, 最終日期: ${formattedDate}`);
             
             // 構建完整的更新請求
             const requestData = {
               user_id: nurse.id,
               updated_by: userId,
-              date: date.toISOString().split('T')[0], // 格式化為 YYYY-MM-DD
+              date: formattedDate,
               shift_type: newShift,
               create_version: true // 啟用版本控制
             };
             
             // 發送更新請求到API
             await apiService.schedule.updateShift(requestData);
-            console.log(`實時更新數據庫: ${nurse.name} 在 ${date.toISOString().split('T')[0]} 的班次更新為 ${newShift}`);
+            console.log(`實時更新數據庫: ${nurse.name} 在 ${formattedDate} 的班次更新為 ${newShift}`);
           } else {
             console.log('班表變更已保存在本地，但未同步到數據庫，因為當前用戶不是護理長或管理員');
           }

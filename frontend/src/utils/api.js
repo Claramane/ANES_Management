@@ -20,6 +20,10 @@ api.interceptors.request.use(
     return config;
   },
   (error) => {
+    // 格式化錯誤信息為字符串
+    if (typeof error === 'object') {
+      return Promise.reject(error.message || '請求處理錯誤');
+    }
     return Promise.reject(error);
   }
 );
@@ -30,11 +34,35 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
-    // 不再處理 401 未授權錯誤，保持登入狀態
-    // if (error.response && error.response.status === 401) {
-    //   // 清除本地存儲的 auth 資訊
-    //   localStorage.removeItem('auth-storage');
-    // }
+    // 處理錯誤，確保返回標準化錯誤信息
+    let errorMessage = '發生未知錯誤';
+    
+    if (error.response) {
+      // 服務器返回了錯誤響應
+      const responseData = error.response.data;
+      if (typeof responseData === 'string') {
+        errorMessage = responseData;
+      } else if (responseData && responseData.detail) {
+        if (typeof responseData.detail === 'object') {
+          errorMessage = JSON.stringify(responseData.detail);
+        } else {
+          errorMessage = responseData.detail;
+        }
+      } else if (responseData && typeof responseData === 'object') {
+        errorMessage = JSON.stringify(responseData);
+      }
+      
+      error.message = errorMessage;
+    } else if (error.request) {
+      // 請求發出但沒有收到響應
+      errorMessage = '無法連接到伺服器，請檢查網絡連接';
+      error.message = errorMessage;
+    } else {
+      // 請求設置過程中出錯
+      errorMessage = error.message || '請求處理錯誤';
+      error.message = errorMessage;
+    }
+    
     return Promise.reject(error);
   }
 );
@@ -73,7 +101,7 @@ const apiService = {
   
   // 班表相關
   schedule: {
-    generateMonth: (year, month) => api.post('/schedules/generate', { year, month }),
+    generateMonth: (year, month, options = {}) => api.post('/schedules/generate', { year, month, ...options }),
     getMonthlySchedule: (year, month) => api.get(`/schedules/monthly/${year}/${month}`),
     updateSchedule: (scheduleId, data) => api.put(`/schedules/${scheduleId}`, data),
     publishSchedule: (versionId) => api.post(`/schedules/versions/${versionId}/publish`),
@@ -105,6 +133,57 @@ const apiService = {
     createCategory: (data) => api.post('/announcements/categories', data),
     updateCategory: (id, data) => api.put(`/announcements/categories/${id}`, data),
     deleteCategory: (id) => api.delete(`/announcements/categories/${id}`),
+  },
+  
+  // 加班相關
+  overtime: {
+    // 獲取自己的加班記錄
+    getMyRecords: (startDate, endDate) => api.get('/overtime/me', {
+      params: { start_date: startDate, end_date: endDate }
+    }),
+    
+    // 獲取所有加班記錄（僅護理長/admin）
+    getAllRecords: (startDate, endDate, userId) => api.get('/overtime', {
+      params: { 
+        start_date: startDate, 
+        end_date: endDate,
+        user_id: userId 
+      }
+    }),
+    
+    // 創建加班記錄（僅護理長/admin）
+    create: (data) => api.post('/overtime', data),
+    
+    // 為特定用戶創建加班記錄（僅護理長/admin）
+    createForUser: (userId, data) => api.post(`/overtime/user/${userId}`, data),
+    
+    // 更新加班記錄（僅護理長/admin）
+    update: (recordId, data) => api.put(`/overtime/${recordId}`, data),
+    
+    // 刪除加班記錄（僅護理長/admin）
+    delete: (recordId) => api.delete(`/overtime/${recordId}`),
+    
+    // 批量創建加班記錄（僅護理長/admin）
+    bulkCreate: (records, userId) => api.post('/overtime/bulk', {
+      records: records,
+      user_id: userId
+    }),
+    
+    // 批量更新加班記錄（僅護理長/admin）
+    bulkUpdate: async (recordsArray) => {
+      console.log('API Call: 批量更新整月加班記錄', { 記錄數量: recordsArray.length });
+      
+      // 處理每個記錄中的overtime_shift值
+      const processedRecords = recordsArray.map(record => ({
+        date: record.date,
+        overtime_shift: record.overtime_shift === null || record.overtime_shift === undefined ? '' : record.overtime_shift,
+        user_ids: record.user_ids
+      }));
+      
+      return api.put('/overtime/bulk-month', {
+        records: processedRecords
+      });
+    }
   },
 };
 

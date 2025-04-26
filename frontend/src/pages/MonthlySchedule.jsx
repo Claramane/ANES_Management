@@ -12,7 +12,12 @@ import {
   TableRow,
   Alert,
   CircularProgress,
-  styled
+  styled,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle
 } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
@@ -20,6 +25,7 @@ import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { zhTW } from 'date-fns/locale';
 import { useScheduleStore } from '../store/scheduleStore';
 import { useUserStore } from '../store/userStore';
+import { useAuthStore } from '../store/authStore';
 import { format, getDaysInMonth, getDay, isValid } from 'date-fns';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -73,13 +79,30 @@ const MonthlySchedule = () => {
     generateMonthlySchedule, 
     saveMonthlySchedule,
     fetchMonthlySchedule,
-    updateShift
+    updateShift,
+    isTemporarySchedule
   } = useScheduleStore();
 
   const { nurseUsers, fetchUsers } = useUserStore();
+  const { user } = useAuthStore();
   const [success, setSuccess] = useState(null);
   const [error, setError] = useState(null);
   const [scheduleData, setScheduleData] = useState([]);
+  
+  // 確認對話框狀態
+  const [openGenerateDialog, setOpenGenerateDialog] = useState(false);
+  const [openSaveDialog, setOpenSaveDialog] = useState(false);
+  
+  // 開啟/關閉對話框的函數
+  const handleOpenGenerateDialog = () => setOpenGenerateDialog(true);
+  const handleCloseGenerateDialog = () => setOpenGenerateDialog(false);
+  const handleOpenSaveDialog = () => setOpenSaveDialog(true);
+  const handleCloseSaveDialog = () => setOpenSaveDialog(false);
+  
+  // 檢查是否有編輯權限
+  const hasEditPermission = useMemo(() => {
+    return user?.role === 'head_nurse' || user?.role === 'admin';
+  }, [user]);
   
   // 確保選擇的日期是有效的
   const selectedDate = useMemo(() => {
@@ -116,16 +139,16 @@ const MonthlySchedule = () => {
 
   // 從store獲取排班數據並格式化
   useEffect(() => {
-    console.log('MonthlySchedule - 收到存储的排班数据:', storeMonthlySchedule);
+    console.log('MonthlySchedule - 收到儲存的排班數據:', storeMonthlySchedule);
     
     if (storeMonthlySchedule && Array.isArray(storeMonthlySchedule)) {
-      console.log('处理数组类型的排班数据，长度:', storeMonthlySchedule.length);
+      console.log('處理陣列類型的排班數據，長度:', storeMonthlySchedule.length);
       setScheduleData(storeMonthlySchedule);
     } else {
-      console.log('排班数据不是数组或为空，尝试从其他结构解析');
+      console.log('排班數據不是陣列或為空，嘗試從其他結構解析');
       
       try {
-        // 尝试获取嵌套结构中的数据
+        // 嘗試獲取巢狀結構中的數據
         const year = selectedDate.getFullYear();
         const month = selectedDate.getMonth() + 1;
         
@@ -135,14 +158,14 @@ const MonthlySchedule = () => {
             storeMonthlySchedule[year][month].schedule) {
           
           const extractedData = storeMonthlySchedule[year][month].schedule;
-          console.log('从嵌套结构中提取的排班数据:', extractedData);
+          console.log('從嵌套結構中提取的排班數據:', extractedData);
           setScheduleData(extractedData);
         } else {
-          console.log('无法从嵌套结构中提取数据，设置为空数组');
+          console.log('無法從嵌套結構中提取數據，設置為空數組');
           setScheduleData([]);
         }
       } catch (err) {
-        console.error('解析排班数据出错:', err);
+        console.error('解析排班數據出錯:', err);
         setScheduleData([]);
       }
     }
@@ -271,7 +294,8 @@ const MonthlySchedule = () => {
 
   // 切換班次
   const toggleShift = (nurseIndex, dayIndex) => {
-    if (isLoading) return;
+    // 檢查編輯權限
+    if (!hasEditPermission || isLoading) return; 
     
     const nurse = sortedMonthlySchedule[nurseIndex];
     if (!nurse || !nurse.shifts || nurse.shifts[dayIndex] === undefined) {
@@ -279,8 +303,13 @@ const MonthlySchedule = () => {
       return;
     }
 
+    // 確保日期正確性
+    const currentDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), dayIndex + 1);
+    console.log('切換班次 - 前端日期:', currentDate.toISOString(), '年:', selectedDate.getFullYear(), 
+                '月:', selectedDate.getMonth(), '日索引:', dayIndex, '實際天數:', dayIndex + 1);
+
     const currentShift = nurse.shifts[dayIndex] || 'O';
-    const shiftTypes = ['D', 'A', 'N', 'O', 'K', 'C', 'F', 'E', 'B', 'V'];
+    const shiftTypes = ['D', 'A', 'N', 'O', 'K', 'C', 'F', 'E', 'B', 'V', 'R'];
     const nextShiftIndex = (shiftTypes.indexOf(currentShift) + 1) % shiftTypes.length;
     const newShift = shiftTypes[nextShiftIndex];
     
@@ -315,10 +344,7 @@ const MonthlySchedule = () => {
     if (!shifts || !Array.isArray(shifts)) {
       return 0;
     }
-    const hourMapping = { 
-      'D': 10, 'A': 8, 'N': 8, 'O': 0, 'V': 0, 
-      'K': 8, 'C': 8, 'F': 8, 'E': 4, 'B': 8 
-    };
+    const hourMapping = { 'D': 10, 'A': 8, 'N': 8, 'O': 0, 'V': 0, 'R': 0, 'K': 8, 'C': 8, 'F': 8, 'E': 4, 'B': 8 };
     return shifts.reduce((total, shift) => {
       return total + (hourMapping[shift] || 0);
     }, 0);
@@ -336,7 +362,8 @@ const MonthlySchedule = () => {
       'C': '10-18',
       'F': '12-20',
       'O': 'OFF',
-      'V': 'OFF'
+      'V': 'OFF',
+      'R': 'REPO'
     };
     return shiftTimes[shift] || shift;
   };
@@ -432,7 +459,7 @@ const MonthlySchedule = () => {
               responseData[year][month].schedule) {
             
             const extractedData = responseData[year][month].schedule;
-            console.log('直接从API响应提取的排班数据:', extractedData);
+            console.log('直接從API響應提取的排班數據:', extractedData);
             setScheduleData(extractedData);
           }
         }
@@ -460,9 +487,30 @@ const MonthlySchedule = () => {
   // 處理班表生成功能
   const handleGenerateSchedule = async () => {
     try {
+      handleCloseGenerateDialog(); // 關閉確認對話框
       setError(null); // 清除之前的錯誤
       const response = await generateMonthlySchedule();
-      setSuccess('月班表已生成');
+      
+      // 如果 response 是數組，直接更新本地狀態
+      if (Array.isArray(response)) {
+        setScheduleData(response);
+      } 
+      // 如果 response 是嵌套結構，提取 schedule 數組
+      else if (response && typeof response === 'object') {
+        const year = selectedDate.getFullYear();
+        const month = selectedDate.getMonth() + 1;
+        
+        if (response[year] && 
+            response[year][month] && 
+            response[year][month].schedule) {
+          
+          const extractedData = response[year][month].schedule;
+          console.log('生成班表成功，提取的排班數據:', extractedData);
+          setScheduleData(extractedData);
+        }
+      }
+      
+      setSuccess('月班表已生成並顯示（尚未儲存）');
       setTimeout(() => setSuccess(null), 3000);
     } catch (error) {
       console.error('生成月班表失敗:', error);
@@ -485,8 +533,9 @@ const MonthlySchedule = () => {
   // 處理保存月班表
   const handleSaveSchedule = async () => {
     try {
+      handleCloseSaveDialog(); // 關閉確認對話框
       await saveMonthlySchedule();
-      setSuccess('月班表已保存');
+      setSuccess('月班表已成功儲存到資料庫');
       setTimeout(() => setSuccess(null), 3000);
     } catch (error) {
       console.error('保存月班表失敗:', error);
@@ -542,38 +591,49 @@ const MonthlySchedule = () => {
           />
         </LocalizationProvider>
         
-        <Button 
-          variant="contained" 
-          color="primary"
-          onClick={handleGenerateSchedule}
-          disabled={isLoading}
-        >
-          生成月班表
-        </Button>
-        
-        <Button 
-          variant="contained" 
-          color="success"
-          onClick={handleSaveSchedule}
-          disabled={isLoading || !scheduleData.length}
-        >
-          儲存班表
-        </Button>
-        
-        <Button 
-          variant="contained" 
-          color="warning"
-          onClick={generatePDF}
-          disabled={!scheduleData.length}
-        >
-          生成 PDF
-        </Button>
+        {hasEditPermission && (
+          <>
+            <Button 
+              variant="contained" 
+              color="primary"
+              onClick={handleOpenGenerateDialog}  // 修改為打開確認對話框
+              disabled={isLoading}
+            >
+              生成月班表
+            </Button>
+            
+            <Button 
+              variant="contained" 
+              color="success"
+              onClick={handleOpenSaveDialog}  // 修改為打開確認對話框
+              disabled={isLoading || !scheduleData.length}
+            >
+              儲存班表
+            </Button>
+            
+            <Button 
+              variant="contained" 
+              color="warning"
+              onClick={generatePDF}
+              disabled={!scheduleData.length}
+            >
+              生成 PDF
+            </Button>
+          </>
+        )}
       </Box>
       
       {isLoading && (
         <Box sx={{ display: 'flex', justifyContent: 'center', my: 2 }}>
           <CircularProgress />
         </Box>
+      )}
+      
+      {/* 顯示臨時班表提示 */}
+      {isTemporarySchedule && scheduleData.length > 0 && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          當前顯示的是臨時生成的班表，尚未儲存到資料庫。若要永久保存此班表，請點擊「儲存班表」按鈕。
+        </Alert>
       )}
       
       {storeError && (
@@ -692,8 +752,9 @@ const MonthlySchedule = () => {
                     <ShiftCell
                       key={dayIndex}
                       shift={shift || 'O'}
-                      onClick={() => toggleShift(nurseIndex, dayIndex)}
+                      onClick={() => hasEditPermission && toggleShift(nurseIndex, dayIndex)}
                       padding="none"
+                      style={{ cursor: hasEditPermission ? 'pointer' : 'default' }}
                     >
                       {shift || 'O'}
                     </ShiftCell>
@@ -776,6 +837,56 @@ const MonthlySchedule = () => {
           </Box>
         </Paper>
       </Box>
+      
+      {/* 生成月班表確認對話框 */}
+      <Dialog
+        open={openGenerateDialog}
+        onClose={handleCloseGenerateDialog}
+        aria-labelledby="generate-dialog-title"
+        aria-describedby="generate-dialog-description"
+      >
+        <DialogTitle id="generate-dialog-title">
+          確認生成月班表
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText id="generate-dialog-description">
+            您即將生成 {formattedDate} 的新排班表。這個操作會依據公式班生成新的班表，但不會覆蓋資料庫中已存在的班表，直到您點擊「儲存班表」按鈕。
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseGenerateDialog}>
+            取消
+          </Button>
+          <Button onClick={handleGenerateSchedule} color="primary" autoFocus>
+            確認生成
+          </Button>
+        </DialogActions>
+      </Dialog>
+      
+      {/* 儲存班表確認對話框 */}
+      <Dialog
+        open={openSaveDialog}
+        onClose={handleCloseSaveDialog}
+        aria-labelledby="save-dialog-title"
+        aria-describedby="save-dialog-description"
+      >
+        <DialogTitle id="save-dialog-title">
+          確認儲存班表
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText id="save-dialog-description">
+            您即將儲存 {formattedDate} 的排班表到資料庫。這個操作會覆蓋資料庫中已存在的班表版本。確定要儲存嗎？
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseSaveDialog} color="primary">
+            取消
+          </Button>
+          <Button onClick={handleSaveSchedule} color="primary" autoFocus>
+            確認儲存
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

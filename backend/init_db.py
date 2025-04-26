@@ -5,6 +5,7 @@ from app.models.user import User
 from app.models.announcement import AnnouncementCategory, AnnouncementPermission
 from app.models.shift_swap import ShiftRule
 from app.core.database import SessionLocal, create_tables
+from migrations.initial_data import init_announcement_categories
 
 def init_db():
     db = SessionLocal()
@@ -145,6 +146,9 @@ def init_db():
                 db.add(rule)
                 
             db.commit()
+            
+            # 添加以下代碼，確保在最後調用公告分類初始化
+            init_announcement_categories(db)
             
             print("初始化數據庫完成!")
         else:
