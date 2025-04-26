@@ -203,6 +203,52 @@ async def bulk_month_update_overtime_records(
     
     print(f"處理整月加班批量更新: 共 {len(updates.records)} 條更新記錄")
     
+    # 收集所有需要更新的用戶ID和日期，用於清理舊數據
+    all_user_ids = set()
+    all_dates = set()
+    
+    # 先分析所有記錄，收集用戶ID和日期信息
+    for record in updates.records:
+        try:
+            date_str = record.get('date')
+            user_ids = record.get('user_ids', [])
+            
+            if not date_str or not user_ids:
+                continue
+                
+            # 解析日期
+            try:
+                update_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+                all_dates.add(update_date)
+                
+                # 添加用戶ID
+                for user_id in user_ids:
+                    all_user_ids.add(user_id)
+            except ValueError:
+                continue
+        except Exception as e:
+            print(f"分析記錄時出錯: {str(e)}")
+            continue
+    
+    # 如果有收集到日期和用戶，先清理整月的加班記錄
+    if all_dates and all_user_ids:
+        # 獲取月份的第一天和最後一天
+        first_date = min(all_dates)
+        last_date = max(all_dates)
+        month_start = datetime(first_date.year, first_date.month, 1).date()
+        month_end = (datetime(first_date.year, first_date.month + 1, 1) - timedelta(days=1)).date()
+        
+        print(f"正在清理 {month_start} 到 {month_end} 期間的加班記錄...")
+        
+        # 刪除該月份所有相關用戶的加班記錄
+        delete_count = db.query(OvertimeRecord).filter(
+            OvertimeRecord.user_id.in_(list(all_user_ids)),
+            OvertimeRecord.date >= month_start,
+            OvertimeRecord.date <= month_end
+        ).delete(synchronize_session=False)
+        
+        print(f"已刪除 {delete_count} 條舊的加班記錄")
+    
     # 記錄操作日誌
     log = Log(
         user_id=current_user.id,
@@ -241,26 +287,15 @@ async def bulk_month_update_overtime_records(
                 if not user:
                     continue
                 
-                # 查找或創建記錄
-                record = db.query(OvertimeRecord).filter(
-                    OvertimeRecord.user_id == user_id,
-                    OvertimeRecord.date == update_date
-                ).first()
-                
-                if record:
-                    # 更新現有記錄
-                    record.overtime_shift = overtime_shift
-                    record.updated_at = datetime.now()
-                else:
-                    # 創建新記錄
+                # 由於已刪除舊記錄，直接創建新記錄
+                if overtime_shift:  # 只有當班次不為空時才創建記錄
                     record = OvertimeRecord(
                         user_id=user_id,
                         date=update_date,
                         overtime_shift=overtime_shift
                     )
                     db.add(record)
-                
-                batch_updated += 1
+                    batch_updated += 1
             
             total_updated_count += batch_updated
             
