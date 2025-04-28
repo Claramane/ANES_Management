@@ -1274,7 +1274,7 @@ const WeeklySchedule = () => {
         const nextIndex = (currentIndex + 1) % (orNumbers.length + 1); // +1 是為了讓最後能回到 null
         
         if (nextIndex === orNumbers.length) {
-          // 循環回 null
+          // 循環回 null，並跳到下一個任務種類
           delete newMissionValues[key];
           // 如果資料庫中有值，需要標記為null以便取消
           if (savedMission) {
@@ -1282,6 +1282,9 @@ const WeeklySchedule = () => {
           }
           // 這是取消操作
           await updateDatabaseAreaCode(nurseId, dayIndex, null);
+          // 跳到下一個任務種類
+          handleMissionChange(nurseId, dayIndex, 'DR');
+          return;
         } else {
           // 檢查下一個OR房間是否已有人
           const nextOR = `OR${orNumbers[nextIndex]}`;
@@ -1307,13 +1310,16 @@ const WeeklySchedule = () => {
               checkIndex = (checkIndex + 1) % orNumbers.length;
             }
             
-            // 如果沒有找到可用的房間，則清除任務
+            // 如果沒有找到可用的房間，則清除任務並跳到下一個任務種類
             if (!foundAvailableOR) {
               delete newMissionValues[key];
               if (savedMission) {
                 newMissionValues[key] = null;
               }
               await updateDatabaseAreaCode(nurseId, dayIndex, null);
+              // 跳到下一個任務種類
+              handleMissionChange(nurseId, dayIndex, 'DR');
+              return;
             }
           } else {
             // 下一個房間可用，直接設置
@@ -1335,9 +1341,11 @@ const WeeklySchedule = () => {
           }
         }
         
-        // 如果沒有找到可用的OR房間，則不分配
+        // 如果沒有找到可用的OR房間，則不分配並跳到下一個任務種類
         if (!foundAvailableOR) {
           console.log('所有OR房間已被分配，無法分配新的OR');
+          // 跳到下一個任務種類
+          handleMissionChange(nurseId, dayIndex, 'DR');
           return;
         }
       }
@@ -1364,7 +1372,7 @@ const WeeklySchedule = () => {
         const nextIndex = (currentIndex + 1) % (hcNumbers.length + 1); // +1 是為了讓最後能回到 null
         
         if (nextIndex === hcNumbers.length) {
-          // 循環回 null
+          // 循環回 null，並清除任務
           delete newMissionValues[key];
           // 如果資料庫中有值，需要標記為null以便取消
           if (savedMission) {
@@ -1449,12 +1457,15 @@ const WeeklySchedule = () => {
         const currentValueIs3F = newMissionValues[key] === '3F' || (savedMission === '3F' && !newMissionValues[key]);
         
         if (currentValueIs3F) {
-          // 已經有3F，取消分配
+          // 已經有3F，取消分配並跳到下一個任務種類
           delete newMissionValues[key];
           if (savedMission) {
             newMissionValues[key] = null;
           }
           await updateDatabaseAreaCode(nurseId, dayIndex, null);
+          // 跳到下一個任務種類
+          handleMissionChange(nurseId, dayIndex, 'PAR');
+          return;
         } else {
           // 設置為3F
           newMissionValues[key] = '3F';
@@ -1475,7 +1486,7 @@ const WeeklySchedule = () => {
           const nextIndex = (currentIndex + 1) % (threeFNumbers.length + 1); // +1 是為了讓最後能回到 null
           
           if (nextIndex === threeFNumbers.length) {
-            // 循環回 null
+            // 循環回 null，並跳到下一個任務種類
             delete newMissionValues[key];
             // 如果資料庫中有值，需要標記為null以便取消
             if (savedMission) {
@@ -1483,6 +1494,9 @@ const WeeklySchedule = () => {
             }
             // 這是取消操作
             await updateDatabaseAreaCode(nurseId, dayIndex, null);
+            // 跳到下一個任務種類
+            handleMissionChange(nurseId, dayIndex, 'CC');
+            return;
           } else {
             // 檢查下一個3F位置是否已有人
             const next3F = `3F${threeFNumbers[nextIndex]}`;
@@ -1503,13 +1517,16 @@ const WeeklySchedule = () => {
                 }
               }
               
-              // 如果沒有找到可用的位置，則清除任務
+              // 如果沒有找到可用的位置，則清除任務並跳到下一個任務種類
               if (!foundAvailable3F) {
                 delete newMissionValues[key];
                 if (savedMission) {
                   newMissionValues[key] = null;
                 }
                 await updateDatabaseAreaCode(nurseId, dayIndex, null);
+                // 跳到下一個任務種類
+                handleMissionChange(nurseId, dayIndex, 'CC');
+                return;
               }
             } else {
               // 下一個位置可用，直接設置
@@ -1531,9 +1548,11 @@ const WeeklySchedule = () => {
             }
           }
           
-          // 如果沒有找到可用的3F位置，則不分配
+          // 如果沒有找到可用的3F位置，則不分配並跳到下一個任務種類
           if (!foundAvailable3F) {
             console.log('所有3F位置已被分配，無法分配新的3F');
+            // 跳到下一個任務種類
+            handleMissionChange(nurseId, dayIndex, 'CC');
             return;
           }
         }
@@ -1556,7 +1575,7 @@ const WeeklySchedule = () => {
         const nextIndex = (currentIndex + 1) % (fNumbers.length + 1); // +1 是為了讓最後能回到 null
         
         if (nextIndex === fNumbers.length) {
-          // 循環回 null
+          // 循環回 null，並跳到下一個任務種類
           delete newMissionValues[key];
           // 如果資料庫中有值，需要標記為null以便取消
           if (savedMission) {
@@ -1564,6 +1583,14 @@ const WeeklySchedule = () => {
           }
           // 這是取消操作
           await updateDatabaseAreaCode(nurseId, dayIndex, null);
+          // 跳到下一個任務種類
+          if (nurseData.identity === '麻醉專科護理師') {
+            handleMissionChange(nurseId, dayIndex, 'HC');
+          } else {
+            // 麻醉科Leader不分配HC，直接清除
+            handleMissionChange(nurseId, dayIndex, null);
+          }
+          return;
         } else {
           // 檢查下一個F位置是否已有人
           const nextF = `F${fNumbers[nextIndex]}`;
@@ -1584,13 +1611,21 @@ const WeeklySchedule = () => {
               }
             }
             
-            // 如果沒有找到可用的位置，則清除任務
+            // 如果沒有找到可用的位置，則清除任務並跳到下一個任務種類
             if (!foundAvailableF) {
               delete newMissionValues[key];
               if (savedMission) {
                 newMissionValues[key] = null;
               }
               await updateDatabaseAreaCode(nurseId, dayIndex, null);
+              // 跳到下一個任務種類
+              if (nurseData.identity === '麻醉專科護理師') {
+                handleMissionChange(nurseId, dayIndex, 'HC');
+              } else {
+                // 麻醉科Leader不分配HC，直接清除
+                handleMissionChange(nurseId, dayIndex, null);
+              }
+              return;
             }
           } else {
             // 下一個位置可用，直接設置
@@ -1612,9 +1647,16 @@ const WeeklySchedule = () => {
           }
         }
         
-        // 如果沒有找到可用的F位置，則不分配
+        // 如果沒有找到可用的F位置，則不分配並跳到下一個任務種類
         if (!foundAvailableF) {
           console.log('所有F位置已被分配，無法分配新的F');
+          // 跳到下一個任務種類
+          if (nurseData.identity === '麻醉專科護理師') {
+            handleMissionChange(nurseId, dayIndex, 'HC');
+          } else {
+            // 麻醉科Leader不分配HC，直接清除
+            handleMissionChange(nurseId, dayIndex, null);
+          }
           return;
         }
       }
@@ -1636,7 +1678,7 @@ const WeeklySchedule = () => {
         const nextIndex = (currentIndex + 1) % (parNumbers.length + 1); // +1 是為了讓最後能回到 null
         
         if (nextIndex === parNumbers.length) {
-          // 循環回 null
+          // 循環回 null，並跳到下一個任務種類
           delete newMissionValues[key];
           // 如果資料庫中有值，需要標記為null以便取消
           if (savedMission) {
@@ -1644,6 +1686,9 @@ const WeeklySchedule = () => {
           }
           // 這是取消操作
           await updateDatabaseAreaCode(nurseId, dayIndex, null);
+          // 跳到下一個任務種類
+          handleMissionChange(nurseId, dayIndex, 'C');
+          return;
         } else {
           newMissionValues[key] = `PAR${parNumbers[nextIndex]}`;
         }
@@ -2309,16 +2354,16 @@ const WeeklySchedule = () => {
         
         switch (baseType) {
           case 'OR':
-            // 處理OR循環
-            handleNextMission('DR');
+            // 處理OR子類型的循環
+            handleMissionChange(nurse.id, dayIndex, 'OR');
             break;
           case 'DR':
             // DR後面是3F
             handleNextMission('3F');
             break;
           case '3F':
-            // 3F後面是CC
-            handleNextMission('CC');
+            // 處理3F子類型的循環
+            handleMissionChange(nurse.id, dayIndex, '3F');
             break;
           case 'CC':
             // CC後面是C
@@ -2329,17 +2374,12 @@ const WeeklySchedule = () => {
             handleNextMission('F');
             break;
           case 'F':
-            // F後面是HC (僅針對麻醉專科護理師)
-            if (nurse.identity === '麻醉專科護理師') {
-              handleNextMission('HC');
-            } else {
-              // 麻醉科Leader不分配HC，直接清除
-              handleMissionChange(nurse.id, dayIndex, null);
-            }
+            // 處理F子類型的循環
+            handleMissionChange(nurse.id, dayIndex, 'F');
             break;
           case 'HC':
-            // HC後面是清除
-            handleMissionChange(nurse.id, dayIndex, null);
+            // 處理HC子類型的循環
+            handleMissionChange(nurse.id, dayIndex, 'HC');
             break;
           default:
             // 如果是其他任務，清除
