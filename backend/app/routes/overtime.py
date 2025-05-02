@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import date, datetime, timedelta
+import logging
 
 from ..core.database import get_db
 from ..core.security import get_current_active_user, get_head_nurse_user
@@ -16,6 +17,9 @@ from ..schemas.overtime import (
     BulkOvertimeRecordUpdate,
     MultipleDatesOvertimeUpdate
 )
+
+# 設置logger
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -201,7 +205,7 @@ async def bulk_month_update_overtime_records(
     """批量更新多個日期的加班記錄（僅護理長可操作）"""
     total_updated_count = 0
     
-    print(f"處理整月加班批量更新: 共 {len(updates.records)} 條更新記錄")
+    logger.info(f"處理整月加班批量更新: 共 {len(updates.records)} 條更新記錄")
     
     # 收集所有需要更新的用戶ID和日期，用於清理舊數據
     all_user_ids = set()
@@ -227,7 +231,7 @@ async def bulk_month_update_overtime_records(
             except ValueError:
                 continue
         except Exception as e:
-            print(f"分析記錄時出錯: {str(e)}")
+            logger.error(f"分析記錄時出錯: {str(e)}")
             continue
     
     # 如果有收集到日期和用戶，先清理整月的加班記錄
@@ -238,7 +242,7 @@ async def bulk_month_update_overtime_records(
         month_start = datetime(first_date.year, first_date.month, 1).date()
         month_end = (datetime(first_date.year, first_date.month + 1, 1) - timedelta(days=1)).date()
         
-        print(f"正在清理 {month_start} 到 {month_end} 期間的加班記錄...")
+        logger.info(f"正在清理 {month_start} 到 {month_end} 期間的加班記錄...")
         
         # 刪除該月份所有相關用戶的加班記錄
         delete_count = db.query(OvertimeRecord).filter(
@@ -247,7 +251,7 @@ async def bulk_month_update_overtime_records(
             OvertimeRecord.date <= month_end
         ).delete(synchronize_session=False)
         
-        print(f"已刪除 {delete_count} 條舊的加班記錄")
+        logger.info(f"已刪除 {delete_count} 條舊的加班記錄")
     
     # 記錄操作日誌
     log = Log(
@@ -300,7 +304,7 @@ async def bulk_month_update_overtime_records(
             total_updated_count += batch_updated
             
         except Exception as e:
-            print(f"處理批量更新時出錯: {str(e)}")
+            logger.error(f"處理批量更新時出錯: {str(e)}")
             continue
     
     # 提交所有更改

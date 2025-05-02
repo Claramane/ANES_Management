@@ -3,6 +3,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from typing import List, Any
 from datetime import timedelta
+import logging
 
 from ..core.database import get_db
 from ..core.security import (
@@ -16,6 +17,9 @@ from ..core.config import settings
 from ..models.user import User
 from ..models.log import Log
 from ..schemas.user import UserCreate, UserUpdate, User as UserSchema, Token, PasswordChange
+
+# 設置logger
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -57,7 +61,7 @@ async def login_for_access_token(
         
         return {"access_token": access_token, "token_type": "bearer"}
     except Exception as e:
-        print(f"登錄時發生錯誤: {str(e)}")
+        logger.error(f"登錄時發生錯誤: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"登錄發生錯誤: {str(e)}"
@@ -267,17 +271,17 @@ async def test_login(
         # 查詢用戶
         user = db.query(User).filter(User.username == username).first()
         
-        # 打印診斷信息
-        print(f"測試登錄: 用戶名 {username}")
-        print(f"找到用戶: {user is not None}")
+        # 使用日誌輸出診斷信息
+        logger.info(f"測試登錄: 用戶名 {username}")
+        logger.info(f"找到用戶: {user is not None}")
         
         if user:
-            print(f"用戶ID: {user.id}, 姓名: {user.full_name}, 角色: {user.role}")
-            print(f"密碼哈希: {user.hashed_password[:10]}...")
+            logger.info(f"用戶ID: {user.id}, 姓名: {user.full_name}, 角色: {user.role}")
+            logger.debug(f"密碼哈希: {user.hashed_password[:10]}...")
             
             # 測試密碼驗證
             is_valid = verify_password(password, user.hashed_password)
-            print(f"密碼驗證結果: {is_valid}")
+            logger.info(f"密碼驗證結果: {is_valid}")
             
             if is_valid:
                 return {"status": "success", "message": "登錄成功", "user_id": user.id, "role": user.role}
@@ -287,7 +291,7 @@ async def test_login(
             return {"status": "error", "message": "用戶不存在"}
             
     except Exception as e:
-        print(f"測試登錄發生錯誤: {str(e)}")
+        logger.error(f"測試登錄發生錯誤: {str(e)}")
         return {"status": "error", "message": f"發生錯誤: {str(e)}"}
 
 @router.post("/admin/fix-passwords")
@@ -320,5 +324,5 @@ async def fix_all_passwords(
         }
     
     except Exception as e:
-        print(f"修復密碼時發生錯誤: {str(e)}")
+        logger.error(f"修復密碼時發生錯誤: {str(e)}")
         return {"status": "error", "message": f"發生錯誤: {str(e)}"} 

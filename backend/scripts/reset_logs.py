@@ -7,6 +7,11 @@
 
 import sys
 import os
+import logging
+
+# 設置logger
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 # 將項目根目錄添加到路徑，確保可以導入應用模塊
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -21,16 +26,16 @@ def reset_logs():
     try:
         # 獲取日誌數量
         log_count = db.query(func.count(Log.id)).scalar()
-        print(f"資料庫中共有 {log_count} 條日誌記錄")
+        logger.info(f"資料庫中共有 {log_count} 條日誌記錄")
         
         # 刪除所有日誌
         deleted = db.query(Log).delete()
         db.commit()
         
-        print(f"成功刪除 {deleted} 條日誌記錄")
+        logger.info(f"成功刪除 {deleted} 條日誌記錄")
     except Exception as e:
         db.rollback()
-        print(f"刪除日誌時發生錯誤: {e}")
+        logger.error(f"刪除日誌時發生錯誤: {e}")
     finally:
         db.close()
 
@@ -40,4 +45,4 @@ if __name__ == "__main__":
     if confirm.lower() in ['y', 'yes']:
         reset_logs()
     else:
-        print("操作已取消") 
+        logger.info("操作已取消") 

@@ -2,11 +2,15 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from typing import List, Optional, Dict
+import logging
 
 from ..core.database import get_db
 from ..core.security import get_current_active_user
 from ..models.user import User
 from ..models.formula import FormulaSchedule, FormulaSchedulePattern
+
+# 設置logger
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/formula-schedules",
@@ -253,7 +257,7 @@ async def update_formula_schedule(
                 )
                 db.add(new_pattern)
             
-            print(f"增加了 {num_groups - current_count} 個新的組別，從 {current_count} 增加到 {num_groups}")
+            logger.info(f"增加了 {num_groups - current_count} 個新的組別，從 {current_count} 增加到 {num_groups}")
         
         elif num_groups < current_count:
             # 如果 num_groups 小於現有數量，需要刪除多餘的 pattern
@@ -263,11 +267,11 @@ async def update_formula_schedule(
             for pattern in patterns_to_delete:
                 db.delete(pattern)
             
-            print(f"刪除了 {current_count - num_groups} 個組別，從 {current_count} 減少到 {num_groups}")
+            logger.info(f"刪除了 {current_count - num_groups} 個組別，從 {current_count} 減少到 {num_groups}")
         
         else:
             # 如果相等，不做任何事
-            print(f"組別數量沒有變化，保持在 {num_groups}")
+            logger.info(f"組別數量沒有變化，保持在 {num_groups}")
         
         # 提交更改
         db.commit()

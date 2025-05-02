@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+import logging
 from app.core.config import settings
 from app.core.security import get_password_hash
 from app.models.user import User
@@ -6,6 +7,10 @@ from app.models.announcement import AnnouncementCategory, AnnouncementPermission
 from app.models.shift_swap import ShiftRule
 from app.core.database import SessionLocal, create_tables
 from migrations.initial_data import init_announcement_categories
+
+# 設置logger
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 def init_db():
     db = SessionLocal()
@@ -150,16 +155,16 @@ def init_db():
             # 添加以下代碼，確保在最後調用公告分類初始化
             init_announcement_categories(db)
             
-            print("初始化數據庫完成!")
+            logger.info("初始化數據庫完成!")
         else:
-            print("數據庫已初始化，無需重複操作")
+            logger.info("數據庫已初始化，無需重複操作")
     
     except Exception as e:
-        print(f"初始化數據庫時發生錯誤: {e}")
+        logger.error(f"初始化數據庫時發生錯誤: {e}")
         db.rollback()
     finally:
         db.close()
 
 if __name__ == "__main__":
-    print("正在初始化數據庫...")
+    logger.info("正在初始化數據庫...")
     init_db() 

@@ -4,7 +4,12 @@
 """
 import sys
 import os
+import logging
 from sqlalchemy.orm import sessionmaker, Session
+
+# 設置logger
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 # 添加backend目錄到系統路徑
 sys.path.append(os.path.abspath(os.path.dirname(__file__)))
@@ -17,7 +22,7 @@ def migrate_patterns(db: Session):
     """將FormulaSchedule表中的pattern遷移到FormulaSchedulePattern表"""
     # 查詢所有公式班表
     formula_schedules = db.query(FormulaSchedule).all()
-    print(f"找到 {len(formula_schedules)} 個公式班表")
+    logger.info(f"找到 {len(formula_schedules)} 個公式班表")
     
     # 遍歷每個公式班表
     for formula in formula_schedules:
@@ -28,12 +33,12 @@ def migrate_patterns(db: Session):
         
         # 如果已經有模式記錄，則跳過
         if existing_patterns > 0:
-            print(f"公式班表 '{formula.name}' (ID: {formula.id}) 已經有 {existing_patterns} 個模式記錄，跳過遷移")
+            logger.info(f"公式班表 '{formula.name}' (ID: {formula.id}) 已經有 {existing_patterns} 個模式記錄，跳過遷移")
             continue
         
         # 如果pattern為空，則跳過
         if not formula.pattern:
-            print(f"公式班表 '{formula.name}' (ID: {formula.id}) 的pattern為空，跳過遷移")
+            logger.warning(f"公式班表 '{formula.name}' (ID: {formula.id}) 的pattern為空，跳過遷移")
             continue
         
         # 創建新的模式記錄
@@ -43,11 +48,11 @@ def migrate_patterns(db: Session):
             pattern=formula.pattern
         )
         db.add(db_pattern)
-        print(f"為公式班表 '{formula.name}' (ID: {formula.id}) 創建了模式記錄: {formula.pattern}")
+        logger.info(f"為公式班表 '{formula.name}' (ID: {formula.id}) 創建了模式記錄: {formula.pattern}")
     
     # 提交事務
     db.commit()
-    print("遷移完成")
+    logger.info("遷移完成")
 
 def main():
     """主函數"""
@@ -59,7 +64,7 @@ def main():
         # 執行遷移
         migrate_patterns(db)
     except Exception as e:
-        print(f"遷移過程中發生錯誤: {e}")
+        logger.error(f"遷移過程中發生錯誤: {e}")
         db.rollback()
     finally:
         db.close()

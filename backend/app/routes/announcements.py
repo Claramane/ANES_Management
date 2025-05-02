@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from typing import List, Optional
 from datetime import datetime, timedelta
+import logging
 
 from ..core.database import get_db
 from ..core.security import get_current_active_user
@@ -14,6 +15,9 @@ from ..schemas.announcement import (
     Announcement as AnnouncementSchema,
 )
 from ..schemas.user import User as UserSchema
+
+# 設置logger
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/announcements",
@@ -47,7 +51,7 @@ async def get_all_announcements(
         announcements = query.order_by(Announcement.is_pinned.desc(), Announcement.created_at.desc()).offset(skip).limit(limit).all()
     except Exception as e:
         # 如果發生錯誤（例如is_pinned欄位不存在），則只按創建時間排序
-        print(f"排序時發生錯誤，降級使用僅創建時間排序: {str(e)}")
+        logger.warning(f"排序時發生錯誤，降級使用僅創建時間排序: {str(e)}")
         announcements = query.order_by(Announcement.created_at.desc()).offset(skip).limit(limit).all()
     
     # 處理響應，同時添加所需資訊
