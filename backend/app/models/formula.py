@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, ForeignKey, UniqueConstraint
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 
@@ -40,7 +40,7 @@ class FormulaSchedulePattern(Base):
 
     # 唯一約束
     __table_args__ = (
-        {"unique_constraint": ('formula_id', 'group_number', 'day_offset')},
+        UniqueConstraint('formula_id', 'group_number', 'day_offset'),
     )
 
     # 關聯
@@ -62,7 +62,7 @@ class NurseFormulaAssignment(Base):
 
     # 唯一約束
     __table_args__ = (
-        {"unique_constraint": ('user_id', 'formula_id')},
+        UniqueConstraint('user_id', 'formula_id'),
     )
 
     # 關聯
@@ -83,7 +83,7 @@ class PatternNurseAssignment(Base):
 
     # 唯一約束
     __table_args__ = (
-        {"unique_constraint": ('user_id', 'pattern_id')},
+        UniqueConstraint('user_id', 'pattern_id'),
     )
 
     # 關聯

@@ -14,7 +14,4 @@ class OvertimeRecord(Base):
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
     # 關聯
-    user = relationship("User")
-    
-    class Config:
-        orm_mode = True 
+    user = relationship("User") 

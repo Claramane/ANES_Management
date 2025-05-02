@@ -53,15 +53,36 @@ async def generate_monthly_schedule(
         # 檢查請求中是否包含 temporary 參數
         is_temporary = getattr(request, 'temporary', False)
         
+        # 取得現有班表資料，用於保留夜班人員班表
+        existing_shift_data = {}
+        month_str = f"{request.year}{request.month:02d}"
+        existing_version = db.query(ScheduleVersion).filter(
+            ScheduleVersion.month == month_str
+        ).order_by(ScheduleVersion.id.desc()).first()
+        
+        if existing_version:
+            # 獲取現有班表資料
+            existing_schedules = db.query(MonthlySchedule).filter(
+                MonthlySchedule.version_id == existing_version.id
+            ).all()
+            
+            # 按用戶ID和日期組織現有班表資料
+            for schedule in existing_schedules:
+                user_id = schedule.user_id
+                day = schedule.date.day
+                
+                if user_id not in existing_shift_data:
+                    existing_shift_data[user_id] = {}
+                
+                existing_shift_data[user_id][day] = {
+                    'shift_type': schedule.shift_type,
+                    'area_code': schedule.area_code,
+                    'special_type': schedule.special_type
+                }
+        
         # 如果是臨時生成，不修改資料庫中的數據，只在內存中計算並返回結果
         version_id = None
         if not is_temporary:
-            # 檢查是否已有該月份的排班表
-            month_str = f"{request.year}{request.month:02d}"
-            existing_version = db.query(ScheduleVersion).filter(
-                ScheduleVersion.month == month_str
-            ).first()
-            
             if existing_version:
                 # 刪除現有排班記錄
                 db.query(MonthlySchedule).filter(
@@ -128,6 +149,61 @@ async def generate_monthly_schedule(
         for nurse in all_nurses:
             # 收集這位護理師的排班信息，用於臨時模式
             nurse_shifts = ['O'] * days_in_month  # 預設全休假
+            
+            # 判斷該護理師是否為夜班人員
+            is_night_shift_nurse = False
+            special_type = None
+            
+            # 檢查group_data是否有夜班標記
+            if nurse.group_data:
+                try:
+                    group_data = json.loads(nurse.group_data)
+                    if isinstance(group_data, list) and len(group_data) >= 2:
+                        if group_data[1] == 'SNP' or group_data[1] == 'LNP':
+                            is_night_shift_nurse = True
+                            special_type = group_data[1]
+                except Exception:
+                    pass
+            
+            # 夜班人員且存在現有班表，則保留現有班表
+            if is_night_shift_nurse and nurse.id in existing_shift_data:
+                logger.info(f"保留夜班人員 {nurse.full_name} (ID: {nurse.id}) 的現有班表")
+                
+                for day in range(1, days_in_month + 1):
+                    entry_date = date(request.year, request.month, day)
+                    
+                    # 獲取現有班表數據
+                    existing_data = existing_shift_data.get(nurse.id, {}).get(day, {})
+                    shift_type = existing_data.get('shift_type', 'O')
+                    area_code = existing_data.get('area_code', nurse.identity)
+                    
+                    # 更新臨時模式的班表
+                    nurse_shifts[day-1] = shift_type
+                    
+                    # 如果不是臨時模式，創建排班記錄
+                    if not is_temporary:
+                        schedule_entry = MonthlySchedule(
+                            user_id=nurse.id,
+                            date=entry_date,
+                            shift_type=shift_type,
+                            area_code=area_code,
+                            special_type=special_type,
+                            version_id=version_id
+                        )
+                        schedule_entries.append(schedule_entry)
+                
+                # 對於臨時模式，添加到臨時排班表中
+                if is_temporary:
+                    temporary_schedule.append({
+                        "id": nurse.id,
+                        "name": nurse.full_name,
+                        "role": nurse.role,
+                        "identity": nurse.identity,
+                        "special_type": special_type,
+                        "shifts": nurse_shifts
+                    })
+                
+                continue
             
             # 護理長特殊處理：週一至週五為A班，週六日為O休假
             if nurse.role == 'head_nurse':
@@ -940,7 +1016,7 @@ async def save_monthly_schedule(
                 )
                 db.add(schedule_entry)
             except Exception as e:
-                print(f"處理護理師 {user_id} 於 {year}-{month}-{day} 的排班記錄時出錯: {str(e)}")
+                logger.error(f"處理護理師 {user_id} 於 {year}-{month}-{day} 的排班記錄時出錯: {str(e)}")
                 continue
     
     # 創建日誌記錄

@@ -7,6 +7,10 @@ import psycopg2
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 import sys
 import os
+import logging
+
+# 設置logger
+logger = logging.getLogger(__name__)
 
 # 讀取環境變量或使用默認連接信息
 DB_NAME = os.environ.get("DB_NAME", "anes_db")
@@ -19,7 +23,7 @@ def fix_overtime_records_table():
     """
     連接到PostgreSQL並添加缺少的overtime_shift欄位
     """
-    print(f"正在連接到PostgreSQL數據庫: {DB_NAME} @ {DB_HOST}...")
+    logger.info(f"正在連接到PostgreSQL數據庫: {DB_NAME} @ {DB_HOST}...")
     
     try:
         # 連接到PostgreSQL
@@ -46,7 +50,7 @@ def fix_overtime_records_table():
         """)
         
         if not cursor.fetchone()[0]:
-            print("錯誤: overtime_records 表不存在，請確保先創建此表。")
+            logger.error("錯誤: overtime_records 表不存在，請確保先創建此表。")
             return False
         
         # 檢查列是否已存在
@@ -58,11 +62,11 @@ def fix_overtime_records_table():
         """)
         
         if cursor.fetchone()[0]:
-            print("overtime_shift 欄位已存在，無需修改。")
+            logger.info("overtime_shift 欄位已存在，無需修改。")
             return True
         
         # 添加缺少的欄位
-        print("正在添加 overtime_shift 欄位...")
+        logger.info("正在添加 overtime_shift 欄位...")
         cursor.execute("""
             ALTER TABLE overtime_records 
             ADD COLUMN overtime_shift VARCHAR(1);
@@ -77,29 +81,35 @@ def fix_overtime_records_table():
         
         result = cursor.fetchone()
         if result:
-            print(f"成功添加欄位: {result[0]} ({result[1]})")
+            logger.info(f"成功添加欄位: {result[0]} ({result[1]})")
             return True
         else:
-            print("添加欄位失敗，請手動檢查數據庫。")
+            logger.error("添加欄位失敗，請手動檢查數據庫。")
             return False
             
     except psycopg2.Error as e:
-        print(f"數據庫錯誤: {e}")
+        logger.error(f"數據庫錯誤: {e}")
         return False
     except Exception as e:
-        print(f"發生錯誤: {e}")
+        logger.error(f"發生錯誤: {e}")
         return False
     finally:
         if 'conn' in locals() and conn:
             cursor.close()
             conn.close()
-            print("數據庫連接已關閉")
+            logger.info("數據庫連接已關閉")
             
 if __name__ == "__main__":
-    print("開始修復 overtime_records 表結構...")
+    # 設置基本日誌配置
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    
+    logger.info("開始修復 overtime_records 表結構...")
     if fix_overtime_records_table():
-        print("修復完成！請重啟後端服務。")
+        logger.info("修復完成！請重啟後端服務。")
         sys.exit(0)
     else:
-        print("修復失敗，請參考錯誤信息並手動解決問題。")
+        logger.error("修復失敗，請參考錯誤信息並手動解決問題。")
         sys.exit(1) 

@@ -1,11 +1,15 @@
 from sqlalchemy.orm import Session
 from app.models.announcement import AnnouncementCategory
+import logging
+
+# 設置logger
+logger = logging.getLogger(__name__)
 
 def init_announcement_categories(db: Session):
     # 檢查是否已有分類數據
     existing_categories = db.query(AnnouncementCategory).all()
     if existing_categories:
-        print("公告分類已存在，跳過初始化")
+        logger.info("公告分類已存在，跳過初始化")
         return
     
     # 創建基本分類
@@ -21,4 +25,4 @@ def init_announcement_categories(db: Session):
     db.add_all(categories)
     db.commit()
     
-    print(f"成功初始化 {len(categories)} 個公告分類") 
+    logger.info(f"成功初始化 {len(categories)} 個公告分類") 
