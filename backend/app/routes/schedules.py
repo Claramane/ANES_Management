@@ -5,6 +5,7 @@ from datetime import datetime, date
 import calendar
 import json
 import copy
+import logging
 
 from ..core.database import get_db
 from ..core.security import get_current_active_user, get_head_nurse_user, get_current_user
@@ -18,6 +19,9 @@ from ..schemas.schedule import (
     GenerateMonthScheduleRequest
 )
 from ..models.formula import FormulaSchedule, FormulaSchedulePattern
+
+# 設置logger
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -340,8 +344,27 @@ async def generate_monthly_schedule(
         )
     except Exception as e:
         import traceback
-        print(f"生成排班表時發生錯誤: {str(e)}")
-        print(traceback.format_exc())
+        error_msg = f"生成排班表時發生錯誤: {str(e)}"
+        error_trace = traceback.format_exc()
+        
+        # 記錄錯誤信息到日誌
+        logger.error(error_msg)
+        logger.error(error_trace)
+        
+        # 添加到系統日誌表
+        try:
+            log = Log(
+                user_id=current_user.id if current_user else None,
+                action="generate_schedule_error",
+                operation_type="error",
+                description=error_msg
+            )
+            db.add(log)
+            db.commit()
+        except Exception:
+            # 如果記錄日誌失敗，忽略它，不要再產生異常
+            pass
+            
         raise HTTPException(
             status_code=500,
             detail=f"獲取排班表時發生錯誤: {str(e)}"
@@ -463,8 +486,27 @@ async def get_monthly_schedule(
         )
     except Exception as e:
         import traceback
-        print(f"獲取排班表時發生錯誤: {str(e)}")
-        print(traceback.format_exc())
+        error_msg = f"獲取排班表時發生錯誤: {str(e)}"
+        error_trace = traceback.format_exc()
+        
+        # 記錄錯誤信息到日誌
+        logger.error(error_msg)
+        logger.error(error_trace)
+        
+        # 添加到系統日誌表
+        try:
+            log = Log(
+                user_id=current_user.id if current_user else None,
+                action="get_monthly_schedule_error",
+                operation_type="error",
+                description=error_msg
+            )
+            db.add(log)
+            db.commit()
+        except Exception:
+            # 如果記錄日誌失敗，忽略它，不要再產生異常
+            pass
+            
         raise HTTPException(
             status_code=500,
             detail=f"獲取排班表時發生錯誤: {str(e)}"
@@ -676,9 +718,31 @@ async def compare_versions(
     except HTTPException:
         raise
     except Exception as e:
+        import traceback
+        error_msg = f"比較版本時出錯: {str(e)}"
+        error_trace = traceback.format_exc()
+        
+        # 記錄錯誤信息到日誌
+        logger.error(error_msg)
+        logger.error(error_trace)
+        
+        # 添加到系統日誌表
+        try:
+            log = Log(
+                user_id=current_user.id if current_user else None,
+                action="compare_versions_error",
+                operation_type="error",
+                description=error_msg
+            )
+            db.add(log)
+            db.commit()
+        except Exception:
+            # 如果記錄日誌失敗，忽略它，不要再產生異常
+            pass
+            
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"比較版本時出錯: {str(e)}"
+            detail=error_msg
         )
 
 @router.post("/schedules/updateShift", response_model=Dict[str, Any])
@@ -965,11 +1029,30 @@ async def reset_area_codes(
         )
     except Exception as e:
         import traceback
-        print(f"重置工作分配時發生錯誤: {str(e)}")
-        print(traceback.format_exc())
+        error_msg = f"重置工作分配時發生錯誤: {str(e)}"
+        error_trace = traceback.format_exc()
+        
+        # 記錄錯誤信息到日誌
+        logger.error(error_msg)
+        logger.error(error_trace)
+        
+        # 添加到系統日誌表
+        try:
+            log = Log(
+                user_id=current_user.id if current_user else None,
+                action="reset_area_codes_error",
+                operation_type="error",
+                description=error_msg
+            )
+            db.add(log)
+            db.commit()
+        except Exception:
+            # 如果記錄日誌失敗，忽略它，不要再產生異常
+            pass
+            
         raise HTTPException(
             status_code=500,
-            detail=f"重置工作分配時發生錯誤: {str(e)}"
+            detail=error_msg
         )
 
 @router.get("/schedules/details", response_model=Dict[str, Any])
@@ -1029,11 +1112,30 @@ async def get_monthly_schedule_details(
         )
     except Exception as e:
         import traceback
-        print(f"獲取排班詳細記錄時發生錯誤: {str(e)}")
-        print(traceback.format_exc())
+        error_msg = f"獲取排班詳細記錄時發生錯誤: {str(e)}"
+        error_trace = traceback.format_exc()
+        
+        # 記錄錯誤信息到日誌
+        logger.error(error_msg)
+        logger.error(error_trace)
+        
+        # 添加到系統日誌表
+        try:
+            log = Log(
+                user_id=current_user.id if current_user else None,
+                action="get_schedule_details_error",
+                operation_type="error",
+                description=error_msg
+            )
+            db.add(log)
+            db.commit()
+        except Exception:
+            # 如果記錄日誌失敗，忽略它，不要再產生異常
+            pass
+            
         raise HTTPException(
             status_code=500,
-            detail=f"獲取排班詳細記錄時發生錯誤: {str(e)}"
+            detail=error_msg
         )
 
 @router.post("/schedules/bulkUpdateAreaCodes", response_model=Dict[str, Any])
@@ -1116,7 +1218,25 @@ async def bulk_update_area_codes(
                 updated_count += 1
                 
             except Exception as e:
-                print(f"更新記錄時發生錯誤: {str(e)}")
+                error_msg = f"更新記錄時發生錯誤: {str(e)}"
+                
+                # 記錄錯誤信息到日誌
+                logger.error(error_msg)
+                
+                # 添加到系統日誌表
+                try:
+                    log = Log(
+                        user_id=current_user.id if current_user else None,
+                        action="update_record_error",
+                        operation_type="error",
+                        description=error_msg
+                    )
+                    db.add(log)
+                    db.commit()
+                except Exception:
+                    # 如果記錄日誌失敗，忽略它，不要再產生異常
+                    pass
+                    
                 failed_count += 1
         
         # 提交所有更新
@@ -1141,9 +1261,28 @@ async def bulk_update_area_codes(
         
     except Exception as e:
         import traceback
-        print(f"批量更新工作分配時發生錯誤: {str(e)}")
-        print(traceback.format_exc())
+        error_msg = f"批量更新工作分配時發生錯誤: {str(e)}"
+        error_trace = traceback.format_exc()
+        
+        # 記錄錯誤信息到日誌
+        logger.error(error_msg)
+        logger.error(error_trace)
+        
+        # 添加到系統日誌表
+        try:
+            log = Log(
+                user_id=current_user.id if current_user else None,
+                action="bulk_update_area_codes_error",
+                operation_type="error",
+                description=error_msg
+            )
+            db.add(log)
+            db.commit()
+        except Exception:
+            # 如果記錄日誌失敗，忽略它，不要再產生異常
+            pass
+            
         raise HTTPException(
             status_code=500,
-            detail=f"批量更新工作分配時發生錯誤: {str(e)}"
+            detail=error_msg
         ) 
