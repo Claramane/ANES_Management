@@ -1249,6 +1249,12 @@ const Formula = () => {
       // 退出編輯模式
       setScheduleEditMode(false);
       
+      // 清除藍色選取框，確保在保存後不會殘留選取狀態
+      setFocusedCell(null);
+      setQuickEdit(null);
+      // 強制刷新UI
+      forceUpdate();
+      
       // 重新獲取最新數據
       await fetchFormulaSchedules();
       
@@ -1281,6 +1287,8 @@ const Formula = () => {
     if (!scheduleEditMode) return; // 只在編輯模式下處理
     
     let nurse;
+    // 確保 nurseId 是字符串
+    const nurseIdStr = nurseId.toString();
     
     // 根據來源區域獲取護理師信息並從原區域移除
     if (sourceArea === 'group') {
@@ -1306,9 +1314,9 @@ const Formula = () => {
       }
       
       // 找到護理師
-      const nurseIndex = sourcePattern.members.findIndex(m => m.id.toString() === nurseId);
+      const nurseIndex = sourcePattern.members.findIndex(m => m.id.toString() === nurseIdStr);
       if (nurseIndex === -1) {
-        console.error('未找到護理師ID:', nurseId);
+        console.error('未找到護理師ID:', nurseIdStr);
         return;
       }
       
@@ -1329,7 +1337,7 @@ const Formula = () => {
           const p = copy[idx].patterns[i];
           if (Number(p.group_number) === Number(sourceGroupId)) {
             // 保留現有的members，但過濾掉要移除的護理師
-            p.members = (p.members || []).filter(m => m.id.toString() !== nurseId);
+            p.members = (p.members || []).filter(m => m.id.toString() !== nurseIdStr);
           }
         }
         
@@ -1337,20 +1345,32 @@ const Formula = () => {
       });
     } else if (sourceArea === 'snp') {
       // 從小夜包班區域移除
-      nurse = snpNurses.find(n => n.id.toString() === nurseId);
+      // 確保使用 toString() 進行比較
+      nurse = snpNurses.find(n => n.id.toString() === nurseIdStr);
       if (!nurse) {
-        console.error('未找到小夜包班護理師:', nurseId);
-        return;
+        console.error('未找到小夜包班護理師:', nurseIdStr);
+        // 嘗試使用數字形式比較
+        nurse = snpNurses.find(n => Number(n.id) === Number(nurseIdStr));
+        if (!nurse) {
+          console.error('使用數字比較後仍未找到小夜包班護理師:', nurseIdStr);
+          return;
+        }
       }
-      setSnpNurses(prev => prev.filter(n => n.id.toString() !== nurseId));
+      setSnpNurses(prev => prev.filter(n => n.id.toString() !== nurseIdStr));
     } else if (sourceArea === 'lnp') {
       // 從大夜包班區域移除
-      nurse = lnpNurses.find(n => n.id.toString() === nurseId);
+      // 確保使用 toString() 進行比較
+      nurse = lnpNurses.find(n => n.id.toString() === nurseIdStr);
       if (!nurse) {
-        console.error('未找到大夜包班護理師:', nurseId);
-        return;
+        console.error('未找到大夜包班護理師:', nurseIdStr);
+        // 嘗試使用數字形式比較
+        nurse = lnpNurses.find(n => Number(n.id) === Number(nurseIdStr));
+        if (!nurse) {
+          console.error('使用數字比較後仍未找到大夜包班護理師:', nurseIdStr);
+          return;
+        }
       }
-      setLnpNurses(prev => prev.filter(n => n.id.toString() !== nurseId));
+      setLnpNurses(prev => prev.filter(n => n.id.toString() !== nurseIdStr));
     } else {
       console.error('未知的來源區域:', sourceArea);
       return;

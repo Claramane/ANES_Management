@@ -150,8 +150,6 @@ const MonthlySchedule = () => {
   
   // 確保選擇的日期是有效的
   const selectedDate = useMemo(() => {
-    console.log('MonthlySchedule - storeSelectedDate:', storeSelectedDate,
-               'instanceof Date:', storeSelectedDate instanceof Date);
     try {
       return ensureValidDate(storeSelectedDate);
     } catch (error) {
@@ -188,14 +186,9 @@ const MonthlySchedule = () => {
 
   // 從store獲取排班數據並格式化
   useEffect(() => {
-    console.log('MonthlySchedule - 收到儲存的排班數據:', storeMonthlySchedule);
-    
     if (storeMonthlySchedule && Array.isArray(storeMonthlySchedule)) {
-      console.log('處理陣列類型的排班數據，長度:', storeMonthlySchedule.length);
       setScheduleData(storeMonthlySchedule);
     } else {
-      console.log('排班數據不是陣列或為空，嘗試從其他結構解析');
-      
       try {
         // 嘗試獲取巢狀結構中的數據
         const year = selectedDate.getFullYear();
@@ -207,10 +200,8 @@ const MonthlySchedule = () => {
             storeMonthlySchedule[year][month].schedule) {
           
           const extractedData = storeMonthlySchedule[year][month].schedule;
-          console.log('從嵌套結構中提取的排班數據:', extractedData);
           setScheduleData(extractedData);
         } else {
-          console.log('無法從嵌套結構中提取數據，設置為空數組');
           setScheduleData([]);
         }
       } catch (err) {
@@ -363,9 +354,6 @@ const MonthlySchedule = () => {
     const userStore = useUserStore.getState();
     const userOrder = userStore.userOrder || {};
     
-    // 列出所有用戶資料
-    console.log('排班前用戶資料:', sorted.map(n => `${n.full_name || n.name || '未知'}(id:${n.id},role:${n.role},identity:${n.identity})`));
-    
     // 按身份分組
     const nursesByIdentity = {};
     const unknownIdentity = [];
@@ -434,8 +422,6 @@ const MonthlySchedule = () => {
     // 添加未知身份的護理師
     result.push(...unknownIdentity);
     
-    console.log('月班表護理師排序後:', result.map(n => `${n.full_name || n.name || '未知'}(id:${n.id},role:${n.role})`));
-    
     // 處理空的shifts數組
     return result.map(nurse => {
       // 確保shifts存在並且有效
@@ -475,8 +461,6 @@ const MonthlySchedule = () => {
 
     // 確保日期正確性
     const currentDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), dayIndex + 1);
-    console.log('切換班次 - 前端日期:', currentDate.toISOString(), '年:', selectedDate.getFullYear(), 
-                '月:', selectedDate.getMonth(), '日索引:', dayIndex, '實際天數:', dayIndex + 1);
 
     // 根據護理師身份確定可用的班次類型
     const identity = nurse.identity;
@@ -525,13 +509,14 @@ const MonthlySchedule = () => {
     
     // 通知store更新
     updateShift({ nurseIndex: originalIndex, dayIndex, newShift });
-    
-    console.log(`更新護理師 ${nurse.name} (ID: ${nurse.id}, 索引: ${originalIndex}, 身份: ${identity}) 的第 ${dayIndex+1} 天班次為 ${newShift}`);
   };
 
   // 切換編輯模式
   const toggleEditMode = () => {
     if (isEditMode) {
+      // 離開編輯模式前先清除選取狀態
+      setFocusedCell(null);
+      setQuickEdit(null);
       // 保存模式下，顯示確認對話框
       handleOpenSaveDialog();
     } else {
@@ -543,6 +528,10 @@ const MonthlySchedule = () => {
   // 處理保存後的操作
   const handleAfterSave = () => {
     setIsEditMode(false);
+    // 清除選取狀態，確保藍色框消失
+    setFocusedCell(null);
+    setQuickEdit(null);
+    forceUpdate(); // 強制更新UI，確保選取框立即消失
   };
 
   // 統計特定班次數量
@@ -677,7 +666,6 @@ const MonthlySchedule = () => {
             response[year][month].schedule) {
           
           const extractedData = response[year][month].schedule;
-          console.log('生成班表成功，提取的排班數據:', extractedData);
           setScheduleData(extractedData);
         }
       }
@@ -768,8 +756,6 @@ const MonthlySchedule = () => {
     if (isValid(selectedDate)) {
       const year = selectedDate.getFullYear();
       const month = selectedDate.getMonth() + 1;
-      
-      console.log('日期變更後獲取班表:', year, month);
       
       // 呼叫API獲取班表
       const getSchedule = async () => {

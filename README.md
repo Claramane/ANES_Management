@@ -1,6 +1,6 @@
 # 麻醉科護理班表管理系統
 
-![Version](https://img.shields.io/badge/version-0.8.0-blue)
+![Version](https://img.shields.io/badge/version-0.8.1-blue)
 ![License](https://img.shields.io/badge/license-Apache%202.0-green)
 
 這是一個專為麻醉科部門設計的護理班表管理系統，旨在簡化護理長排班和護理師查詢班表的流程。系統支援麻醉科、恢復室等專科護理師的特殊排班需求，提供直覺化的界面和高效的排班工具。
