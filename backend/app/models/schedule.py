@@ -12,6 +12,7 @@ class MonthlySchedule(Base):
     shift_type = Column(String)  # D=白班, A=小夜班, N=大夜班, O=休假
     area_code = Column(String)  # 房區代號
     work_time = Column(String)  # 工作時間
+    special_type = Column(String)  # 特殊分類標記 (SNP=小夜班包班, LNP=大夜班包班)
     version_id = Column(Integer, ForeignKey("schedule_versions.id"))
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())

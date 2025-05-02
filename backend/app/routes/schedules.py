@@ -35,10 +35,7 @@ async def generate_monthly_schedule(
         if request.month < 1 or request.month > 12:
             raise ValueError("月份必須在1至12之間")
         
-        # 驗證年份範圍（這裡可以根據需要調整）
-        current_year = datetime.now().year
-        if request.year < current_year - 1 or request.year > current_year + 1:
-            raise ValueError(f"年份必須在 {current_year-1} 至 {current_year+1} 之間")
+        # 年份範圍檢測已移除，允許任意年份
             
         # 創建目標月份的第一天
         first_day = date(request.year, request.month, 1)
@@ -442,6 +439,7 @@ async def get_monthly_schedule(
                     "identity": user.identity if user else "",
                     "group": formula_group,
                     "shifts": ["O"] * 31,  # 最大31天，用O填充
+                    "special_type": None,  # 初始化 special_type 為 None
                     "vacationDays": 0,
                     "accumulatedLeave": 0
                 }
@@ -452,6 +450,10 @@ async def get_monthly_schedule(
             # 確保不會超出數組範圍
             if 0 <= day < 31:
                 schedules_by_user[user_id]["shifts"][day] = schedule.shift_type
+                
+                # 如果這條記錄有 special_type，且用戶的 special_type 為空，則設置它
+                if schedule.special_type and not schedules_by_user[user_id]["special_type"]:
+                    schedules_by_user[user_id]["special_type"] = schedule.special_type
         
         # 將字典轉換為數組，並修剪shifts到當月實際天數
         import calendar
@@ -877,6 +879,7 @@ async def save_monthly_schedule(
         user_id = schedule_item.get("user_id")
         shifts = schedule_item.get("shifts", [])
         area_codes = schedule_item.get("area_codes", [])
+        special_type = schedule_item.get("special_type")  # 獲取 special_type
         
         # 檢查用戶是否存在
         nurse = db.query(User).filter(User.id == user_id).first()
@@ -898,6 +901,7 @@ async def save_monthly_schedule(
                     date=schedule_date,
                     shift_type=shift,
                     area_code=area_code,
+                    special_type=special_type,  # 設置 special_type
                     version_id=latest_version.id
                 )
                 db.add(schedule_entry)

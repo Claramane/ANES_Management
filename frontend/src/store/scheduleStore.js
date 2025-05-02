@@ -581,7 +581,8 @@ export const useScheduleStore = create(
             schedule_data: monthlySchedule.map(nurse => ({
               user_id: nurse.id,
               shifts: nurse.shifts,
-              area_codes: nurse.area_codes || Array(nurse.shifts.length).fill(null)
+              area_codes: nurse.area_codes || Array(nurse.shifts.length).fill(null),
+              special_type: nurse.special_type || null  // 加入 special_type 欄位
             })),
             create_version: true // 創建新版本
           };
@@ -666,7 +667,8 @@ export const useScheduleStore = create(
                 return {
                   ...nurse,
                   shifts: shifts,
-                  area_codes: area_codes // 添加空的area_codes以保持數據結構一致
+                  area_codes: area_codes, // 添加空的area_codes以保持數據結構一致
+                  special_type: nurse.special_type || null // 確保 special_type 字段存在
                 };
               });
               
