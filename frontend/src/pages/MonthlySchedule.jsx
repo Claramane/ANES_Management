@@ -42,16 +42,17 @@ const ensureValidDate = (date) => {
 // 班次顏色設定
 const ShiftCell = styled(TableCell)(({ shift }) => {
   const colors = { 
-    'D': '#a08887', // 白班 22-08
-    'A': '#d9d06e', // 小夜班 8-16
-    'N': '#8387da', // 大夜班 14-22
+    'D': '#c5b5ac', // 白班 22-08
+    'A': '#c6c05f', // 小夜班 8-16
+    'N': '#aa77c4', // 大夜班 14-22
     'K': '#8AA6C1', // 早班 9-17
-    'C': '#67dcbd', // 中班 10-18
-    'F': '#FFA07A', // 晚班 12-20
-    'E': '#FFB6C1', // 半班 8-12
-    'B': '#FFDAB9', // 日班 8-17
-    'O': '#FFFFFF', // 休假 OFF
-    'V': '#FFFFFF'  // 休假 OFF
+    'C': '#a9d0ab', // 中班 10-18
+    'F': '#d8bd89', // 晚班 12-20
+    'E': '#cb9cc8', // 半班 8-12
+    'B': '#e7b284', // 日班 8-17
+    'O': '#e7e7e7', // 休假 OFF
+    'V': '#e7e7e7',  // 休假 OFF
+    'R': '#e7e7e7'  // 靜養假 OFF
   };
   
   return {

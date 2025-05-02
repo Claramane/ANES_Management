@@ -2160,7 +2160,7 @@ const WeeklySchedule = () => {
           height: '22px',
           lineHeight: '22px'
         }}>
-          {showShiftTime ? convertShiftToTime(shift) : shift}
+          A
         </Box>
       );
     }

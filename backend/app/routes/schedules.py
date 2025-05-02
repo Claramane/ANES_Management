@@ -10,7 +10,6 @@ from ..core.database import get_db
 from ..core.security import get_current_active_user, get_head_nurse_user, get_current_user
 from ..models.user import User
 from ..models.schedule import MonthlySchedule, ScheduleVersion, ScheduleVersionDiff
-from ..models.formula_schedule import FormulaSchedule, NurseFormulaAssignment
 from ..models.log import Log
 from ..schemas.schedule import (
     MonthlyScheduleCreate, MonthlyScheduleUpdate, MonthlySchedule as MonthlyScheduleSchema,
@@ -18,6 +17,7 @@ from ..schemas.schedule import (
     ScheduleVersionDiffCreate, ScheduleVersionDiff as ScheduleVersionDiffSchema,
     GenerateMonthScheduleRequest
 )
+from ..models.formula import FormulaSchedule, FormulaSchedulePattern
 
 router = APIRouter()
 
@@ -85,14 +85,12 @@ async def generate_monthly_schedule(
             version_id = version.id
         
         # 獲取所有公式班表及其patterns
-        from ..models.formula_schedule import FormulaSchedulePattern
-        formula_patterns = {}
-        
         formulas = db.query(FormulaSchedule).all()
         
         # 建立公式名稱到ID的映射
         formula_name_to_id = {}
         formula_id_to_name = {}
+        formula_patterns = {}
         for formula in formulas:
             formula_name_to_id[formula.name] = formula.id
             formula_id_to_name[formula.id] = formula.name
@@ -130,14 +128,6 @@ async def generate_monthly_schedule(
         # 生成月度排班
         schedule_entries = []
         temporary_schedule = []  # 臨時存儲生成的排班數據，用於臨時模式
-        
-        # 身份與公式ID對應關係
-        identity_to_formula = {
-            '麻醉專科護理師': 1,
-            '恢復室護理師': 2,
-            '麻醉科Leader': 3,
-            '麻醉科書記': 4
-        }
         
         # 處理每個護理師的排班
         for nurse in all_nurses:
@@ -206,8 +196,7 @@ async def generate_monthly_schedule(
                         print(f"  解析得到: 公式ID: {formula_id}, 起始組別: {start_pattern}")
                     else:
                         print(f"護理師 {nurse.full_name} 的 group_data 格式不正確: {group_data}")
-                        formula_id = identity_to_formula.get(nurse.identity)
-                        start_pattern = 1
+                        formula_id = None
                 except Exception as e:
                     print(f"解析護理師 {nurse.full_name} 的group_data時發生錯誤: {str(e)}")
                     formula_id = None
@@ -241,13 +230,11 @@ async def generate_monthly_schedule(
                         schedule_entries.append(schedule_entry)
                 continue
             
-            # 如果沒有從group_data獲取到，則根據護理師身份設置默認公式
-            if formula_id is None:
-                formula_id = identity_to_formula.get(nurse.identity)
-                print(f"護理師 {nurse.full_name} 未設置組別，使用身份 {nurse.identity} 對應的公式 ID: {formula_id}")
+            # 獲取該公式班表的所有patterns
+            patterns = formula_patterns.get(formula_id, [])
             
-            # 如果沒有找到有效的公式班表設定，則生成預設休假排班
-            if formula_id is None or formula_id not in formula_patterns:
+            # 如果沒有找到有效的公式班表或patterns，則生成預設休假排班
+            if formula_id is None or not patterns:
                 print(f"護理師 {nurse.full_name} 沒有有效的公式班表設定，生成全休假排班")
                 
                 # 對於臨時模式，添加到臨時排班表中
@@ -262,38 +249,6 @@ async def generate_monthly_schedule(
                     continue
                 
                 # 為這個護理師生成全休假排班
-                for day in range(1, days_in_month + 1):
-                    entry_date = date(request.year, request.month, day)
-                    
-                    if not is_temporary:
-                        schedule_entry = MonthlySchedule(
-                            user_id=nurse.id,
-                            date=entry_date,
-                            shift_type='O',  # 休假
-                            area_code=nurse.identity,
-                            version_id=version_id
-                        )
-                        schedule_entries.append(schedule_entry)
-                continue
-            
-            # 獲取該公式班表的所有patterns
-            patterns = formula_patterns.get(formula_id, [])
-            
-            if not patterns:
-                print(f"警告: 公式班表ID {formula_id} ({formula_id_to_name.get(formula_id, '未知')}) 沒有pattern定義，將使用默認休假排班")
-                
-                # 對於臨時模式，添加到臨時排班表中
-                if is_temporary:
-                    temporary_schedule.append({
-                        "id": nurse.id,
-                        "name": nurse.full_name,
-                        "role": nurse.role,
-                        "identity": nurse.identity,
-                        "shifts": nurse_shifts
-                    })
-                    continue
-                
-                # 為這個護理師生成默認排班
                 for day in range(1, days_in_month + 1):
                     entry_date = date(request.year, request.month, day)
                     

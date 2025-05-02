@@ -11,7 +11,7 @@ import Dashboard from './pages/Dashboard';
 import WeeklySchedule from './pages/WeeklySchedule';
 import MonthlySchedule from './pages/MonthlySchedule';
 import BigSchedule from './pages/BigSchedule';
-import FormulaSchedule from './pages/FormulaSchedule';
+import Formula from './pages/Formula';
 import ShiftSwapPage from './pages/ShiftSwap';
 import AnnouncementPage from './pages/Announcement';
 import UserManagement from './pages/UserManagement';
@@ -111,9 +111,9 @@ function App() {
             <Route path="overtime-staff" element={<OvertimeStaff />} />
             
             {/* 護理長專用路由 */}
-            <Route path="formula-schedule" element={
+            <Route path="formula" element={
               <HeadNurseRoute>
-                <FormulaSchedule />
+                <Formula />
               </HeadNurseRoute>
             } />
             <Route path="users" element={

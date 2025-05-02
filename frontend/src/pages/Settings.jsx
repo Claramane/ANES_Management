@@ -9,15 +9,9 @@ import {
   Alert,
   CircularProgress,
   TextField,
-  FormControl,
-  FormHelperText,
-  InputLabel,
-  FormGroup,
-  FormLabel,
   IconButton,
   InputAdornment
 } from '@mui/material';
-import SaveIcon from '@mui/icons-material/Save';
 import LockIcon from '@mui/icons-material/Lock';
 import Visibility from '@mui/icons-material/Visibility';
 import VisibilityOff from '@mui/icons-material/VisibilityOff';
@@ -25,34 +19,10 @@ import { useSettingsStore } from '../store/settingsStore';
 import apiService from '../utils/api';
 import { useAuthStore } from '../store/authStore';
 
-// 定義四種公式班表類型
-const FORMULA_TYPES = {
-  ANESTHESIA_SPECIALIST: 'anesthesia_specialist', // 麻醉專科護理師
-  RECOVERY_NURSE: 'recovery_nurse', // 恢復室護理師
-  ANESTHESIA_LEADER: 'anesthesia_leader', // 麻醉科Leader
-  ANESTHESIA_SECRETARY: 'anesthesia_secretary', // 麻醉科書記
-};
-
-// 班表類型顯示名稱映射
-const FORMULA_TYPE_NAMES = {
-  [FORMULA_TYPES.ANESTHESIA_SPECIALIST]: '麻醉專科護理師',
-  [FORMULA_TYPES.RECOVERY_NURSE]: '恢復室護理師',
-  [FORMULA_TYPES.ANESTHESIA_LEADER]: '麻醉科Leader',
-  [FORMULA_TYPES.ANESTHESIA_SECRETARY]: '麻醉科書記',
-};
-
 const Settings = () => {
-  const { settings, isLoading, error, fetchSettings, updateSettings } = useSettingsStore();
+  const { settings, isLoading, error, fetchSettings } = useSettingsStore();
   const { user } = useAuthStore();
-  const [formSettings, setFormSettings] = useState({
-    regularGroupCount: 3,
-    anesthesia_specialist_groups: 3,
-    recovery_nurse_groups: 3,
-    anesthesia_leader_groups: 3,
-    anesthesia_secretary_groups: 3,
-  });
   const [success, setSuccess] = useState(false);
-  const [errors, setErrors] = useState({});
   
   // 密碼修改狀態
   const [passwordForm, setPasswordForm] = useState({
@@ -90,19 +60,6 @@ const Settings = () => {
     loadSettings();
   }, [fetchSettings]);
 
-  // 當 store 中的設置更新時，更新表單
-  useEffect(() => {
-    if (settings) {
-      setFormSettings({
-        regularGroupCount: settings.regularGroupCount || 3,
-        anesthesia_specialist_groups: settings.anesthesia_specialist_groups || 3,
-        recovery_nurse_groups: settings.recovery_nurse_groups || 3,
-        anesthesia_leader_groups: settings.anesthesia_leader_groups || 3,
-        anesthesia_secretary_groups: settings.anesthesia_secretary_groups || 3,
-      });
-    }
-  }, [settings]);
-
   // 當用戶資料更新時，更新個人資料表單
   useEffect(() => {
     if (user) {
@@ -111,70 +68,6 @@ const Settings = () => {
       });
     }
   }, [user]);
-
-  // 驗證輸入是否為正整數且大於等於1
-  const validateInput = (value) => {
-    return /^[1-9]\d*$/.test(value);
-  };
-
-  // 處理組別數量變更
-  const handleGroupCountChange = (field) => (event) => {
-    const value = event.target.value;
-    setFormSettings({
-      ...formSettings,
-      [field]: value,
-    });
-
-    // 驗證輸入
-    if (value === '' || !validateInput(value)) {
-      setErrors({
-        ...errors,
-        [field]: '請輸入大於等於1的正整數',
-      });
-    } else {
-      const newErrors = { ...errors };
-      delete newErrors[field];
-      setErrors(newErrors);
-    }
-  };
-
-  // 檢查表單是否有錯誤
-  const hasErrors = () => {
-    // 檢查所有字段是否都有效
-    return Object.entries(FORMULA_TYPES).some(([_, value]) => {
-      const fieldValue = formSettings[`${value}_groups`];
-      return !fieldValue || !validateInput(fieldValue);
-    });
-  };
-
-  // 保存設定
-  const saveSettings = async () => {
-    // 如果有錯誤，不允許保存
-    if (hasErrors()) {
-      return;
-    }
-
-    try {
-      // 轉換字符串為數字
-      const updatedSettings = {
-        regularGroupCount: parseInt(formSettings.regularGroupCount, 10),
-        anesthesia_specialist_groups: parseInt(formSettings.anesthesia_specialist_groups, 10),
-        recovery_nurse_groups: parseInt(formSettings.recovery_nurse_groups, 10),
-        anesthesia_leader_groups: parseInt(formSettings.anesthesia_leader_groups, 10),
-        anesthesia_secretary_groups: parseInt(formSettings.anesthesia_secretary_groups, 10),
-      };
-
-      await updateSettings(updatedSettings);
-      setSuccess(true);
-      
-      // 3秒後自動清除成功訊息
-      setTimeout(() => {
-        setSuccess(false);
-      }, 3000);
-    } catch (err) {
-      console.error('Error saving settings:', err);
-    }
-  };
   
   // 處理密碼表單變更
   const handlePasswordChange = (field) => (event) => {
@@ -493,55 +386,6 @@ const Settings = () => {
           </Button>
         </Box>
       </Paper>
-      
-      {/* 管理員專用的班表設定區域 */}
-      {(user?.role === 'head_nurse' || user?.role === 'admin') && (
-        <Paper sx={{ padding: 3, marginTop: 2 }}>
-          <Typography variant="h6" gutterBottom>
-            公式排班設定
-          </Typography>
-          
-          <Divider sx={{ my: 2 }} />
-          
-          <FormGroup sx={{ mb: 4 }}>
-            <FormLabel component="legend" sx={{ mb: 2 }}>
-              各類型班表組別數量設置
-            </FormLabel>
-            
-            <Grid container spacing={3}>
-              {Object.entries(FORMULA_TYPES).map(([key, value]) => (
-                <Grid item xs={12} sm={6} key={value}>
-                  <TextField
-                    fullWidth
-                    label={`${FORMULA_TYPE_NAMES[value]}組別數量`}
-                    variant="outlined"
-                    value={formSettings[`${value}_groups`]}
-                    onChange={handleGroupCountChange(`${value}_groups`)}
-                    error={!!errors[`${value}_groups`]}
-                    helperText={errors[`${value}_groups`] || '請輸入大於等於1的正整數'}
-                    inputProps={{ 
-                      inputMode: 'numeric',
-                      pattern: '[1-9][0-9]*'
-                    }}
-                  />
-                </Grid>
-              ))}
-            </Grid>
-          </FormGroup>
-          
-          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
-            <Button
-              variant="contained"
-              color="primary"
-              startIcon={<SaveIcon />}
-              onClick={saveSettings}
-              disabled={isLoading || hasErrors()}
-            >
-              保存設定
-            </Button>
-          </Box>
-        </Paper>
-      )}
       
       <Paper sx={{ padding: 3, marginTop: 3 }}>
         <Typography variant="h6" gutterBottom>

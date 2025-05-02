@@ -77,7 +77,7 @@ function Layout() {
 
   // 護理長專用選單 
   const headNurseMenuItems = [
-    { text: '公式班表', icon: <EventIcon />, path: '/formula-schedule' },
+    { text: '公式班表', icon: <EventIcon />, path: '/formula' },
     { text: '用戶管理', icon: <PeopleIcon />, path: '/users' },
     { text: '系統設定', icon: <SettingsIcon />, path: '/settings' },
   ];

@@ -84,6 +84,9 @@ const apiService = {
   formulaSchedule: {
     getAll: () => api.get('/formula-schedules'),
     getAllWithPatterns: () => api.get('/formula-schedules?include_patterns=true&include_assignments=true'),
+    getAllPatterns: () => api.get('/formula-schedules/patterns'),
+    getPatternsByFormula: (formulaId) => api.get(`/formula-schedules/patterns?formula_id=${formulaId}`),
+    getPatternsByGroup: (groupNumber) => api.get(`/formula-schedules/patterns?group_number=${groupNumber}`),
     getById: (id) => api.get(`/formula-schedules/${id}`),
     create: (data) => api.post('/formula-schedules', data),
     update: (id, data) => api.put(`/formula-schedules/${id}`, data),

@@ -1,7 +1,7 @@
 # 麻醉科護理班表管理系統
 
-![Version](https://img.shields.io/badge/version-0.7.0-blue)
-![License](https://img.shields.io/badge/license-MIT-green)
+![Version](https://img.shields.io/badge/version-0.7.8-blue)
+![License](https://img.shields.io/badge/license-Apache%202.0-green)
 
 這是一個專為麻醉科部門設計的護理班表管理系統，旨在簡化護理長排班和護理師查詢班表的流程。系統支援麻醉科、恢復室等專科護理師的特殊排班需求，提供直覺化的界面和高效的排班工具。
 
@@ -64,71 +64,73 @@
 backend/
 ├── app/
 │   ├── core/          # 核心功能：設置、安全性、數據庫連接等
-│   ├── models/        # 數據庫模型定義
+│   ├── models/        # 數據庫模型定義 (SQLAlchemy)
 │   │   ├── user.py    # 用戶模型
 │   │   ├── schedule.py # 班表模型
-│   │   ├── formula_schedule.py # 公式班表模型
+│   │   ├── formula.py # 公式班表與模式模型
 │   │   ├── shift_swap.py # 換班模型
 │   │   ├── announcement.py # 公告模型
 │   │   ├── overtime.py # 加班記錄模型
 │   │   └── log.py     # 日誌模型
-│   ├── routes/        # API路由
-│   │   ├── users.py   # 用戶相關API
-│   │   ├── auth.py    # 認證相關API
-│   │   ├── schedule.py # 班表相關API
-│   │   ├── formula_schedule.py # 公式班表相關API
-│   │   ├── shift_swap.py # 換班相關API
-│   │   ├── overtime.py # 加班記錄相關API
-│   │   └── announcement.py # 公告相關API
-│   ├── schemas/       # Pydantic模型（資料驗證）
+│   ├── routes/        # API 路由 (FastAPI)
+│   │   ├── users.py   # 用戶相關 API
+│   │   ├── schedules.py # 班表相關 API
+│   │   ├── formula_schedules.py # 公式班表相關 API
+│   │   ├── overtime.py # 加班記錄相關 API
+│   │   └── announcements.py # 公告相關 API
+│   ├── schemas/       # Pydantic 模型（資料驗證）
 │   │   ├── user.py
 │   │   ├── schedule.py
-│   │   ├── formula_schedule.py
 │   │   ├── shift_swap.py
 │   │   ├── overtime.py
 │   │   └── announcement.py
-│   ├── utils/         # 工具函數
-│   └── main.py        # 主應用入口
-├── migrations/        # 數據庫遷移腳本
+│   └── main.py        # 主應用入口 (FastAPI App)
+├── migrations/        # 數據庫遷移腳本 (Alembic)
+├── scripts/           # 輔助腳本 (例如，數據遷移、檢查)
 ├── init_db.py         # 數據庫初始化腳本
-├── requirements.txt   # 依賴項
-├── .env               # 環境變數配置
-└── run.py             # 啟動腳本
+├── requirements.txt   # Python 依賴項
+├── .env.example       # 環境變數範例檔
+└── run.py             # Gunicorn 啟動腳本
 ```
 
 ### 前端 (Frontend)
 ```
 frontend/
-├── public/           # 靜態資源
-└── src/
-    ├── assets/       # 圖片等資源
-    ├── components/   # 可重用組件
-    │   ├── layout/   # 頁面佈局組件
-    │   ├── common/   # 通用組件
-    │   └── schedule/ # 班表相關組件
-    ├── pages/        # 頁面組件
-    │   ├── Login.jsx           # 登入頁
-    │   ├── Dashboard.jsx       # 儀表板
-    │   ├── UserManagement.jsx  # 用戶管理
-    │   ├── FormulaSchedule.jsx # 公式班表設定
-    │   ├── MonthlySchedule.jsx # 月班表
-    │   ├── WeeklySchedule.jsx  # 週班表與工作分配
-    │   ├── BigSchedule.jsx     # 大班表
-    │   ├── OvertimeStaff.jsx   # 加班人員管理
-    │   ├── ShiftSwap.jsx       # 換班管理
-    │   └── Announcement.jsx    # 公告管理
-    ├── store/        # 狀態管理
-    │   ├── userStore.js      # 用戶狀態
-    │   ├── authStore.js      # 認證狀態
-    │   ├── scheduleStore.js  # 班表狀態
-    │   ├── settingsStore.js  # 設置狀態
-    │   └── announcementStore.js # 公告狀態
-    ├── utils/        # 工具函數
-    │   ├── api.js    # API調用
-    │   ├── date.js   # 日期處理
-    │   └── auth.js   # 認證相關
-    ├── App.jsx       # 應用主入口
-    └── index.jsx     # 渲染入口
+├── public/           # 靜態資源 (例如 index.html, favicons)
+├── src/
+│   ├── assets/       # 圖片、字體等資源
+│   ├── components/   # 可重用 React 組件
+│   │   └── Layout.jsx   # 主要頁面佈局
+│   │   └── OvertimeStaff.jsx # 加班人員相關組件 (可能需要移動到 pages 或更具體目錄)
+│   ├── pages/        # 頁面級 React 組件
+│   │   ├── Login.jsx           # 登入頁
+│   │   ├── Dashboard.jsx       # 儀表板
+│   │   ├── UserManagement.jsx  # 用戶管理
+│   │   ├── Formula.jsx         # 公式班表設定頁
+│   │   ├── MonthlySchedule.jsx # 月班表頁
+│   │   ├── WeeklySchedule.jsx  # 週班表與工作分配頁
+│   │   ├── BigSchedule.jsx     # 大班表頁
+│   │   ├── OvertimeStaff.jsx   # 加班人員管理頁
+│   │   ├── ShiftSwap.jsx       # 換班管理頁
+│   │   ├── Announcement.jsx    # 公告列表頁
+│   │   ├── PublishAnnouncementForm.jsx # 發布公告表單
+│   │   ├── VersionHistory.jsx  # 版本歷史頁 (班表)
+│   │   ├── Settings.jsx        # 設置頁
+│   │   └── NotFound.jsx        # 404 頁面
+│   ├── store/        # 狀態管理 (Zustand)
+│   │   ├── authStore.js      # 認證狀態
+│   │   ├── userStore.js      # 用戶狀態
+│   │   ├── scheduleStore.js  # 班表狀態
+│   │   └── settingsStore.js  # 設置狀態
+│   ├── utils/        # 工具函數
+│   │   ├── api.js    # API 請求封裝 (Axios)
+│   │   └── migrateFormulaPatternsData.js # 數據遷移相關工具
+│   ├── App.jsx       # 應用主組件 (路由配置)
+│   ├── index.jsx     # React 應用渲染入口
+│   ├── index.css     # 全局樣式
+│   └── reportWebVitals.js # 性能監測
+├── package.json      # Node.js 項目配置與依賴
+└── .gitignore        # Git 忽略配置
 ```
 
 ## 技術架構與設計邏輯
@@ -310,7 +312,7 @@ npm start
 
 ## 授權
 
-本專案採用 MIT 授權 - 詳情請參閱 [LICENSE](LICENSE) 文件
+本專案採用 Apache 2.0 授權 - 詳情請參閱 [LICENSE](LICENSE) 文件
 
 ## 詳細文檔
 
@@ -338,18 +340,11 @@ npm start
 3. 遵循安裝指南中的PostgreSQL配置步驟
 4. 數據庫參數可在`backend/.env`文件中調整 
 
-## 當前進度 (v0.7.0)
-- 新增加班管理系統，支援從月班表自動識別A班加班人員
-- 實現加班人員排序標記功能，支援A-F六種排序標記
-- 開發加班記錄API與前端整合，實現資料持久化
-- 優化表格顯示，合併日期與星期欄位以節省空間
-- 完善權限管理，確保只有護理長和管理員可編輯加班記錄
-- 修復資料庫結構問題，確保加班記錄資料的正確儲存
-- 改進週班表的工作分配按鈕樣式，統一麻醉專科護理師和恢復室護理師的按鈕大小
-- 整合完整的日間工作分配表功能，提供更直觀的工作安排視圖
-- 優化快速工作分配區佈局，提升使用者操作體驗
-- 優化本週工作分配統計區塊，排除護理長的工作分配數據
-- 保留工作快速分配區的恢復室護理師特殊樣式顯示
-- 提升使用者體驗，使界面更加統一和美觀
-- 修復了部分佈局問題，確保在不同設備上的顯示一致性
+## 當前進度 (v0.7.8)
+- 重構並優化後端公式班表核心邏輯。
+- 進行前端架構調整與部分核心組件重寫，提升性能與可維護性。
+- 重新設計並實現月班表生成邏輯，提高效率與準確性。
+- 將專案授權從 MIT 更改為 Apache 2.0。
+- 更新 README 中的專案架構描述以符合最新結構。
+- 修復部分已知錯誤並提升整體系統穩定性。
   
