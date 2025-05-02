@@ -107,10 +107,6 @@ async def generate_monthly_schedule(
                 patterns_dict.values(),
                 key=lambda p: p.group_number
             )
-            
-            print(f"公式班表 '{formula.name}' (ID: {formula.id}) 有 {len(patterns_dict)} 個有效pattern")
-            for p in patterns_dict.values():
-                print(f" - 組別: {p.group_number}, pattern: {p.pattern}")
         
         # 獲取所有護理師
         all_nurses = db.query(User).filter(
@@ -120,8 +116,6 @@ async def generate_monthly_schedule(
         if not all_nurses:
             raise ValueError("未找到任何護理師，無法生成班表")
             
-        print(f"找到 {len(all_nurses)} 名護理師")
-        
         # 生成月度排班
         schedule_entries = []
         temporary_schedule = []  # 臨時存儲生成的排班數據，用於臨時模式
@@ -133,8 +127,6 @@ async def generate_monthly_schedule(
             
             # 護理長特殊處理：週一至週五為A班，週六日為O休假
             if nurse.role == 'head_nurse':
-                print(f"護理長 {nurse.full_name} (ID: {nurse.id}) 使用特殊班表: 週一至週五A班，週六日休假")
-                
                 # 為護理長生成特殊班表
                 for day in range(1, days_in_month + 1):
                     entry_date = date(request.year, request.month, day)
@@ -158,8 +150,6 @@ async def generate_monthly_schedule(
                             version_id=version_id
                         )
                         schedule_entries.append(schedule_entry)
-                    
-                print(f"護理長 {nurse.full_name} 的排班已完成")
                 
                 # 對於臨時模式，添加到臨時排班表中
                 if is_temporary:
@@ -188,19 +178,11 @@ async def generate_monthly_schedule(
                         formula_id = int(group_data[0])
                         # 第二個元素是起始pattern組
                         start_pattern = int(group_data[1])
-                        
-                        print(f"護理師 {nurse.full_name} (ID: {nurse.id}) 的 group_data: {group_data}")
-                        print(f"  解析得到: 公式ID: {formula_id}, 起始組別: {start_pattern}")
                     else:
-                        print(f"護理師 {nurse.full_name} 的 group_data 格式不正確: {group_data}")
                         formula_id = None
                 except Exception as e:
-                    print(f"解析護理師 {nurse.full_name} 的group_data時發生錯誤: {str(e)}")
                     formula_id = None
             else:
-                # group_data 為 null，直接生成全休假排班
-                print(f"護理師 {nurse.full_name} 的 group_data 為 null，生成全休假排班")
-                
                 # 對於臨時模式，添加到臨時排班表中
                 if is_temporary:
                     temporary_schedule.append({
@@ -232,8 +214,6 @@ async def generate_monthly_schedule(
             
             # 如果沒有找到有效的公式班表或patterns，則生成預設休假排班
             if formula_id is None or not patterns:
-                print(f"護理師 {nurse.full_name} 沒有有效的公式班表設定，生成全休假排班")
-                
                 # 對於臨時模式，添加到臨時排班表中
                 if is_temporary:
                     temporary_schedule.append({
@@ -263,13 +243,7 @@ async def generate_monthly_schedule(
             # 計算pattern的最大組別數
             max_group = max(p.group_number for p in patterns)
             
-            print(f"護理師 {nurse.full_name} 使用公式班表ID: {formula_id} ({formula_id_to_name.get(formula_id, '未知')}), 起始組別: {start_pattern}, 最大組別數: {max_group}")
-            
             # 為這個護理師生成整月排班
-            print(f"開始為護理師 {nurse.full_name} 生成 {request.year}年{request.month}月 的排班")
-            print(f"  月初第一天是星期 {first_day_weekday+1}，共 {days_in_month} 天")
-            print(f"  使用公式班表ID: {formula_id}，起始pattern組: {start_pattern}，最大pattern組數: {max_group}")
-            
             for day in range(1, days_in_month + 1):
                 entry_date = date(request.year, request.month, day)
                 
@@ -298,11 +272,9 @@ async def generate_monthly_schedule(
                     # 獲取當天對應的班次，注意pattern中的第一個字符代表週一
                     if 0 <= day_of_week < len(pattern_str):
                         shift_type = pattern_str[day_of_week]
-                        # 移除日誌限制條件，顯示每天的排班信息
-                        print(f"  日期: {entry_date.strftime('%Y-%m-%d')}(星期{day_of_week+1}), 第{current_week+1}周, 使用pattern組: {current_pattern}, 班別: {shift_type}")
                     else:
                         # 如果pattern字串不夠長，默認休假
-                        print(f"警告: 日期 {entry_date} 的星期 {day_of_week+1} 超出pattern長度 {len(pattern_str)}")
+                        pass
                 
                 # 更新臨時模式的班表
                 if is_temporary:
@@ -865,8 +837,6 @@ async def save_monthly_schedule(
         db.commit()
         db.refresh(new_version)
         latest_version = new_version
-        
-        print(f"未找到 {year}年{month}月 的排班表，已創建新版本 {new_version_number}")
     
     # 無論是否創建新版本，總是需要清空現有排班記錄並重新創建
     # 清空現有排班記錄
@@ -1064,7 +1034,7 @@ async def get_monthly_schedule_details(
         raise HTTPException(
             status_code=500,
             detail=f"獲取排班詳細記錄時發生錯誤: {str(e)}"
-        ) 
+        )
 
 @router.post("/schedules/bulkUpdateAreaCodes", response_model=Dict[str, Any])
 async def bulk_update_area_codes(
