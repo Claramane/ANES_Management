@@ -991,10 +991,34 @@ const OvertimeStaff = () => {
     setGenerationAttempts(0);
     shouldCancelGenerationRef.current = false; // 重置取消標記
     
-    // 使用setTimeout實現非阻塞的生成
-    setTimeout(() => {
-      generateFullAssignmentsAsync();
-    }, 100);
+    // 先載入最新的年度統計數據，然後再開始隨機生成
+    Promise.resolve()
+      .then(() => {
+        // 先嘗試從數據庫載入
+        console.log('在隨機生成前載入最新的年度統計數據');
+        return loadYearlyStatisticsFromDB();
+      })
+      .then((dataLoaded) => {
+        if (!dataLoaded) {
+          // 如果沒有從數據庫獲取到數據，則重新計算
+          console.log('數據庫中沒有年度統計數據，重新計算');
+          return generateYearlyStatistics();
+        }
+      })
+      .then(() => {
+        // 開始隨機生成
+        console.log('年度統計數據已載入，開始隨機生成');
+        console.log('目前年度數據：', yearlyStatisticsData);
+        setTimeout(() => {
+          generateFullAssignmentsAsync();
+        }, 100);
+      })
+      .catch((error) => {
+        console.error('載入年度統計數據失敗:', error);
+        setApiError('載入年度統計數據失敗，無法進行隨機生成');
+        setOpenSnackbar(true);
+        setIsGeneratingRandom(false);
+      });
   };
 
   // 非阻塞的生成算法 - 全部重新生成
@@ -1171,10 +1195,21 @@ const OvertimeStaff = () => {
         // 檢查是否有年度總分超出範圍（正負2分）
         // 注意：需要從yearlyStatisticsData中獲取護理師之前的年度總分，然後扣除原本當月的分數，再加上新生成的當月分數來判斷
         const currentMonth = selectedDate.getMonth();
-        const hasYearOutOfRange = nursesScores.some(nurse => {
+        console.log('進行年度總分檢查，當前月份:', currentMonth + 1);
+        console.log('檢查護理師總分時使用的年度統計數據:', yearlyStatisticsData);
+        
+        // 為所有護理師計算詳細的分數，以便分析
+        const nurseDetailedScores = nursesScores.map(nurse => {
           // 找到護理師在年度統計中的數據
           const yearlyData = yearlyStatisticsData.find(data => data.id === nurse.id);
-          if (!yearlyData) return false; // 如果沒有年度數據，則不視為超出範圍
+          if (!yearlyData) {
+            return {
+              name: nurse.name,
+              id: nurse.id,
+              hasYearlyData: false,
+              message: '沒有年度統計數據'
+            };
+          }
           
           // 計算除了當月之外的所有月份的總分
           let otherMonthsTotal = 0;
@@ -1192,9 +1227,19 @@ const OvertimeStaff = () => {
           // 計算新的年度總分 = 其他月份總分 + 當月新分數
           const newYearlyTotal = otherMonthsTotal + currentMonthNewScore;
           
-          // 檢查新的年度總分是否超出範圍(±2分)
-          return newYearlyTotal > 2 || newYearlyTotal < -2;
+          return {
+            name: nurse.name,
+            id: nurse.id,
+            currentMonthScore: currentMonthNewScore,
+            otherMonthsTotal,
+            newYearlyTotal,
+            isOutOfRange: newYearlyTotal > 2 || newYearlyTotal < -2
+          };
         });
+        
+        console.log('護理師詳細分數計算:', nurseDetailedScores);
+        
+        const hasYearOutOfRange = nurseDetailedScores.some(nurse => nurse.isOutOfRange);
         
         if (!hasMonthOutOfRange && !hasYearOutOfRange) {
           isBalanced = true;
@@ -1210,9 +1255,9 @@ const OvertimeStaff = () => {
           }
           
           if (hasYearOutOfRange) {
-            const outOfRangeNurses = nursesScores
-              .filter(nurse => nurse.totalScore > 2 || nurse.totalScore < -2)
-              .map(nurse => `${nurse.name}(${nurse.totalScore.toFixed(2)})`);
+            const outOfRangeNurses = nurseDetailedScores
+              .filter(nurse => nurse.isOutOfRange)
+              .map(nurse => `${nurse.name}: 其他月總分(${nurse.otherMonthsTotal.toFixed(2)}) + 當月新分數(${nurse.currentMonthScore.toFixed(2)}) = 新年度總分(${nurse.newYearlyTotal.toFixed(2)})`);
             console.log('有護理師年度總分超出範圍(±2)，需要重新生成:', outOfRangeNurses);
           }
         }
@@ -1258,10 +1303,34 @@ const OvertimeStaff = () => {
     setGenerationAttempts(0);
     shouldCancelGenerationRef.current = false; // 重置取消標記
     
-    // 使用setTimeout實現非阻塞的生成
-    setTimeout(() => {
-      generatePartialAssignmentsAsync();
-    }, 100);
+    // 先載入最新的年度統計數據，然後再開始隨機生成
+    Promise.resolve()
+      .then(() => {
+        // 先嘗試從數據庫載入
+        console.log('在隨機生成前載入最新的年度統計數據');
+        return loadYearlyStatisticsFromDB();
+      })
+      .then((dataLoaded) => {
+        if (!dataLoaded) {
+          // 如果沒有從數據庫獲取到數據，則重新計算
+          console.log('數據庫中沒有年度統計數據，重新計算');
+          return generateYearlyStatistics();
+        }
+      })
+      .then(() => {
+        // 開始隨機生成
+        console.log('年度統計數據已載入，開始隨機生成');
+        console.log('目前年度數據：', yearlyStatisticsData);
+        setTimeout(() => {
+          generatePartialAssignmentsAsync();
+        }, 100);
+      })
+      .catch((error) => {
+        console.error('載入年度統計數據失敗:', error);
+        setApiError('載入年度統計數據失敗，無法進行隨機生成');
+        setOpenSnackbar(true);
+        setIsGeneratingRandom(false);
+      });
   };
 
   // 非阻塞的生成算法 - 生成尚未指定
@@ -1270,7 +1339,7 @@ const OvertimeStaff = () => {
       // 使用全局常量
       let attempts = 0;
       let isBalanced = false;
-      let newMarkings = {};
+      let newMarkings = { ...markings };  // 保留現有標記
       
       // 先檢查是否有足夠的資料來生成
       if (!overtimeData || Object.keys(overtimeData).length === 0) {
@@ -1296,7 +1365,7 @@ const OvertimeStaff = () => {
         
         console.log(`嘗試生成尚未指定加班人員 (第 ${attempts} 次)`);
         
-        // 保留現有標記
+        // 保留現有標記，重置為初始狀態
         newMarkings = { ...markings };
         
         // 對每一天進行處理 - 簡化的隨機分配方式
@@ -1451,10 +1520,21 @@ const OvertimeStaff = () => {
         // 檢查是否有年度總分超出範圍（正負2分）
         // 注意：需要從yearlyStatisticsData中獲取護理師之前的年度總分，然後扣除原本當月的分數，再加上新生成的當月分數來判斷
         const currentMonth = selectedDate.getMonth();
-        const hasYearOutOfRange = nursesScores.some(nurse => {
+        console.log('進行年度總分檢查，當前月份:', currentMonth + 1);
+        console.log('檢查護理師總分時使用的年度統計數據:', yearlyStatisticsData);
+        
+        // 為所有護理師計算詳細的分數，以便分析
+        const nurseDetailedScores = nursesScores.map(nurse => {
           // 找到護理師在年度統計中的數據
           const yearlyData = yearlyStatisticsData.find(data => data.id === nurse.id);
-          if (!yearlyData) return false; // 如果沒有年度數據，則不視為超出範圍
+          if (!yearlyData) {
+            return {
+              name: nurse.name,
+              id: nurse.id,
+              hasYearlyData: false,
+              message: '沒有年度統計數據'
+            };
+          }
           
           // 計算除了當月之外的所有月份的總分
           let otherMonthsTotal = 0;
@@ -1472,9 +1552,19 @@ const OvertimeStaff = () => {
           // 計算新的年度總分 = 其他月份總分 + 當月新分數
           const newYearlyTotal = otherMonthsTotal + currentMonthNewScore;
           
-          // 檢查新的年度總分是否超出範圍(±2分)
-          return newYearlyTotal > 2 || newYearlyTotal < -2;
+          return {
+            name: nurse.name,
+            id: nurse.id,
+            currentMonthScore: currentMonthNewScore,
+            otherMonthsTotal,
+            newYearlyTotal,
+            isOutOfRange: newYearlyTotal > 2 || newYearlyTotal < -2
+          };
         });
+        
+        console.log('護理師詳細分數計算:', nurseDetailedScores);
+        
+        const hasYearOutOfRange = nurseDetailedScores.some(nurse => nurse.isOutOfRange);
         
         if (!hasMonthOutOfRange && !hasYearOutOfRange) {
           isBalanced = true;
@@ -1755,7 +1845,7 @@ const OvertimeStaff = () => {
     try {
       if (!filteredSchedule || !filteredSchedule.length) {
         setYearlyStatisticsData([]);
-        return;
+        return Promise.resolve(false);
       }
       
       // 獲取當年1月1日至今的日期範圍
@@ -2021,10 +2111,13 @@ const OvertimeStaff = () => {
       statistics.sort((a, b) => b.totalScore - a.totalScore);
       
       setYearlyStatisticsData(statistics);
+      console.log('已生成年度統計數據:', statistics);
+      return Promise.resolve(true);
     } catch (error) {
       console.error('生成年度統計數據失敗:', error);
       setApiError('生成年度統計數據時發生錯誤: ' + error.message);
       setOpenSnackbar(true);
+      return Promise.resolve(false);
     } finally {
       setIsLoadingYearlyStatistics(false);
     }
@@ -2176,6 +2269,7 @@ const OvertimeStaff = () => {
       
       // 更新年度統計數據
       setYearlyStatisticsData(statistics);
+      console.log('從數據庫載入的年度統計數據:', statistics);
       
       return true; // 表示已從數據庫中獲取到數據
     } catch (error) {
