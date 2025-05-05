@@ -1185,14 +1185,14 @@ const OvertimeStaff = () => {
           };
         });
         
-        // 檢查是否有任何月份的分數超出範圍（正負3.5分）
+        // 檢查是否有任何月份的分數超出範圍（正負3分）
         const hasMonthOutOfRange = nursesScores.some(nurse => 
           Object.values(nurse.monthlyScores).some(score => 
-            score > 3.5 || score < -3.5
+            score > 2.5 || score < -2.5
           )
         );
         
-        // 檢查是否有年度總分超出範圍（正負2分）
+        // 檢查是否有年度總分超出範圍（正負2.5分）
         // 注意：需要從yearlyStatisticsData中獲取護理師之前的年度總分，然後扣除原本當月的分數，再加上新生成的當月分數來判斷
         const currentMonth = selectedDate.getMonth();
         console.log('進行年度總分檢查，當前月份:', currentMonth + 1);
@@ -1233,7 +1233,7 @@ const OvertimeStaff = () => {
             currentMonthScore: currentMonthNewScore,
             otherMonthsTotal,
             newYearlyTotal,
-            isOutOfRange: newYearlyTotal > 2 || newYearlyTotal < -2
+            isOutOfRange: newYearlyTotal > 2.5 || newYearlyTotal < -2.5
           };
         });
         
@@ -1248,10 +1248,10 @@ const OvertimeStaff = () => {
           if (hasMonthOutOfRange) {
             const outOfRangeMonths = nursesScores.flatMap(nurse => 
               Object.entries(nurse.monthlyScores)
-                .filter(([_, score]) => score > 3.5 || score < -3.5)
+                .filter(([_, score]) => score > 2.5 || score < -2.5)
                 .map(([month, score]) => `${nurse.name}的${parseInt(month) + 1}月分數(${score.toFixed(2)})`)
             );
-            console.log('有月份分數超出範圍(±3.5)，需要重新生成:', outOfRangeMonths);
+            console.log('有月份分數超出範圍(±2.5)，需要重新生成:', outOfRangeMonths);
           }
           
           if (hasYearOutOfRange) {
@@ -1510,10 +1510,10 @@ const OvertimeStaff = () => {
           };
         });
         
-        // 檢查是否有任何月份的分數超出範圍（正負3.5分）
+        // 檢查是否有任何月份的分數超出範圍（正負3分）
         const hasMonthOutOfRange = nursesScores.some(nurse => 
           Object.values(nurse.monthlyScores).some(score => 
-            score > 3.5 || score < -3.5
+            score > 2.5 || score < -2.5
           )
         );
         
@@ -1558,7 +1558,7 @@ const OvertimeStaff = () => {
             currentMonthScore: currentMonthNewScore,
             otherMonthsTotal,
             newYearlyTotal,
-            isOutOfRange: newYearlyTotal > 2 || newYearlyTotal < -2
+            isOutOfRange: newYearlyTotal > 2.5 || newYearlyTotal < -2.5
           };
         });
         
@@ -1573,10 +1573,10 @@ const OvertimeStaff = () => {
           if (hasMonthOutOfRange) {
             const outOfRangeMonths = nursesScores.flatMap(nurse => 
               Object.entries(nurse.monthlyScores)
-                .filter(([_, score]) => score > 3.5 || score < -3.5)
+                .filter(([_, score]) => score > 2.5 || score < -2.5)
                 .map(([month, score]) => `${nurse.name}的${parseInt(month) + 1}月分數(${score.toFixed(2)})`)
             );
-            console.log('有月份分數超出範圍(±3.5)，需要重新生成:', outOfRangeMonths);
+            console.log('有月份分數超出範圍(±2.5)，需要重新生成:', outOfRangeMonths);
           }
           
           if (hasYearOutOfRange) {
@@ -1595,7 +1595,7 @@ const OvertimeStaff = () => {
                 const currentMonthNewScore = nurse.monthlyScores[currentMonth] || 0;
                 const newYearlyTotal = otherMonthsTotal + currentMonthNewScore;
                 
-                return newYearlyTotal > 2 || newYearlyTotal < -2;
+                return newYearlyTotal > 2.5 || newYearlyTotal < -2.5;
               })
               .map(nurse => {
                 const yearlyData = yearlyStatisticsData.find(data => data.id === nurse.id);
@@ -1611,7 +1611,7 @@ const OvertimeStaff = () => {
                 
                 return `${nurse.name}: 其他月總分(${otherMonthsTotal.toFixed(2)}) + 當月新分數(${currentMonthNewScore.toFixed(2)}) = 新年度總分(${newYearlyTotal.toFixed(2)})`;
               });
-            console.log('有護理師年度總分超出範圍(±2)，需要重新生成:', outOfRangeNurses);
+            console.log('有護理師年度總分超出範圍(±2.5)，需要重新生成:', outOfRangeNurses);
           }
         }
       }
@@ -2663,7 +2663,7 @@ const OvertimeStaff = () => {
           </Typography>
           
           <Alert severity="info" sx={{ mb: 2 }}>
-            統計規則：A班加班 = 1.0分，B班加班 = 0.8分，C班加班 = 0.7分，D班加班 = 0.2分，E和F班加班 = 0分，白班未排加班 = -0.264分，夜班或休假 = 0分
+            統計規則：A班加班 = 1.0分，B班加班 = 0.8分，C班加班 = 0.7分，D班加班 = 0.2分，E和F班加班 = 0分，白班未排加班 = -0.264分，夜班或休假 = 0分。每月分數和年度總分均需保持在±2.5分以內。
           </Alert>
           
           {/* 切換按鈕 */}
@@ -2893,14 +2893,14 @@ const OvertimeStaff = () => {
         <DialogContent>
           <Box sx={{ p: 2 }}>
             <Typography id="random-progress-description" sx={{ mb: 2 }}>
-              系統正在嘗試找到一個平衡的加班分配方案，其中月度分數需要在±3.5分以內，且年度總分（考慮其他月份總分和當月新計算分數）需要在±2分以內。
+              系統正在嘗試找到一個平衡的加班分配方案，其中月度分數需要在±2.5分以內，且年度總分（考慮其他月份總分和當月新計算分數）需要在±2.5分以內。
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
               已嘗試 {generationAttempts} 次...
             </Typography>
             <LinearProgress variant="indeterminate" sx={{ my: 2 }} />
             <Typography variant="body2" color="text.secondary">
-              注意：計算年度總分時，會先將護理師其他月份的分數（不含當月舊分數）加上當月新計算的分數，然後檢查是否在±2分範圍內。
+              注意：計算年度總分時，會先將護理師其他月份的分數（不含當月舊分數）加上當月新計算的分數，然後檢查是否在±2.5分範圍內。
             </Typography>
           </Box>
         </DialogContent>
