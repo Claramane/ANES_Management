@@ -20,7 +20,8 @@ import {
   DialogActions,
   DialogContent,
   DialogContentText,
-  DialogTitle
+  DialogTitle,
+  LinearProgress
 } from '@mui/material';
 import SaveIcon from '@mui/icons-material/Save';
 import ShuffleIcon from '@mui/icons-material/Shuffle';
@@ -1100,6 +1101,8 @@ const OvertimeStaff = () => {
         // 計算每個護理師的分數
         const nursesScores = anesthesiaStaff.map(nurse => {
           let totalScore = 0;
+          // 用於記錄每月分數
+          const monthlyScores = {};
           
           // 檢查nurse.shifts的有效性
           if (!nurse.shifts || !Array.isArray(nurse.shifts)) {
@@ -1108,7 +1111,8 @@ const OvertimeStaff = () => {
               id: nurse.id,
               name: nurse.name || nurse.full_name || nurse.id.toString(),
               identity: nurse.identity,
-              totalScore: 0
+              totalScore: 0,
+              monthlyScores: {}
             };
           }
           
@@ -1116,6 +1120,12 @@ const OvertimeStaff = () => {
           for (let day = 1; day <= daysInMonth; day++) {
             const currentDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), day);
             const dateKey = format(currentDate, 'yyyy-MM-dd');
+            const month = currentDate.getMonth();
+            
+            // 確保該月的分數對象存在
+            if (!monthlyScores[month]) {
+              monthlyScores[month] = 0;
+            }
             
             // 確保day-1不會超出shifts數組範圍
             if (day <= nurse.shifts.length) {
@@ -1138,6 +1148,7 @@ const OvertimeStaff = () => {
               }
               
               totalScore += dayScore;
+              monthlyScores[month] += dayScore;
             }
           }
           
@@ -1145,23 +1156,42 @@ const OvertimeStaff = () => {
             id: nurse.id,
             name: nurse.name || nurse.full_name || nurse.id.toString(),
             identity: nurse.identity,
-            totalScore: parseFloat(totalScore.toFixed(2))
+            totalScore: parseFloat(totalScore.toFixed(2)),
+            monthlyScores
           };
         });
         
-        // 檢查是否有人的分數超出範圍
-        const hasOutOfRangeScore = nursesScores.some(nurse => 
+        // 檢查是否有任何月份的分數超出範圍（正負3.5分）
+        const hasMonthOutOfRange = nursesScores.some(nurse => 
+          Object.values(nurse.monthlyScores).some(score => 
+            score > 3.5 || score < -3.5
+          )
+        );
+        
+        // 檢查是否有年度總分超出範圍（正負2分）
+        const hasYearOutOfRange = nursesScores.some(nurse => 
           nurse.totalScore > 2 || nurse.totalScore < -2
         );
         
-        if (!hasOutOfRangeScore) {
+        if (!hasMonthOutOfRange && !hasYearOutOfRange) {
           isBalanced = true;
           console.log('生成的加班人選分數已平衡', nursesScores);
         } else {
-          const outOfRangeNurses = nursesScores.filter(nurse => 
-            nurse.totalScore > 2 || nurse.totalScore < -2
-          );
-          console.log('有護理師分數超出範圍，需要重新生成:', outOfRangeNurses);
+          if (hasMonthOutOfRange) {
+            const outOfRangeMonths = nursesScores.flatMap(nurse => 
+              Object.entries(nurse.monthlyScores)
+                .filter(([_, score]) => score > 3.5 || score < -3.5)
+                .map(([month, score]) => `${nurse.name}的${parseInt(month) + 1}月分數(${score.toFixed(2)})`)
+            );
+            console.log('有月份分數超出範圍(±3.5)，需要重新生成:', outOfRangeMonths);
+          }
+          
+          if (hasYearOutOfRange) {
+            const outOfRangeNurses = nursesScores
+              .filter(nurse => nurse.totalScore > 2 || nurse.totalScore < -2)
+              .map(nurse => `${nurse.name}(${nurse.totalScore.toFixed(2)})`);
+            console.log('有護理師年度總分超出範圍(±2)，需要重新生成:', outOfRangeNurses);
+          }
         }
       }
       
@@ -1328,6 +1358,8 @@ const OvertimeStaff = () => {
         // 計算每個護理師的分數
         const nursesScores = anesthesiaStaff.map(nurse => {
           let totalScore = 0;
+          // 用於記錄每月分數
+          const monthlyScores = {};
           
           // 檢查nurse.shifts的有效性
           if (!nurse.shifts || !Array.isArray(nurse.shifts)) {
@@ -1336,7 +1368,8 @@ const OvertimeStaff = () => {
               id: nurse.id,
               name: nurse.name || nurse.full_name || nurse.id.toString(),
               identity: nurse.identity,
-              totalScore: 0
+              totalScore: 0,
+              monthlyScores: {}
             };
           }
           
@@ -1344,6 +1377,12 @@ const OvertimeStaff = () => {
           for (let day = 1; day <= daysInMonth; day++) {
             const currentDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), day);
             const dateKey = format(currentDate, 'yyyy-MM-dd');
+            const month = currentDate.getMonth();
+            
+            // 確保該月的分數對象存在
+            if (!monthlyScores[month]) {
+              monthlyScores[month] = 0;
+            }
             
             // 確保day-1不會超出shifts數組範圍
             if (day <= nurse.shifts.length) {
@@ -1366,6 +1405,7 @@ const OvertimeStaff = () => {
               }
               
               totalScore += dayScore;
+              monthlyScores[month] += dayScore;
             }
           }
           
@@ -1373,23 +1413,42 @@ const OvertimeStaff = () => {
             id: nurse.id,
             name: nurse.name || nurse.full_name || nurse.id.toString(),
             identity: nurse.identity,
-            totalScore: parseFloat(totalScore.toFixed(2))
+            totalScore: parseFloat(totalScore.toFixed(2)),
+            monthlyScores
           };
         });
         
-        // 檢查是否有人的分數超出範圍
-        const hasOutOfRangeScore = nursesScores.some(nurse => 
+        // 檢查是否有任何月份的分數超出範圍（正負3.5分）
+        const hasMonthOutOfRange = nursesScores.some(nurse => 
+          Object.values(nurse.monthlyScores).some(score => 
+            score > 3.5 || score < -3.5
+          )
+        );
+        
+        // 檢查是否有年度總分超出範圍（正負2分）
+        const hasYearOutOfRange = nursesScores.some(nurse => 
           nurse.totalScore > 2 || nurse.totalScore < -2
         );
         
-        if (!hasOutOfRangeScore) {
+        if (!hasMonthOutOfRange && !hasYearOutOfRange) {
           isBalanced = true;
           console.log('生成的加班人選分數已平衡', nursesScores);
         } else {
-          const outOfRangeNurses = nursesScores.filter(nurse => 
-            nurse.totalScore > 2 || nurse.totalScore < -2
-          );
-          console.log('有護理師分數超出範圍，需要重新生成:', outOfRangeNurses);
+          if (hasMonthOutOfRange) {
+            const outOfRangeMonths = nursesScores.flatMap(nurse => 
+              Object.entries(nurse.monthlyScores)
+                .filter(([_, score]) => score > 3.5 || score < -3.5)
+                .map(([month, score]) => `${nurse.name}的${parseInt(month) + 1}月分數(${score.toFixed(2)})`)
+            );
+            console.log('有月份分數超出範圍(±3.5)，需要重新生成:', outOfRangeMonths);
+          }
+          
+          if (hasYearOutOfRange) {
+            const outOfRangeNurses = nursesScores
+              .filter(nurse => nurse.totalScore > 2 || nurse.totalScore < -2)
+              .map(nurse => `${nurse.name}(${nurse.totalScore.toFixed(2)})`);
+            console.log('有護理師年度總分超出範圍(±2)，需要重新生成:', outOfRangeNurses);
+          }
         }
       }
       
@@ -2169,13 +2228,22 @@ const OvertimeStaff = () => {
   };
 
   // 處理統計視圖切換
-  const toggleStatisticsView = () => {
+  const toggleStatisticsView = async () => {
     // 檢查是否有未保存的變更
     if (hasUnsavedChanges && canEdit) {
-      // 設置待處理操作為切換視圖
-      setPendingAction('toggleView');
-      setOpenSaveConfirmDialog(true);
-      return;
+      // 自動儲存變更後切換視圖
+      try {
+        setIsSaving(true);
+        await saveOvertimeRecords();
+        setSuccessMessage('已自動儲存變更並切換統計視圖');
+        setOpenSnackbar(true);
+      } catch (error) {
+        console.error('自動儲存變更失敗:', error);
+        setApiError(`自動儲存變更失敗: ${error.message || '未知錯誤'}`);
+        setOpenSnackbar(true);
+      } finally {
+        setIsSaving(false);
+      }
     }
     
     // 執行切換視圖
@@ -2647,40 +2715,24 @@ const OvertimeStaff = () => {
       </Dialog>
       
       {/* 隨機生成進度對話框 */}
-      <Dialog
-        open={isGeneratingRandom}
-        onClose={() => {
-          shouldCancelGenerationRef.current = true;
-          setSuccessMessage('正在取消生成...');
-          setOpenSnackbar(true);
-        }}
-      >
+      <Dialog open={isGeneratingRandom} onClose={() => shouldCancelGenerationRef.current = true}>
         <DialogTitle>正在生成加班人選</DialogTitle>
-        <DialogContent sx={{ minWidth: 300, minHeight: 180 }}>
-          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 2, gap: 2 }}>
-            <CircularProgress size={60} />
-            <Typography variant="h4" sx={{ my: 2, fontWeight: 'bold', color: '#1976d2' }}>
-              第 {generationAttempts} 次嘗試
-            </Typography>
-            <Typography variant="body2" color="text.secondary" textAlign="center">
-              系統正在嘗試找到平衡的分配方案...
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
-              (目標：每位護理師加班分數維持在-2到2之間)
-            </Typography>
+        <DialogContent>
+          <Box sx={{ width: '100%', mb: 2 }}>
+            <LinearProgress variant="indeterminate" />
           </Box>
+          <Typography variant="body1" gutterBottom>
+            正在嘗試第 {generationAttempts} 次生成加班人選...
+          </Typography>
+          <Typography variant="body2" color="textSecondary">
+            系統正在嘗試找到一個平衡的加班分配方案，該方案需要滿足：每月加班分數不超過±3.5分，年度總分不超過±2分。
+          </Typography>
+          <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
+            如果生成時間過長，可點擊取消按鈕停止生成。
+          </Typography>
         </DialogContent>
         <DialogActions>
-          <Button 
-            onClick={() => {
-              shouldCancelGenerationRef.current = true;
-              setSuccessMessage('正在取消生成...');
-              setOpenSnackbar(true);
-            }} 
-            color="error" 
-            variant="contained" 
-            startIcon={<RestartAltIcon />}
-          >
+          <Button onClick={() => shouldCancelGenerationRef.current = true} color="primary">
             取消生成
           </Button>
         </DialogActions>
