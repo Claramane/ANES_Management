@@ -36,17 +36,17 @@ import apiService from '../utils/api';
 // 班次顏色設定
 const ShiftCell = styled(TableCell)(({ shift }) => {
   const colors = { 
-    'D': '#a08887', // 白班
-    'A': '#D5E8DC', // 小夜班 - 更淡的綠色
-    'N': '#8387da', // 大夜班
-    'K': '#8AA6C1', // 早班(恢復室)
-    'C': '#67dcbd', // 中班(恢復室)
-    'F': '#FFA07A', // 晚班(恢復室)
-    'E': '#FFB6C1', // 半班(Leader/書記)
-    'B': '#FFDAB9', // 日班(書記)
-    'O': '#FFFFFF', // 休假 - 白底
-    'V': '#FFFFFF',  // 休假 - 白底
-    'R': '#FFFFFF'  // 靜養假 - 白底
+    'D': '#c5b5ac', // 白班 22-08
+    'A': '#c6c05f', // 小夜班 8-16
+    'N': '#aa77c4', // 大夜班 14-22
+    'K': '#8AA6C1', // 早班 9-17
+    'C': '#a9d0ab', // 中班 10-18
+    'F': '#d8bd89', // 晚班 12-20
+    'E': '#cb9cc8', // 半班 8-12
+    'B': '#e7b284', // 日班 8-17
+    'O': '#e7e7e7', // 排休 OFF
+    'V': '#e0755f',  // 休假 OFF
+    'R': '#a9c4ce'  // 靜養假 OFF
   };
   
   return {
@@ -110,6 +110,9 @@ const WeeklySchedule = () => {
   const [missionValues, setMissionValues] = useState({});
   const [isSaving, setIsSaving] = useState(false);
   const [showNurseNames, setShowNurseNames] = useState(false);
+  
+  // 添加臨時日期狀態
+  const [tempDate, setTempDate] = useState(null);
   
   // 檢查是否有編輯權限
   const hasEditPermission = user?.role === 'head_nurse' || user?.role === 'admin';
@@ -334,6 +337,10 @@ const WeeklySchedule = () => {
   const toggleEditMode = () => {
     if (editMode) {
       // 編輯模式關閉時保存更改
+      // 先清除選取狀態和暫存的任務值，確保藍色選取框消失
+      const valuesToSave = { ...missionValues };
+      setMissionValues({});
+      // 然後再保存更改
       saveWorkAssignments();
     }
     setEditMode(!editMode);
@@ -493,7 +500,7 @@ const WeeklySchedule = () => {
       setIsSaving(false);
       setEditMode(false);
       
-      // 清空暫存的編輯值
+      // 清空暫存的編輯值和編輯狀態
       setMissionValues({});
       
       // 不需要重新獲取數據，因為我們已經在上面更新了本地數據
@@ -1858,22 +1865,30 @@ const WeeklySchedule = () => {
   // 處理日期變更
   const handleDateChange = (newDate) => {
     if (newDate && newDate instanceof Date && !isNaN(newDate.getTime())) {
+      // 只更新臨時日期，不觸發API調用
+      setTempDate(newDate);
+    } else {
+      console.error('嘗試設置無效的日期:', newDate);
+      setTempDate(new Date());
+    }
+  };
+  
+  // 處理日期確認
+  const handleDateAccept = () => {
+    if (tempDate && tempDate instanceof Date && !isNaN(tempDate.getTime())) {
       // 如果新日期和當前日期是同一個月，則不重新加載資料
       const isSameMonth = 
-        selectedDate.getFullYear() === newDate.getFullYear() && 
-        selectedDate.getMonth() === newDate.getMonth();
+        selectedDate.getFullYear() === tempDate.getFullYear() && 
+        selectedDate.getMonth() === tempDate.getMonth();
       
       // 更新日期並設置週次
-      updateSelectedDate(newDate);
+      updateSelectedDate(tempDate);
       setCurrentWeek(1);
       
       // 清空舊的 missionValues
       setMissionValues({});
       
-      console.log(`日期變更: ${format(newDate, 'yyyy-MM-dd')}, 是否同月: ${isSameMonth}`);
-    } else {
-      console.error('嘗試設置無效的日期:', newDate);
-      updateSelectedDate(new Date());
+      console.log(`日期變更: ${format(tempDate, 'yyyy-MM-dd')}, 是否同月: ${isSameMonth}`);
     }
   };
 
@@ -2498,7 +2513,18 @@ const WeeklySchedule = () => {
             maxDate={new Date('2030-12-31')}
             value={selectedDate}
             onChange={handleDateChange}
+            onAccept={handleDateAccept}
             sx={{ width: 200 }}
+            openTo="month"
+            closeOnSelect={false}
+            slotProps={{
+              actionBar: {
+                actions: ['cancel', 'accept'],
+              },
+              toolbar: {
+                hidden: false,
+              },
+            }}
           />
         </LocalizationProvider>
         

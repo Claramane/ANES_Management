@@ -38,4 +38,32 @@ class OvertimeRecord(OvertimeRecordBase):
     updated_at: datetime
 
     class Config:
+        from_attributes = True
+
+# 月度加班分數基礎模型
+class OvertimeMonthlyScoreBase(BaseModel):
+    user_id: int
+    year: int
+    month: int
+    total_score: int
+    details: Optional[str] = None
+
+# 創建月度加班分數請求模型
+class OvertimeMonthlyScoreCreate(OvertimeMonthlyScoreBase):
+    pass
+
+# 更新月度加班分數請求模型
+class OvertimeMonthlyScoreUpdate(BaseModel):
+    total_score: Optional[int] = None
+    details: Optional[str] = None
+
+# 批量更新月度加班分數請求模型
+class BulkOvertimeMonthlyScoreUpdate(BaseModel):
+    scores: List[OvertimeMonthlyScoreCreate]
+
+# 月度加班分數響應模型
+class OvertimeMonthlyScore(OvertimeMonthlyScoreBase):
+    id: int
+
+    class Config:
         from_attributes = True 

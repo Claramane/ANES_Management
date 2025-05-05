@@ -7,7 +7,7 @@ import logging
 from ..core.database import get_db
 from ..core.security import get_current_active_user, get_head_nurse_user
 from ..models.user import User
-from ..models.overtime import OvertimeRecord
+from ..models.overtime import OvertimeRecord, OvertimeMonthlyScore
 from ..models.log import Log
 from ..schemas.overtime import (
     OvertimeRecordCreate,
@@ -15,7 +15,11 @@ from ..schemas.overtime import (
     OvertimeRecord as OvertimeRecordSchema,
     BulkOvertimeRecordCreate,
     BulkOvertimeRecordUpdate,
-    MultipleDatesOvertimeUpdate
+    MultipleDatesOvertimeUpdate,
+    OvertimeMonthlyScoreCreate,
+    OvertimeMonthlyScoreUpdate,
+    OvertimeMonthlyScore as OvertimeMonthlyScoreSchema,
+    BulkOvertimeMonthlyScoreUpdate
 )
 
 # 設置logger
@@ -401,4 +405,200 @@ async def get_all_overtime_records(
         query = query.filter(OvertimeRecord.date <= end_date)
         
     records = query.order_by(OvertimeRecord.date).all()
-    return records 
+    return records
+
+# 以下是針對 overtime_monthly_scores 表的新API
+
+# 獲取月度加班分數 - 當前用戶
+@router.get("/overtime/monthly-scores/me", response_model=List[OvertimeMonthlyScoreSchema])
+async def get_my_monthly_scores(
+    year: Optional[int] = None,
+    month: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """獲取當前用戶的月度加班分數"""
+    query = db.query(OvertimeMonthlyScore).filter(OvertimeMonthlyScore.user_id == current_user.id)
+    
+    if year:
+        query = query.filter(OvertimeMonthlyScore.year == year)
+    if month:
+        query = query.filter(OvertimeMonthlyScore.month == month)
+        
+    monthly_scores = query.all()
+    return monthly_scores
+
+# 獲取所有用戶的月度加班分數 - 僅限護理長和admin
+@router.get("/overtime/monthly-scores", response_model=List[OvertimeMonthlyScoreSchema])
+async def get_all_monthly_scores(
+    year: Optional[int] = None,
+    month: Optional[int] = None,
+    user_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_head_nurse_user)
+):
+    """獲取所有用戶的月度加班分數（僅限護理長和admin）"""
+    query = db.query(OvertimeMonthlyScore)
+    
+    if user_id:
+        query = query.filter(OvertimeMonthlyScore.user_id == user_id)
+    if year:
+        query = query.filter(OvertimeMonthlyScore.year == year)
+    if month:
+        query = query.filter(OvertimeMonthlyScore.month == month)
+        
+    monthly_scores = query.all()
+    return monthly_scores
+
+# 創建或更新月度加班分數 - 僅限護理長和admin
+@router.post("/overtime/monthly-scores", response_model=OvertimeMonthlyScoreSchema)
+async def create_or_update_monthly_score(
+    score_data: OvertimeMonthlyScoreCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_head_nurse_user)
+):
+    """創建或更新月度加班分數（僅限護理長和admin）"""
+    # 檢查用戶是否存在
+    user = db.query(User).filter(User.id == score_data.user_id).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="用戶不存在"
+        )
+    
+    # 檢查是否已存在該用戶的該月記錄
+    existing_score = db.query(OvertimeMonthlyScore).filter(
+        OvertimeMonthlyScore.user_id == score_data.user_id,
+        OvertimeMonthlyScore.year == score_data.year,
+        OvertimeMonthlyScore.month == score_data.month
+    ).first()
+    
+    if existing_score:
+        # 更新已存在的記錄
+        existing_score.total_score = score_data.total_score
+        existing_score.details = score_data.details
+        db.commit()
+        db.refresh(existing_score)
+        
+        # 記錄操作日誌
+        log = Log(
+            user_id=current_user.id,
+            action="update_monthly_score",
+            operation_type="update",
+            description=f"更新用戶 {user.username} 的 {score_data.year}年{score_data.month}月 加班分數: {score_data.total_score}"
+        )
+        db.add(log)
+        db.commit()
+        
+        return existing_score
+    else:
+        # 創建新記錄
+        new_score = OvertimeMonthlyScore(
+            user_id=score_data.user_id,
+            year=score_data.year,
+            month=score_data.month,
+            total_score=score_data.total_score,
+            details=score_data.details
+        )
+        db.add(new_score)
+        db.commit()
+        db.refresh(new_score)
+        
+        # 記錄操作日誌
+        log = Log(
+            user_id=current_user.id,
+            action="create_monthly_score",
+            operation_type="create",
+            description=f"創建用戶 {user.username} 的 {score_data.year}年{score_data.month}月 加班分數: {score_data.total_score}"
+        )
+        db.add(log)
+        db.commit()
+        
+        return new_score
+
+# 批量創建或更新月度加班分數 - 僅限護理長和admin
+@router.post("/overtime/monthly-scores/bulk", response_model=List[OvertimeMonthlyScoreSchema])
+async def bulk_create_or_update_monthly_scores(
+    bulk_data: BulkOvertimeMonthlyScoreUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_head_nurse_user)
+):
+    """批量創建或更新月度加班分數（僅限護理長和admin）"""
+    result = []
+    
+    for score_data in bulk_data.scores:
+        # 檢查用戶是否存在
+        user = db.query(User).filter(User.id == score_data.user_id).first()
+        if not user:
+            continue  # 如果用戶不存在，跳過此記錄
+        
+        # 檢查是否已存在該用戶的該月記錄
+        existing_score = db.query(OvertimeMonthlyScore).filter(
+            OvertimeMonthlyScore.user_id == score_data.user_id,
+            OvertimeMonthlyScore.year == score_data.year,
+            OvertimeMonthlyScore.month == score_data.month
+        ).first()
+        
+        if existing_score:
+            # 更新已存在的記錄
+            existing_score.total_score = score_data.total_score
+            existing_score.details = score_data.details
+            db.commit()
+            db.refresh(existing_score)
+            result.append(existing_score)
+        else:
+            # 創建新記錄
+            new_score = OvertimeMonthlyScore(
+                user_id=score_data.user_id,
+                year=score_data.year,
+                month=score_data.month,
+                total_score=score_data.total_score,
+                details=score_data.details
+            )
+            db.add(new_score)
+            db.commit()
+            db.refresh(new_score)
+            result.append(new_score)
+    
+    # 記錄操作日誌
+    log = Log(
+        user_id=current_user.id,
+        action="bulk_update_monthly_scores",
+        operation_type="update",
+        description=f"批量更新月度加班分數: {len(result)} 條記錄"
+    )
+    db.add(log)
+    db.commit()
+    
+    return result
+
+# 刪除月度加班分數 - 僅限護理長和admin
+@router.delete("/overtime/monthly-scores/{score_id}", response_model=OvertimeMonthlyScoreSchema)
+async def delete_monthly_score(
+    score_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_head_nurse_user)
+):
+    """刪除月度加班分數（僅限護理長和admin）"""
+    db_score = db.query(OvertimeMonthlyScore).filter(OvertimeMonthlyScore.id == score_id).first()
+    
+    if not db_score:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="月度加班分數記錄不存在"
+        )
+    
+    # 記錄操作日誌
+    log = Log(
+        user_id=current_user.id,
+        action="delete_monthly_score",
+        operation_type="delete",
+        description=f"刪除用戶ID: {db_score.user_id} 的 {db_score.year}年{db_score.month}月 加班分數記錄"
+    )
+    db.add(log)
+    
+    # 刪除記錄
+    db.delete(db_score)
+    db.commit()
+    
+    return db_score 

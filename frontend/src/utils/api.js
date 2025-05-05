@@ -186,7 +186,28 @@ const apiService = {
       return api.put('/overtime/bulk-month', {
         records: processedRecords
       });
-    }
+    },
+    
+    // 獲取自己的月度加班分數
+    getMyMonthlyScores: (year, month) => api.get('/overtime/monthly-scores/me', {
+      params: { year, month }
+    }),
+    
+    // 獲取所有用戶的月度加班分數（僅護理長/admin）
+    getAllMonthlyScores: (year, month, userId) => api.get('/overtime/monthly-scores', {
+      params: { year, month, user_id: userId }
+    }),
+    
+    // 創建或更新月度加班分數（僅護理長/admin）
+    createOrUpdateMonthlyScore: (data) => api.post('/overtime/monthly-scores', data),
+    
+    // 批量創建或更新月度加班分數（僅護理長/admin）
+    bulkCreateOrUpdateMonthlyScores: (scoresArray) => api.post('/overtime/monthly-scores/bulk', {
+      scores: scoresArray
+    }),
+    
+    // 刪除月度加班分數（僅護理長/admin）
+    deleteMonthlyScore: (scoreId) => api.delete(`/overtime/monthly-scores/${scoreId}`)
   },
 };
 
