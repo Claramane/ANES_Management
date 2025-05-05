@@ -1169,9 +1169,32 @@ const OvertimeStaff = () => {
         );
         
         // 檢查是否有年度總分超出範圍（正負2分）
-        const hasYearOutOfRange = nursesScores.some(nurse => 
-          nurse.totalScore > 2 || nurse.totalScore < -2
-        );
+        // 注意：需要從yearlyStatisticsData中獲取護理師之前的年度總分，然後扣除原本當月的分數，再加上新生成的當月分數來判斷
+        const currentMonth = selectedDate.getMonth();
+        const hasYearOutOfRange = nursesScores.some(nurse => {
+          // 找到護理師在年度統計中的數據
+          const yearlyData = yearlyStatisticsData.find(data => data.id === nurse.id);
+          if (!yearlyData) return false; // 如果沒有年度數據，則不視為超出範圍
+          
+          // 計算除了當月之外的所有月份的總分
+          let otherMonthsTotal = 0;
+          
+          // 循環統計每月分數，排除當月
+          yearlyData.monthlyStats.forEach((monthStat, monthIndex) => {
+            if (monthIndex !== currentMonth) {
+              otherMonthsTotal += monthStat.score;
+            }
+          });
+          
+          // 當月的新分數
+          const currentMonthNewScore = nurse.monthlyScores[currentMonth] || 0;
+          
+          // 計算新的年度總分 = 其他月份總分 + 當月新分數
+          const newYearlyTotal = otherMonthsTotal + currentMonthNewScore;
+          
+          // 檢查新的年度總分是否超出範圍(±2分)
+          return newYearlyTotal > 2 || newYearlyTotal < -2;
+        });
         
         if (!hasMonthOutOfRange && !hasYearOutOfRange) {
           isBalanced = true;
@@ -1426,9 +1449,32 @@ const OvertimeStaff = () => {
         );
         
         // 檢查是否有年度總分超出範圍（正負2分）
-        const hasYearOutOfRange = nursesScores.some(nurse => 
-          nurse.totalScore > 2 || nurse.totalScore < -2
-        );
+        // 注意：需要從yearlyStatisticsData中獲取護理師之前的年度總分，然後扣除原本當月的分數，再加上新生成的當月分數來判斷
+        const currentMonth = selectedDate.getMonth();
+        const hasYearOutOfRange = nursesScores.some(nurse => {
+          // 找到護理師在年度統計中的數據
+          const yearlyData = yearlyStatisticsData.find(data => data.id === nurse.id);
+          if (!yearlyData) return false; // 如果沒有年度數據，則不視為超出範圍
+          
+          // 計算除了當月之外的所有月份的總分
+          let otherMonthsTotal = 0;
+          
+          // 循環統計每月分數，排除當月
+          yearlyData.monthlyStats.forEach((monthStat, monthIndex) => {
+            if (monthIndex !== currentMonth) {
+              otherMonthsTotal += monthStat.score;
+            }
+          });
+          
+          // 當月的新分數
+          const currentMonthNewScore = nurse.monthlyScores[currentMonth] || 0;
+          
+          // 計算新的年度總分 = 其他月份總分 + 當月新分數
+          const newYearlyTotal = otherMonthsTotal + currentMonthNewScore;
+          
+          // 檢查新的年度總分是否超出範圍(±2分)
+          return newYearlyTotal > 2 || newYearlyTotal < -2;
+        });
         
         if (!hasMonthOutOfRange && !hasYearOutOfRange) {
           isBalanced = true;
@@ -1445,8 +1491,36 @@ const OvertimeStaff = () => {
           
           if (hasYearOutOfRange) {
             const outOfRangeNurses = nursesScores
-              .filter(nurse => nurse.totalScore > 2 || nurse.totalScore < -2)
-              .map(nurse => `${nurse.name}(${nurse.totalScore.toFixed(2)})`);
+              .filter(nurse => {
+                const yearlyData = yearlyStatisticsData.find(data => data.id === nurse.id);
+                if (!yearlyData) return false;
+                
+                let otherMonthsTotal = 0;
+                yearlyData.monthlyStats.forEach((monthStat, monthIndex) => {
+                  if (monthIndex !== currentMonth) {
+                    otherMonthsTotal += monthStat.score;
+                  }
+                });
+                
+                const currentMonthNewScore = nurse.monthlyScores[currentMonth] || 0;
+                const newYearlyTotal = otherMonthsTotal + currentMonthNewScore;
+                
+                return newYearlyTotal > 2 || newYearlyTotal < -2;
+              })
+              .map(nurse => {
+                const yearlyData = yearlyStatisticsData.find(data => data.id === nurse.id);
+                let otherMonthsTotal = 0;
+                yearlyData.monthlyStats.forEach((monthStat, monthIndex) => {
+                  if (monthIndex !== currentMonth) {
+                    otherMonthsTotal += monthStat.score;
+                  }
+                });
+                
+                const currentMonthNewScore = nurse.monthlyScores[currentMonth] || 0;
+                const newYearlyTotal = otherMonthsTotal + currentMonthNewScore;
+                
+                return `${nurse.name}: 其他月總分(${otherMonthsTotal.toFixed(2)}) + 當月新分數(${currentMonthNewScore.toFixed(2)}) = 新年度總分(${newYearlyTotal.toFixed(2)})`;
+              });
             console.log('有護理師年度總分超出範圍(±2)，需要重新生成:', outOfRangeNurses);
           }
         }
@@ -2715,24 +2789,35 @@ const OvertimeStaff = () => {
       </Dialog>
       
       {/* 隨機生成進度對話框 */}
-      <Dialog open={isGeneratingRandom} onClose={() => shouldCancelGenerationRef.current = true}>
-        <DialogTitle>正在生成加班人選</DialogTitle>
+      <Dialog
+        open={isGeneratingRandom}
+        disableEscapeKeyDown
+        aria-labelledby="random-progress-title"
+        aria-describedby="random-progress-description"
+      >
+        <DialogTitle id="random-progress-title">正在隨機生成加班人選</DialogTitle>
         <DialogContent>
-          <Box sx={{ width: '100%', mb: 2 }}>
-            <LinearProgress variant="indeterminate" />
+          <Box sx={{ p: 2 }}>
+            <Typography id="random-progress-description" sx={{ mb: 2 }}>
+              系統正在嘗試找到一個平衡的加班分配方案，其中月度分數需要在±3.5分以內，且年度總分（考慮其他月份總分和當月新計算分數）需要在±2分以內。
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+              已嘗試 {generationAttempts} 次...
+            </Typography>
+            <LinearProgress variant="indeterminate" sx={{ my: 2 }} />
+            <Typography variant="body2" color="text.secondary">
+              注意：計算年度總分時，會先將護理師其他月份的分數（不含當月舊分數）加上當月新計算的分數，然後檢查是否在±2分範圍內。
+            </Typography>
           </Box>
-          <Typography variant="body1" gutterBottom>
-            正在嘗試第 {generationAttempts} 次生成加班人選...
-          </Typography>
-          <Typography variant="body2" color="textSecondary">
-            系統正在嘗試找到一個平衡的加班分配方案，該方案需要滿足：每月加班分數不超過±3.5分，年度總分不超過±2分。
-          </Typography>
-          <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
-            如果生成時間過長，可點擊取消按鈕停止生成。
-          </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => shouldCancelGenerationRef.current = true} color="primary">
+          <Button 
+            onClick={() => {
+              shouldCancelGenerationRef.current = true;
+              console.log('用戶請求取消隨機生成');
+            }} 
+            color="error"
+          >
             取消生成
           </Button>
         </DialogActions>
