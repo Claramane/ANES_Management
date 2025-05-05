@@ -111,14 +111,7 @@ const OvertimeStaff = () => {
   const [isLoadingStatistics, setIsLoadingStatistics] = useState(false);
   
   // 新增年度統計相關狀態
-  const [showYearlyStats, setShowYearlyStats] = useState(false);
-  const [yearlyStatisticsData, setYearlyStatisticsData] = useState([]);
-  const [isLoadingYearlyStatistics, setIsLoadingYearlyStatistics] = useState(false);
   const [apiData, setApiData] = useState(null);  // 存儲共享的API數據，避免重複請求
-  
-  // 新增確認對話框狀態
-  const [openSaveConfirmDialog, setOpenSaveConfirmDialog] = useState(false);
-  const [pendingAction, setPendingAction] = useState(null);
   
   // 新增標記變更狀態
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -853,8 +846,8 @@ const OvertimeStaff = () => {
               // 有加班記錄，根據加班類型計算分數
               dayScore = calculateOvertimeScore(overtimeShift);
             } else {
-              // 沒有加班記錄，扣0.264分
-              dayScore = -0.264;
+              // 沒有加班記錄，扣0.3分
+              dayScore = -0.3;
             }
           }
           // 如果是夜班(D或N)或休假(O、V、R)，分數為0
@@ -991,34 +984,25 @@ const OvertimeStaff = () => {
     setGenerationAttempts(0);
     shouldCancelGenerationRef.current = false; // 重置取消標記
     
-    // 先載入最新的年度統計數據，然後再開始隨機生成
-    Promise.resolve()
-      .then(() => {
-        // 先嘗試從數據庫載入
-        console.log('在隨機生成前載入最新的年度統計數據');
-        return loadYearlyStatisticsFromDB();
-      })
-      .then((dataLoaded) => {
-        if (!dataLoaded) {
-          // 如果沒有從數據庫獲取到數據，則重新計算
-          console.log('數據庫中沒有年度統計數據，重新計算');
-          return generateYearlyStatistics();
-        }
-      })
-      .then(() => {
-        // 開始隨機生成
-        console.log('年度統計數據已載入，開始隨機生成');
-        console.log('目前年度數據：', yearlyStatisticsData);
-        setTimeout(() => {
-          generateFullAssignmentsAsync();
-        }, 100);
-      })
-      .catch((error) => {
-        console.error('載入年度統計數據失敗:', error);
-        setApiError('載入年度統計數據失敗，無法進行隨機生成');
-        setOpenSnackbar(true);
-        setIsGeneratingRandom(false);
-      });
+    // 直接開始隨機生成
+    console.log('開始隨機生成');
+    setTimeout(() => {
+      generateFullAssignmentsAsync();
+    }, 100);
+  };
+
+  // 生成尚未指定加班人員
+  const generatePartialRandomAssignments = () => {
+    setOpenConfirmDialog(false);
+    setIsGeneratingRandom(true);
+    setGenerationAttempts(0);
+    shouldCancelGenerationRef.current = false; // 重置取消標記
+    
+    // 直接開始隨機生成
+    console.log('開始隨機生成');
+    setTimeout(() => {
+      generatePartialAssignmentsAsync();
+    }, 100);
   };
 
   // 非阻塞的生成算法 - 全部重新生成
@@ -1107,159 +1091,11 @@ const OvertimeStaff = () => {
             }
           });
         
-        // 使用臨時的markings計算分數
-        const tempMarkings = newMarkings;
+        // 檢查分配是否平衡（月度和年度分數均不超出範圍）
+        isBalanced = checkIfAssignmentBalanced(newMarkings);
         
-        // 篩選出麻醉專科護理師（排除麻醉科Leader，因為他們不參與分數計算）
-        const anesthesiaStaff = filteredSchedule.filter(nurse => 
-          nurse.identity === '麻醉專科護理師' && 
-          nurse.role !== 'head_nurse' && 
-          nurse.position !== 'CC'
-        );
-        
-        // 檢查是否有足夠的護理師來分配
-        if (!anesthesiaStaff || anesthesiaStaff.length === 0) {
-          throw new Error('沒有找到符合條件的麻醉專科護理師');
-        }
-        
-        // 計算每個護理師的分數
-        const nursesScores = anesthesiaStaff.map(nurse => {
-          let totalScore = 0;
-          // 用於記錄每月分數
-          const monthlyScores = {};
-          
-          // 檢查nurse.shifts的有效性
-          if (!nurse.shifts || !Array.isArray(nurse.shifts)) {
-            console.warn(`護理師 ${nurse.name || nurse.id} 缺少shifts數據`);
-            return {
-              id: nurse.id,
-              name: nurse.name || nurse.full_name || nurse.id.toString(),
-              identity: nurse.identity,
-              totalScore: 0,
-              monthlyScores: {}
-            };
-          }
-          
-          // 計算每天的分數
-          for (let day = 1; day <= daysInMonth; day++) {
-            const currentDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), day);
-            const dateKey = format(currentDate, 'yyyy-MM-dd');
-            const month = currentDate.getMonth();
-            
-            // 確保該月的分數對象存在
-            if (!monthlyScores[month]) {
-              monthlyScores[month] = 0;
-            }
-            
-            // 確保day-1不會超出shifts數組範圍
-            if (day <= nurse.shifts.length) {
-              const shift = nurse.shifts[day - 1]; // 該護理師當天的班別
-              
-              let dayScore = 0;
-              
-              // 如果是白班(A)，檢查加班情況
-              if (shift === 'A') {
-                // 檢查是否有加班記錄
-                const overtimeShift = tempMarkings[dateKey]?.[nurse.id];
-                
-                if (overtimeShift) {
-                  // 有加班記錄，根據加班類型計算分數
-                  dayScore = calculateOvertimeScore(overtimeShift);
-                } else {
-                  // 沒有加班記錄，扣0.264分
-                  dayScore = -0.264;
-                }
-              }
-              
-              totalScore += dayScore;
-              monthlyScores[month] += dayScore;
-            }
-          }
-          
-          return {
-            id: nurse.id,
-            name: nurse.name || nurse.full_name || nurse.id.toString(),
-            identity: nurse.identity,
-            totalScore: parseFloat(totalScore.toFixed(2)),
-            monthlyScores
-          };
-        });
-        
-        // 檢查是否有任何月份的分數超出範圍（正負3分）
-        const hasMonthOutOfRange = nursesScores.some(nurse => 
-          Object.values(nurse.monthlyScores).some(score => 
-            score > 2.5 || score < -2.5
-          )
-        );
-        
-        // 檢查是否有年度總分超出範圍（正負2.5分）
-        // 注意：需要從yearlyStatisticsData中獲取護理師之前的年度總分，然後扣除原本當月的分數，再加上新生成的當月分數來判斷
-        const currentMonth = selectedDate.getMonth();
-        console.log('進行年度總分檢查，當前月份:', currentMonth + 1);
-        console.log('檢查護理師總分時使用的年度統計數據:', yearlyStatisticsData);
-        
-        // 為所有護理師計算詳細的分數，以便分析
-        const nurseDetailedScores = nursesScores.map(nurse => {
-          // 找到護理師在年度統計中的數據
-          const yearlyData = yearlyStatisticsData.find(data => data.id === nurse.id);
-          if (!yearlyData) {
-            return {
-              name: nurse.name,
-              id: nurse.id,
-              hasYearlyData: false,
-              message: '沒有年度統計數據'
-            };
-          }
-          
-          // 計算除了當月之外的所有月份的總分
-          let otherMonthsTotal = 0;
-          
-          // 循環統計每月分數，排除當月
-          yearlyData.monthlyStats.forEach((monthStat, monthIndex) => {
-            if (monthIndex !== currentMonth) {
-              otherMonthsTotal += monthStat.score;
-            }
-          });
-          
-          // 當月的新分數
-          const currentMonthNewScore = nurse.monthlyScores[currentMonth] || 0;
-          
-          // 計算新的年度總分 = 其他月份總分 + 當月新分數
-          const newYearlyTotal = otherMonthsTotal + currentMonthNewScore;
-          
-          return {
-            name: nurse.name,
-            id: nurse.id,
-            currentMonthScore: currentMonthNewScore,
-            otherMonthsTotal,
-            newYearlyTotal,
-            isOutOfRange: newYearlyTotal > 2.5 || newYearlyTotal < -2.5
-          };
-        });
-        
-        console.log('護理師詳細分數計算:', nurseDetailedScores);
-        
-        const hasYearOutOfRange = nurseDetailedScores.some(nurse => nurse.isOutOfRange);
-        
-        if (!hasMonthOutOfRange && !hasYearOutOfRange) {
-          isBalanced = true;
-          console.log('生成的加班人選分數已平衡', nursesScores);
-        } else {
-          if (hasMonthOutOfRange) {
-            const outOfRangeMonths = nursesScores.flatMap(nurse => 
-              Object.entries(nurse.monthlyScores)
-                .filter(([_, score]) => score > 2.5 || score < -2.5)
-                .map(([month, score]) => `${nurse.name}的${parseInt(month) + 1}月分數(${score.toFixed(2)})`)
-            );
-            console.log('有月份分數超出範圍(±2.5)，需要重新生成:', outOfRangeMonths);
-          }
-          
-          if (hasYearOutOfRange) {
-            const outOfRangeNurses = nurseDetailedScores
-              .filter(nurse => nurse.isOutOfRange)
-              .map(nurse => `${nurse.name}: 其他月總分(${nurse.otherMonthsTotal.toFixed(2)}) + 當月新分數(${nurse.currentMonthScore.toFixed(2)}) = 新年度總分(${nurse.newYearlyTotal.toFixed(2)})`);
-            console.log('有護理師年度總分超出範圍(±2)，需要重新生成:', outOfRangeNurses);
-          }
+        if (isBalanced) {
+          console.log('生成的加班人選分數已平衡，嘗試次數:', attempts);
         }
       }
       
@@ -1274,7 +1110,7 @@ const OvertimeStaff = () => {
       }
       
       if (!isBalanced) {
-        setSuccessMessage(`已嘗試 ${MAX_OVERTIME_GENERATION_ATTEMPTS} 次全部重新生成加班人選，但無法達到完全平衡。目前結果為最接近平衡的方案。`);
+        setSuccessMessage(`已嘗試 ${MAX_OVERTIME_GENERATION_ATTEMPTS} 次全部重新生成加班人選，但無法達到完全平衡。請嘗試分時段生成或重新設計班表。`);
       } else {
         setSuccessMessage(`已全部重新生成加班人選！在第 ${attempts} 次嘗試達到平衡分配。請記得保存變更`);
       }
@@ -1294,43 +1130,6 @@ const OvertimeStaff = () => {
       setIsGeneratingRandom(false);
       shouldCancelGenerationRef.current = false;
     }
-  };
-
-  // 生成尚未指定加班人員
-  const generatePartialRandomAssignments = () => {
-    setOpenConfirmDialog(false);
-    setIsGeneratingRandom(true);
-    setGenerationAttempts(0);
-    shouldCancelGenerationRef.current = false; // 重置取消標記
-    
-    // 先載入最新的年度統計數據，然後再開始隨機生成
-    Promise.resolve()
-      .then(() => {
-        // 先嘗試從數據庫載入
-        console.log('在隨機生成前載入最新的年度統計數據');
-        return loadYearlyStatisticsFromDB();
-      })
-      .then((dataLoaded) => {
-        if (!dataLoaded) {
-          // 如果沒有從數據庫獲取到數據，則重新計算
-          console.log('數據庫中沒有年度統計數據，重新計算');
-          return generateYearlyStatistics();
-        }
-      })
-      .then(() => {
-        // 開始隨機生成
-        console.log('年度統計數據已載入，開始隨機生成');
-        console.log('目前年度數據：', yearlyStatisticsData);
-        setTimeout(() => {
-          generatePartialAssignmentsAsync();
-        }, 100);
-      })
-      .catch((error) => {
-        console.error('載入年度統計數據失敗:', error);
-        setApiError('載入年度統計數據失敗，無法進行隨機生成');
-        setOpenSnackbar(true);
-        setIsGeneratingRandom(false);
-      });
   };
 
   // 非阻塞的生成算法 - 生成尚未指定
@@ -1432,187 +1231,11 @@ const OvertimeStaff = () => {
             }
           });
         
-        // 使用臨時的markings計算分數
-        const tempMarkings = newMarkings;
+        // 檢查分配是否平衡（月度和年度分數均不超出範圍）
+        isBalanced = checkIfAssignmentBalanced(newMarkings);
         
-        // 篩選出麻醉專科護理師（排除麻醉科Leader，因為他們不參與分數計算）
-        const anesthesiaStaff = filteredSchedule.filter(nurse => 
-          nurse.identity === '麻醉專科護理師' && 
-          nurse.role !== 'head_nurse' && 
-          nurse.position !== 'CC'
-        );
-        
-        // 檢查是否有足夠的護理師來分配
-        if (!anesthesiaStaff || anesthesiaStaff.length === 0) {
-          throw new Error('沒有找到符合條件的麻醉專科護理師');
-        }
-        
-        // 計算每個護理師的分數
-        const nursesScores = anesthesiaStaff.map(nurse => {
-          let totalScore = 0;
-          // 用於記錄每月分數
-          const monthlyScores = {};
-          
-          // 檢查nurse.shifts的有效性
-          if (!nurse.shifts || !Array.isArray(nurse.shifts)) {
-            console.warn(`護理師 ${nurse.name || nurse.id} 缺少shifts數據`);
-            return {
-              id: nurse.id,
-              name: nurse.name || nurse.full_name || nurse.id.toString(),
-              identity: nurse.identity,
-              totalScore: 0,
-              monthlyScores: {}
-            };
-          }
-          
-          // 計算每天的分數
-          for (let day = 1; day <= daysInMonth; day++) {
-            const currentDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), day);
-            const dateKey = format(currentDate, 'yyyy-MM-dd');
-            const month = currentDate.getMonth();
-            
-            // 確保該月的分數對象存在
-            if (!monthlyScores[month]) {
-              monthlyScores[month] = 0;
-            }
-            
-            // 確保day-1不會超出shifts數組範圍
-            if (day <= nurse.shifts.length) {
-              const shift = nurse.shifts[day - 1]; // 該護理師當天的班別
-              
-              let dayScore = 0;
-              
-              // 如果是白班(A)，檢查加班情況
-              if (shift === 'A') {
-                // 檢查是否有加班記錄
-                const overtimeShift = tempMarkings[dateKey]?.[nurse.id];
-                
-                if (overtimeShift) {
-                  // 有加班記錄，根據加班類型計算分數
-                  dayScore = calculateOvertimeScore(overtimeShift);
-                } else {
-                  // 沒有加班記錄，扣0.264分
-                  dayScore = -0.264;
-                }
-              }
-              
-              totalScore += dayScore;
-              monthlyScores[month] += dayScore;
-            }
-          }
-          
-          return {
-            id: nurse.id,
-            name: nurse.name || nurse.full_name || nurse.id.toString(),
-            identity: nurse.identity,
-            totalScore: parseFloat(totalScore.toFixed(2)),
-            monthlyScores
-          };
-        });
-        
-        // 檢查是否有任何月份的分數超出範圍（正負3分）
-        const hasMonthOutOfRange = nursesScores.some(nurse => 
-          Object.values(nurse.monthlyScores).some(score => 
-            score > 2.5 || score < -2.5
-          )
-        );
-        
-        // 檢查是否有年度總分超出範圍（正負2分）
-        // 注意：需要從yearlyStatisticsData中獲取護理師之前的年度總分，然後扣除原本當月的分數，再加上新生成的當月分數來判斷
-        const currentMonth = selectedDate.getMonth();
-        console.log('進行年度總分檢查，當前月份:', currentMonth + 1);
-        console.log('檢查護理師總分時使用的年度統計數據:', yearlyStatisticsData);
-        
-        // 為所有護理師計算詳細的分數，以便分析
-        const nurseDetailedScores = nursesScores.map(nurse => {
-          // 找到護理師在年度統計中的數據
-          const yearlyData = yearlyStatisticsData.find(data => data.id === nurse.id);
-          if (!yearlyData) {
-            return {
-              name: nurse.name,
-              id: nurse.id,
-              hasYearlyData: false,
-              message: '沒有年度統計數據'
-            };
-          }
-          
-          // 計算除了當月之外的所有月份的總分
-          let otherMonthsTotal = 0;
-          
-          // 循環統計每月分數，排除當月
-          yearlyData.monthlyStats.forEach((monthStat, monthIndex) => {
-            if (monthIndex !== currentMonth) {
-              otherMonthsTotal += monthStat.score;
-            }
-          });
-          
-          // 當月的新分數
-          const currentMonthNewScore = nurse.monthlyScores[currentMonth] || 0;
-          
-          // 計算新的年度總分 = 其他月份總分 + 當月新分數
-          const newYearlyTotal = otherMonthsTotal + currentMonthNewScore;
-          
-          return {
-            name: nurse.name,
-            id: nurse.id,
-            currentMonthScore: currentMonthNewScore,
-            otherMonthsTotal,
-            newYearlyTotal,
-            isOutOfRange: newYearlyTotal > 2.5 || newYearlyTotal < -2.5
-          };
-        });
-        
-        console.log('護理師詳細分數計算:', nurseDetailedScores);
-        
-        const hasYearOutOfRange = nurseDetailedScores.some(nurse => nurse.isOutOfRange);
-        
-        if (!hasMonthOutOfRange && !hasYearOutOfRange) {
-          isBalanced = true;
-          console.log('生成的加班人選分數已平衡', nursesScores);
-        } else {
-          if (hasMonthOutOfRange) {
-            const outOfRangeMonths = nursesScores.flatMap(nurse => 
-              Object.entries(nurse.monthlyScores)
-                .filter(([_, score]) => score > 2.5 || score < -2.5)
-                .map(([month, score]) => `${nurse.name}的${parseInt(month) + 1}月分數(${score.toFixed(2)})`)
-            );
-            console.log('有月份分數超出範圍(±2.5)，需要重新生成:', outOfRangeMonths);
-          }
-          
-          if (hasYearOutOfRange) {
-            const outOfRangeNurses = nursesScores
-              .filter(nurse => {
-                const yearlyData = yearlyStatisticsData.find(data => data.id === nurse.id);
-                if (!yearlyData) return false;
-                
-                let otherMonthsTotal = 0;
-                yearlyData.monthlyStats.forEach((monthStat, monthIndex) => {
-                  if (monthIndex !== currentMonth) {
-                    otherMonthsTotal += monthStat.score;
-                  }
-                });
-                
-                const currentMonthNewScore = nurse.monthlyScores[currentMonth] || 0;
-                const newYearlyTotal = otherMonthsTotal + currentMonthNewScore;
-                
-                return newYearlyTotal > 2.5 || newYearlyTotal < -2.5;
-              })
-              .map(nurse => {
-                const yearlyData = yearlyStatisticsData.find(data => data.id === nurse.id);
-                let otherMonthsTotal = 0;
-                yearlyData.monthlyStats.forEach((monthStat, monthIndex) => {
-                  if (monthIndex !== currentMonth) {
-                    otherMonthsTotal += monthStat.score;
-                  }
-                });
-                
-                const currentMonthNewScore = nurse.monthlyScores[currentMonth] || 0;
-                const newYearlyTotal = otherMonthsTotal + currentMonthNewScore;
-                
-                return `${nurse.name}: 其他月總分(${otherMonthsTotal.toFixed(2)}) + 當月新分數(${currentMonthNewScore.toFixed(2)}) = 新年度總分(${newYearlyTotal.toFixed(2)})`;
-              });
-            console.log('有護理師年度總分超出範圍(±2.5)，需要重新生成:', outOfRangeNurses);
-          }
+        if (isBalanced) {
+          console.log('生成的加班人選分數已平衡，嘗試次數:', attempts);
         }
       }
       
@@ -1627,7 +1250,7 @@ const OvertimeStaff = () => {
       }
       
       if (!isBalanced) {
-        setSuccessMessage(`已嘗試 ${MAX_OVERTIME_GENERATION_ATTEMPTS} 次生成尚未指定加班人員，但無法達到完全平衡。目前結果為最接近平衡的方案。`);
+        setSuccessMessage(`已嘗試 ${MAX_OVERTIME_GENERATION_ATTEMPTS} 次生成尚未指定加班人員，但無法達到完全平衡。請嘗試全部重新生成或手動調整。`);
       } else {
         setSuccessMessage(`已成功生成尚未指定加班人員！在第 ${attempts} 次嘗試達到平衡分配。請記得保存變更`);
       }
@@ -1838,451 +1461,9 @@ const OvertimeStaff = () => {
     generateStatistics();
   };
 
-  // 生成年度統計數據
-  const generateYearlyStatistics = async () => {
-    setIsLoadingYearlyStatistics(true);
-    
-    try {
-      if (!filteredSchedule || !filteredSchedule.length) {
-        setYearlyStatisticsData([]);
-        return Promise.resolve(false);
-      }
-      
-      // 獲取當年1月1日至今的日期範圍
-      const currentYear = new Date().getFullYear();
-      const startDate = format(new Date(currentYear, 0, 1), 'yyyy-MM-dd'); // 1月1日
-      const endDate = format(new Date(), 'yyyy-MM-dd'); // 今天
-      
-      // 獲取這段時間內的所有加班記錄
-      const response = canEdit 
-        ? await apiService.overtime.getAllRecords(startDate, endDate)
-        : await apiService.overtime.getMyRecords(startDate, endDate);
-      
-      // 獲取整年的月排班數據
-      const monthlySchedules = {};
-      
-      // 循環獲取每個月的班表數據（1-12月）
-      for (let month = 0; month < 12; month++) {
-        try {
-          // 構建查詢日期（當年的每個月的1號）
-          const queryDate = new Date(currentYear, month, 1);
-          
-          // 如果查詢日期在未來，則跳過（不獲取未來的排班數據）
-          if (queryDate > new Date()) {
-            continue;
-          }
-          
-          // 使用API獲取該月排班數據
-          const monthlyResponse = await apiService.schedule.getMonthlySchedule(queryDate);
-          if (monthlyResponse && monthlyResponse.data) {
-            monthlySchedules[month] = monthlyResponse.data;
-          }
-        } catch (error) {
-          console.warn(`無法獲取${currentYear}年${month + 1}月的排班數據:`, error);
-          // 繼續處理下一個月，不中斷整個流程
-        }
-      }
-      
-      // 將加班記錄按用戶ID和日期索引
-      const overtimeByUserAndDate = {};
-      
-      response.data.forEach(record => {
-        const userId = record.user_id;
-        const dateKey = record.date;
-        
-        if (!overtimeByUserAndDate[userId]) {
-          overtimeByUserAndDate[userId] = {};
-        }
-        
-        overtimeByUserAndDate[userId][dateKey] = record.overtime_shift;
-      });
-      
-      // 初始化用戶月度統計數據
-      const userMonthlyStats = {};
-      
-      // 篩選出麻醉專科護理師（不包含麻醉科Leader，因為他們不參與分數計算）
-      const anesthesiaStaff = filteredSchedule.filter(nurse => 
-        nurse.identity === '麻醉專科護理師' && 
-        nurse.role !== 'head_nurse' && 
-        nurse.position !== 'CC'
-      );
-      
-      // 篩選出麻醉科Leader（單獨處理，不計算分數）
-      const leaderStaff = filteredSchedule.filter(nurse => 
-        nurse.identity === '麻醉科Leader' && 
-        nurse.role !== 'head_nurse' && 
-        nurse.position !== 'CC'
-      );
-      
-      // 初始化所有護理師的統計數據
-      [...anesthesiaStaff, ...leaderStaff].forEach(nurse => {
-        userMonthlyStats[nurse.id] = {
-          monthlyStats: Array(12).fill().map(() => ({ score: 0, count: 0, whiteShiftDays: 0 })),
-          identity: nurse.identity
-        };
-      });
-      
-      // 處理每個月的排班數據和加班記錄
-      Object.entries(monthlySchedules).forEach(([monthIndex, scheduleData]) => {
-        const month = parseInt(monthIndex);
-        
-        // 確保有排班數據
-        if (!Array.isArray(scheduleData) || scheduleData.length === 0) return;
-        
-        // 遍歷每位護理師
-        scheduleData.forEach(nurse => {
-          const userId = nurse.id;
-          const identity = nurse.identity;
-          
-          // 只處理麻醉專科護理師和麻醉科Leader
-          if (
-            (identity !== '麻醉專科護理師' && identity !== '麻醉科Leader') || 
-            nurse.role === 'head_nurse' || 
-            nurse.position === 'CC'
-          ) {
-            return;
-          }
-          
-          // 確保該用戶有統計數據
-          if (!userMonthlyStats[userId]) {
-            userMonthlyStats[userId] = {
-              monthlyStats: Array(12).fill().map(() => ({ score: 0, count: 0, whiteShiftDays: 0 })),
-              identity: identity
-            };
-          }
-          
-          // 確保該護理師有班次數據
-          if (!nurse.shifts || !Array.isArray(nurse.shifts)) return;
-          
-          // 獲取該月天數
-          const daysInMonth = nurse.shifts.length;
-          
-          // 遍歷該月每一天
-          for (let day = 0; day < daysInMonth; day++) {
-            const shift = nurse.shifts[day];
-            
-            // 只處理白班（A班）
-            if (shift !== 'A') continue;
-            
-            // 構建日期
-            const date = new Date(currentYear, month, day + 1);
-            
-            // 跳過週日（不加班）
-            if (isSunday(date)) continue;
-            
-            // 麻醉科Leader不在週六加班
-            if (identity === '麻醉科Leader' && isSaturday(date)) continue;
-            
-            // 日期格式化為YYYY-MM-DD
-            const dateKey = format(date, 'yyyy-MM-dd');
-            
-            // 獲取加班記錄
-            const overtimeShift = overtimeByUserAndDate[userId]?.[dateKey];
-            
-            // 更新統計數據
-            if (identity === '麻醉專科護理師') {
-              // 累計白班天數
-              userMonthlyStats[userId].monthlyStats[month].whiteShiftDays++;
-              
-              if (overtimeShift) {
-                // 有加班記錄，加分
-                userMonthlyStats[userId].monthlyStats[month].score += calculateOvertimeScore(overtimeShift);
-                userMonthlyStats[userId].monthlyStats[month].count += 1;
-              } else {
-                // 沒有加班記錄，扣0.264分
-                userMonthlyStats[userId].monthlyStats[month].score -= 0.264;
-              }
-            } else if (identity === '麻醉科Leader' && overtimeShift) {
-              // Leader只記錄加班次數，不計分
-              userMonthlyStats[userId].monthlyStats[month].count += 1;
-            }
-          }
-        });
-      });
-      
-      // 將計算完的月度分數保存到服務器（僅限护理長和管理員有權限）
-      if (canEdit) {
-        try {
-          // 整理月度分數數據
-          const monthlyScoresToUpdate = [];
-          
-          Object.entries(userMonthlyStats).forEach(([userId, userData]) => {
-            // 對每個月的統計數據
-            userData.monthlyStats.forEach((monthData, monthIndex) => {
-              // 只保存有數據的月份
-              if (monthData.whiteShiftDays > 0 || monthData.count > 0) {
-                const totalScore = Math.round(monthData.score * 100); // 轉換為整數（乘以100）
-                
-                // 生成詳細信息JSON
-                const details = JSON.stringify({
-                  whiteShiftDays: monthData.whiteShiftDays,
-                  overtimeCount: monthData.count,
-                  rawScore: monthData.score
-                });
-                
-                monthlyScoresToUpdate.push({
-                  user_id: parseInt(userId),
-                  year: currentYear,
-                  month: monthIndex + 1, // 1-12月
-                  total_score: totalScore,
-                  details: details
-                });
-              }
-            });
-          });
-          
-          // 批量保存月度分數
-          if (monthlyScoresToUpdate.length > 0) {
-            console.log('保存月度加班分數:', monthlyScoresToUpdate);
-            await apiService.overtime.bulkCreateOrUpdateMonthlyScores(monthlyScoresToUpdate);
-            console.log('月度加班分數已保存');
-          }
-        } catch (error) {
-          console.error('保存月度加班分數失敗:', error);
-          // 繼續處理，不中斷整個流程
-        }
-      }
-      
-      // 轉換為最終的統計數據格式
-      // 計算普通護理師的年度統計
-      const normalStatistics = anesthesiaStaff.map(nurse => {
-        const stats = userMonthlyStats[nurse.id] || {
-          monthlyStats: Array(12).fill().map(() => ({ score: 0, count: 0, whiteShiftDays: 0 })),
-          identity: nurse.identity
-        };
-        
-        // 計算總分和總加班次數
-        let totalScore = 0;
-        let totalOvertimes = 0;
-        
-        stats.monthlyStats.forEach(month => {
-          totalScore += month.score;
-          totalOvertimes += month.count;
-        });
-        
-        return {
-          id: nurse.id,
-          name: nurse.name || nurse.full_name || nurse.id.toString(),
-          position: nurse.position || '一般護理師',
-          identity: nurse.identity,
-          totalScore: parseFloat(totalScore.toFixed(2)),
-          totalOvertimes,
-          monthlyStats: stats.monthlyStats.map(month => ({
-            score: parseFloat(month.score.toFixed(2)),
-            count: month.count,
-            whiteShiftDays: month.whiteShiftDays
-          }))
-        };
-      });
-      
-      // 計算Leader的年度統計（不計分）
-      const leaderStatistics = leaderStaff.map(nurse => {
-        const stats = userMonthlyStats[nurse.id] || {
-          monthlyStats: Array(12).fill().map(() => ({ score: 0, count: 0, whiteShiftDays: 0 })),
-          identity: nurse.identity
-        };
-        
-        // 計算總加班次數（不計分）
-        let totalOvertimes = 0;
-        
-        stats.monthlyStats.forEach(month => {
-          totalOvertimes += month.count;
-        });
-        
-        return {
-          id: nurse.id,
-          name: nurse.name || nurse.full_name || nurse.id.toString(),
-          position: nurse.position || '一般護理師',
-          identity: nurse.identity,
-          totalScore: 0, // Leader固定為0分
-          totalOvertimes,
-          monthlyStats: stats.monthlyStats.map(month => ({
-            score: 0, // Leader固定為0分
-            count: month.count,
-            whiteShiftDays: month.whiteShiftDays
-          }))
-        };
-      });
-      
-      // 合併普通護理師和Leader的統計數據
-      const statistics = [...normalStatistics, ...leaderStatistics];
-      
-      // 按總分從高到低排序（Leader會排在後面，因為是0分）
-      statistics.sort((a, b) => b.totalScore - a.totalScore);
-      
-      setYearlyStatisticsData(statistics);
-      console.log('已生成年度統計數據:', statistics);
-      return Promise.resolve(true);
-    } catch (error) {
-      console.error('生成年度統計數據失敗:', error);
-      setApiError('生成年度統計數據時發生錯誤: ' + error.message);
-      setOpenSnackbar(true);
-      return Promise.resolve(false);
-    } finally {
-      setIsLoadingYearlyStatistics(false);
-    }
-  };
-
-  // 從數據庫加載年度統計數據
-  const loadYearlyStatisticsFromDB = async () => {
-    setIsLoadingYearlyStatistics(true);
-    
-    try {
-      const currentYear = new Date().getFullYear();
-      
-      // 獲取所有可用的月度加班分數
-      const response = canEdit 
-        ? await apiService.overtime.getAllMonthlyScores(currentYear)
-        : await apiService.overtime.getMyMonthlyScores(currentYear);
-      
-      if (!response.data || response.data.length === 0) {
-        // 如果數據庫中沒有數據，則返回false，表示需要重新計算
-        console.log('數據庫中沒有找到月度加班分數數據，需要重新計算');
-        return false;
-      }
-      
-      console.log(`找到 ${response.data.length} 條月度加班分數數據`);
-      
-      // 按用戶ID分組數據
-      const scoresByUserId = {};
-      
-      response.data.forEach(record => {
-        if (!scoresByUserId[record.user_id]) {
-          scoresByUserId[record.user_id] = {
-            monthlyStats: Array(12).fill().map(() => ({ 
-              score: 0, 
-              count: 0, 
-              whiteShiftDays: 0,
-              hasData: false
-            }))
-          };
-        }
-        
-        // 月份是1-12，數組索引是0-11
-        const monthIndex = record.month - 1;
-        if (monthIndex < 0 || monthIndex > 11) return;
-        
-        // 解析詳細信息
-        let details = {};
-        try {
-          details = JSON.parse(record.details || '{}');
-        } catch (e) {
-          console.warn('無法解析詳細信息:', record.details);
-        }
-        
-        // 更新月度統計
-        scoresByUserId[record.user_id].monthlyStats[monthIndex] = {
-          score: record.total_score / 100, // 轉回小數
-          count: details.overtimeCount || 0,
-          whiteShiftDays: details.whiteShiftDays || 0,
-          hasData: true
-        };
-      });
-      
-      // 篩選出麻醉專科護理師（不包含麻醉科Leader）
-      const anesthesiaStaff = filteredSchedule.filter(nurse => 
-        nurse.identity === '麻醉專科護理師' && 
-        nurse.role !== 'head_nurse' && 
-        nurse.position !== 'CC'
-      );
-      
-      // 篩選出麻醉科Leader
-      const leaderStaff = filteredSchedule.filter(nurse => 
-        nurse.identity === '麻醉科Leader' && 
-        nurse.role !== 'head_nurse' && 
-        nurse.position !== 'CC'
-      );
-      
-      // 處理普通護理師的統計數據
-      const normalStatistics = anesthesiaStaff.map(nurse => {
-        const stats = scoresByUserId[nurse.id] || {
-          monthlyStats: Array(12).fill().map(() => ({ 
-            score: 0, 
-            count: 0, 
-            whiteShiftDays: 0,
-            hasData: false
-          }))
-        };
-        
-        // 計算總分和總加班次數
-        let totalScore = 0;
-        let totalOvertimes = 0;
-        
-        stats.monthlyStats.forEach(month => {
-          totalScore += month.score;
-          totalOvertimes += month.count;
-        });
-        
-        return {
-          id: nurse.id,
-          name: nurse.name || nurse.full_name || nurse.id.toString(),
-          position: nurse.position || '一般護理師',
-          identity: nurse.identity,
-          totalScore: parseFloat(totalScore.toFixed(2)),
-          totalOvertimes,
-          monthlyStats: stats.monthlyStats.map(month => ({
-            score: parseFloat(month.score.toFixed(2)),
-            count: month.count,
-            whiteShiftDays: month.whiteShiftDays
-          }))
-        };
-      });
-      
-      // 處理Leader的統計數據
-      const leaderStatistics = leaderStaff.map(nurse => {
-        const stats = scoresByUserId[nurse.id] || {
-          monthlyStats: Array(12).fill().map(() => ({ 
-            score: 0, 
-            count: 0, 
-            whiteShiftDays: 0,
-            hasData: false
-          }))
-        };
-        
-        // 計算總加班次數（Leader不計分）
-        let totalOvertimes = 0;
-        
-        stats.monthlyStats.forEach(month => {
-          totalOvertimes += month.count;
-        });
-        
-        return {
-          id: nurse.id,
-          name: nurse.name || nurse.full_name || nurse.id.toString(),
-          position: nurse.position || '一般護理師',
-          identity: nurse.identity,
-          totalScore: 0, // Leader固定為0分
-          totalOvertimes,
-          monthlyStats: stats.monthlyStats.map(month => ({
-            score: 0, // Leader固定為0分
-            count: month.count,
-            whiteShiftDays: month.whiteShiftDays
-          }))
-        };
-      });
-      
-      // 合併普通護理師和Leader的統計數據
-      const statistics = [...normalStatistics, ...leaderStatistics];
-      
-      // 按總分從高到低排序
-      statistics.sort((a, b) => b.totalScore - a.totalScore);
-      
-      // 更新年度統計數據
-      setYearlyStatisticsData(statistics);
-      console.log('從數據庫載入的年度統計數據:', statistics);
-      
-      return true; // 表示已從數據庫中獲取到數據
-    } catch (error) {
-      console.error('從數據庫加載年度統計數據失敗:', error);
-      return false; // 失敗時返回false，表示需要重新計算
-    } finally {
-      setIsLoadingYearlyStatistics(false);
-    }
-  };
-
   // 計算並保存月度加班分數
   const calculateAndSaveMonthlyScores = async () => {
-    if (!canEdit) return Promise.resolve();
+    if (!canEdit) return Promise.resolve(false);
     
     try {
       // 獲取當前年月
@@ -2348,8 +1529,8 @@ const OvertimeStaff = () => {
                   monthScore += calculateOvertimeScore(overtimeShift);
                   overtimeCount++;
                 } else {
-                  // 沒有加班記錄，扣0.264分
-                  monthScore -= 0.264;
+                  // 沒有加班記錄，扣0.3分
+                  monthScore -= 0.3;
                 }
               } else if (identity === '麻醉科Leader' && overtimeShift) {
                 // Leader只記錄加班次數，不計分
@@ -2359,26 +1540,24 @@ const OvertimeStaff = () => {
           }
         }
         
-        // 只保存有數據的月份
-        if (whiteShiftDays > 0 || overtimeCount > 0) {
-          // 轉換為整數（乘以100）
-          const totalScore = Math.round(monthScore * 100);
-          
-          // 生成詳細信息JSON
-          const details = JSON.stringify({
-            whiteShiftDays,
-            overtimeCount,
-            rawScore: monthScore
-          });
-          
-          monthlyScoresToUpdate.push({
-            user_id: userId,
-            year: currentYear,
-            month: currentMonth + 1, // 1-12月
-            total_score: totalScore,
-            details
-          });
-        }
+        // 修正：即使沒有白班天數或加班記錄，也創建一條記錄來清空該月份
+        // 這解決了重置加班表後月份分數不更新的問題
+        const totalScore = Math.round(monthScore * 100); // 轉換為整數（乘以100）
+        
+        // 生成詳細信息JSON
+        const details = JSON.stringify({
+          whiteShiftDays,
+          overtimeCount,
+          rawScore: monthScore
+        });
+        
+        monthlyScoresToUpdate.push({
+          user_id: userId,
+          year: currentYear,
+          month: currentMonth + 1, // 1-12月
+          total_score: totalScore,
+          details
+        });
       });
       
       // 批量保存月度分數
@@ -2395,67 +1574,6 @@ const OvertimeStaff = () => {
     }
   };
 
-  // 處理統計視圖切換
-  const toggleStatisticsView = async () => {
-    // 檢查是否有未保存的變更
-    if (hasUnsavedChanges && canEdit) {
-      // 自動儲存變更後切換視圖
-      try {
-        setIsSaving(true);
-        await saveOvertimeRecords();
-        setSuccessMessage('已自動儲存變更並切換統計視圖');
-        setOpenSnackbar(true);
-      } catch (error) {
-        console.error('自動儲存變更失敗:', error);
-        setApiError(`自動儲存變更失敗: ${error.message || '未知錯誤'}`);
-        setOpenSnackbar(true);
-      } finally {
-        setIsSaving(false);
-      }
-    }
-    
-    // 執行切換視圖
-    executeToggleView();
-  };
-  
-  // 實際執行切換視圖的函數
-  const executeToggleView = () => {
-    // 如果要切換到年度視圖
-    if (!showYearlyStats) {
-      if (yearlyStatisticsData.length === 0) {
-        // 先嘗試從數據庫加載
-        setIsLoadingYearlyStatistics(true);
-        loadYearlyStatisticsFromDB().then(dataLoaded => {
-          if (!dataLoaded) {
-            // 如果沒有從數據庫獲取到數據，則重新計算
-            generateYearlyStatistics();
-          }
-        });
-      }
-    }
-    
-    // 切換視圖狀態
-    setShowYearlyStats(prev => !prev);
-  };
-  
-  // 確認對話框操作處理
-  const handleSaveConfirmAction = async (shouldSave) => {
-    setOpenSaveConfirmDialog(false);
-    
-    if (shouldSave) {
-      // 先保存
-      await saveOvertimeRecords();
-    }
-    
-    // 然後執行待處理操作
-    if (pendingAction === 'toggleView') {
-      executeToggleView();
-    }
-    
-    // 重置待處理操作
-    setPendingAction(null);
-  };
-
   // 在任何修改標記的地方添加設置未保存變更狀態
   useEffect(() => {
     // 跳過初始渲染
@@ -2467,6 +1585,93 @@ const OvertimeStaff = () => {
     
     setHasUnsavedChanges(markingsJson !== originalMarkingsJson);
   }, [markings, originalMarkings]);
+
+  // 檢查加班分配方案是否平衡（僅月度分數）
+  const checkIfAssignmentBalanced = (tempMarkings) => {
+    // 篩選出麻醉專科護理師（排除麻醉科Leader，因為他們不參與分數計算）
+    const anesthesiaStaff = filteredSchedule.filter(nurse => 
+      nurse.identity === '麻醉專科護理師' && 
+      nurse.role !== 'head_nurse' && 
+      nurse.position !== 'CC'
+    );
+    
+    if (!anesthesiaStaff || anesthesiaStaff.length === 0) {
+      console.warn('沒有找到符合條件的麻醉專科護理師');
+      return false;
+    }
+    
+    // 計算每個護理師的分數
+    const nursesScores = anesthesiaStaff.map(nurse => {
+      // 用於記錄每月分數
+      const monthlyScores = {};
+      
+      // 檢查nurse.shifts的有效性
+      if (!nurse.shifts || !Array.isArray(nurse.shifts)) {
+        console.warn(`護理師 ${nurse.name || nurse.id} 缺少shifts數據`);
+        return {
+          id: nurse.id,
+          monthlyScores: {}
+        };
+      }
+      
+      // 計算每天的分數
+      for (let day = 1; day <= daysInMonth; day++) {
+        const currentDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), day);
+        const dateKey = format(currentDate, 'yyyy-MM-dd');
+        const month = currentDate.getMonth();
+        
+        // 確保該月的分數對象存在
+        if (!monthlyScores[month]) {
+          monthlyScores[month] = 0;
+        }
+        
+        // 確保day-1不會超出shifts數組範圍
+        if (day <= nurse.shifts.length) {
+          const shift = nurse.shifts[day - 1]; // 該護理師當天的班別
+          
+          // 如果是白班(A)，檢查加班情況
+          if (shift === 'A') {
+            // 檢查是否有加班記錄
+            const overtimeShift = tempMarkings[dateKey]?.[nurse.id];
+            
+            if (overtimeShift) {
+              // 有加班記錄，根據加班類型計算分數
+              monthlyScores[month] += calculateOvertimeScore(overtimeShift);
+            } else {
+              // 沒有加班記錄，扣0.3分
+              monthlyScores[month] -= 0.3;
+            }
+          }
+        }
+      }
+      
+      return {
+        id: nurse.id,
+        name: nurse.name || nurse.full_name || nurse.id.toString(),
+        monthlyScores
+      };
+    });
+    
+    // 檢查是否有任何月份的分數超出範圍（正負2.0分）
+    const hasMonthOutOfRange = nursesScores.some(nurse => 
+      Object.values(nurse.monthlyScores).some(score => 
+        score > 2.0 || score < -2.0
+      )
+    );
+    
+    if (hasMonthOutOfRange) {
+      const outOfRangeMonths = nursesScores.flatMap(nurse => 
+        Object.entries(nurse.monthlyScores)
+          .filter(([_, score]) => score > 2.0 || score < -2.0)
+          .map(([month, score]) => `${nurse.name}的${parseInt(month) + 1}月分數(${score.toFixed(2)})`)
+      );
+      console.log('有月份分數超出範圍(±2.0):', outOfRangeMonths);
+      return false;
+    }
+    
+    // 所有檢查都通過
+    return true;
+  };
 
   return (
     <Box sx={{ padding: 2 }}>
@@ -2659,36 +1864,22 @@ const OvertimeStaff = () => {
           
           {/* 統計標題區域 */}
           <Typography variant="h5" gutterBottom>
-            {formattedDate}{showYearlyStats ? '年度' : '月'}加班統計
+            {formattedDate}月加班統計
           </Typography>
           
           <Alert severity="info" sx={{ mb: 2 }}>
-            統計規則：A班加班 = 1.0分，B班加班 = 0.8分，C班加班 = 0.7分，D班加班 = 0.2分，E和F班加班 = 0分，白班未排加班 = -0.264分，夜班或休假 = 0分。每月分數和年度總分均需保持在±2.5分以內。
+            統計規則：A班加班 = 1.0分，B班加班 = 0.8分，C班加班 = 0.7分，D班加班 = 0.2分，E和F班加班 = 0分，白班未排加班 = -0.3分，夜班或休假 = 0分。每月分數需保持在±2.0分以內。
           </Alert>
           
-          {/* 切換按鈕 */}
-          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
-            <Button 
-              variant="outlined" 
-              color="primary" 
-              onClick={toggleStatisticsView}
-              disabled={isLoadingStatistics || isLoadingYearlyStatistics}
-              startIcon={(isLoadingStatistics || isLoadingYearlyStatistics) ? <CircularProgress size={20} color="inherit" /> : null}
-            >
-              {isLoadingStatistics || isLoadingYearlyStatistics ? '載入中...' : 
-               showYearlyStats ? '顯示本月分數' : '顯示今年加班分數'}
-            </Button>
-          </Box>
-          
           {/* 載入狀態 */}
-          {(isLoading || isLoadingStatistics || isLoadingYearlyStatistics) && (
+          {(isLoading || isLoadingStatistics) && (
             <Box sx={{ display: 'flex', justifyContent: 'center', my: 2 }}>
               <CircularProgress />
             </Box>
           )}
           
           {/* 月度加班統計表 */}
-          {!isLoading && !isLoadingStatistics && !showYearlyStats && statisticsData.length > 0 && (
+          {!isLoading && !isLoadingStatistics && statisticsData.length > 0 && (
             <TableContainer component={Paper} sx={{ mt: 2 }}>
               <Table stickyHeader aria-label="加班統計表格">
                 <TableHead>
@@ -2795,64 +1986,10 @@ const OvertimeStaff = () => {
             </TableContainer>
           )}
           
-          {/* 年度加班統計表 */}
-          {showYearlyStats && !isLoadingYearlyStatistics && yearlyStatisticsData.length > 0 && (
-            <TableContainer component={Paper} sx={{ mt: 2 }}>
-              <Table stickyHeader aria-label="年度加班統計表格">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>護理師</TableCell>
-                    {Array.from({ length: 12 }, (_, i) => (
-                      <TableCell key={i}>{i + 1}月</TableCell>
-                    ))}
-                    <TableCell>總分</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {yearlyStatisticsData.map((staff) => (
-                    <TableRow 
-                      key={staff.id}
-                      sx={{ 
-                        '&:nth-of-type(odd)': { bgcolor: 'rgba(0, 0, 0, 0.03)' }
-                      }}
-                    >
-                      <TableCell component="th" scope="row">
-                        <Tooltip title={staff.identity}>
-                          <span>{staff.name}</span>
-                        </Tooltip>
-                      </TableCell>
-                      {staff.monthlyStats.map((month, index) => (
-                        <TableCell key={index}>
-                          {month.score > 0 || month.count > 0 ? (
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                              <Chip 
-                                label={month.score} 
-                                color={staff.identity === '麻醉科Leader' ? "secondary" : (month.score >= 0 ? "success" : "error")}
-                                size="small"
-                              />
-                              <Typography variant="body2">/{month.count}</Typography>
-                            </Box>
-                          ) : '-'}
-                        </TableCell>
-                      ))}
-                      <TableCell>
-                        <Chip 
-                          label={staff.totalScore} 
-                          color={staff.identity === '麻醉科Leader' ? "secondary" : (staff.totalScore >= 0 ? "success" : "error")}
-                          size="small"
-                        />
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          )}
-          
-          {!isLoading && !isLoadingStatistics && !isLoadingYearlyStatistics && 
-           ((showYearlyStats && yearlyStatisticsData.length === 0) || (!showYearlyStats && statisticsData.length === 0)) && (
+          {!isLoading && !isLoadingStatistics && 
+           (statisticsData.length === 0) && (
             <Alert severity="info" sx={{ mb: 2 }}>
-              沒有可用的{showYearlyStats ? '年度' : '月度'}統計數據，請確保有相關的加班記錄
+              沒有可用的月度統計數據，請確保有相關的加班記錄
             </Alert>
           )}
         </>
@@ -2893,15 +2030,12 @@ const OvertimeStaff = () => {
         <DialogContent>
           <Box sx={{ p: 2 }}>
             <Typography id="random-progress-description" sx={{ mb: 2 }}>
-              系統正在嘗試找到一個平衡的加班分配方案，其中月度分數需要在±2.5分以內，且年度總分（考慮其他月份總分和當月新計算分數）需要在±2.5分以內。
+              系統正在嘗試找到一個平衡的加班分配方案，其中月度分數需要在±2.0分以內。
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
               已嘗試 {generationAttempts} 次...
             </Typography>
             <LinearProgress variant="indeterminate" sx={{ my: 2 }} />
-            <Typography variant="body2" color="text.secondary">
-              注意：計算年度總分時，會先將護理師其他月份的分數（不含當月舊分數）加上當月新計算的分數，然後檢查是否在±2.5分範圍內。
-            </Typography>
           </Box>
         </DialogContent>
         <DialogActions>
@@ -2953,27 +2087,6 @@ const OvertimeStaff = () => {
           }
         }}
       />
-      
-      {/* 保存確認對話框 */}
-      <Dialog
-        open={openSaveConfirmDialog}
-        onClose={() => setOpenSaveConfirmDialog(false)}
-      >
-        <DialogTitle>未保存的變更</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            您有未保存的加班記錄變更。切換到年度統計視圖前，是否要保存這些變更？
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => handleSaveConfirmAction(false)} color="error">
-            不保存
-          </Button>
-          <Button onClick={() => handleSaveConfirmAction(true)} color="primary" autoFocus>
-            保存變更
-          </Button>
-        </DialogActions>
-      </Dialog>
     </Box>
   );
 };
