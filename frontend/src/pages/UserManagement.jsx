@@ -29,8 +29,6 @@ import {
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
-import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
-import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import { useUserStore } from '../store/userStore';
 
 const UserManagement = () => {
@@ -71,12 +69,9 @@ const UserManagement = () => {
   // 初始化排序用戶列表
   useEffect(() => {
     if (users && users.length > 0) {
-      // 按照身份權重初始排序
-      const sorted = [...users].sort((a, b) => {
-        const weightA = getIdentityWeight(a.identity);
-        const weightB = getIdentityWeight(b.identity);
-        return weightA - weightB;
-      });
+      // 按照複合條件進行排序
+      const sorted = [...users].sort(sortNurses);
+      
       setSortableUsers(sorted);
       setOriginalUsers(JSON.parse(JSON.stringify(sorted))); // 深拷貝保存原始狀態
     }
@@ -98,7 +93,7 @@ const UserManagement = () => {
           let hasChanges = false;
           
           // 檢查所有可能變更的字段
-          ['full_name', 'email', 'identity', 'group'].forEach(field => {
+          ['full_name', 'email', 'identity', 'role', 'group'].forEach(field => {
             if (currentUser[field] !== originalUser[field]) {
               changes[field] = currentUser[field];
               hasChanges = true;
@@ -162,7 +157,13 @@ const UserManagement = () => {
   const handleUpdateUser = (userId, updateData) => {
     // 更新本地排序列表
     setSortableUsers(prevUsers => {
-      return prevUsers.map(user => user.id === userId ? { ...user, ...updateData } : user);
+      // 更新用戶數據
+      const updatedUsers = prevUsers.map(user => 
+        user.id === userId ? { ...user, ...updateData } : user
+      );
+      
+      // 重新排序
+      return updatedUsers.sort(sortNurses);
     });
   };
 
@@ -173,9 +174,70 @@ const UserManagement = () => {
       '麻醉科Leader': 2,
       '麻醉專科護理師': 3,
       '恢復室護理師': 4,
-      '麻醉科書記': 5
+      '麻醉科書記': 5,
+      'admin': 6
     };
     return weights[identity] || 999;
+  };
+
+  // 角色排序權重
+  const getRoleWeight = (role) => {
+    const weights = {
+      'leader': 1,
+      'supervise_nurse': 2,
+      'nurse': 3,
+      'head_nurse': 1, // 護理長通常用identity區分，但為了完整性也給一個權重
+      'admin': 4
+    };
+    return weights[role] || 999;
+  };
+
+  // 護理師排序函數 - 結合多層級排序規則
+  const sortNurses = (a, b) => {
+    // 1. 首先按照身份(identity)排序
+    const weightA = getIdentityWeight(a.identity);
+    const weightB = getIdentityWeight(b.identity);
+    
+    if (weightA !== weightB) {
+      return weightA - weightB;
+    }
+    
+    // 2. 相同身份下，按照角色(role)排序
+    const roleWeightA = getRoleWeight(a.role);
+    const roleWeightB = getRoleWeight(b.role);
+    
+    if (roleWeightA !== roleWeightB) {
+      return roleWeightA - roleWeightB;
+    }
+    
+    // 3. 相同角色下，按照入職日期排序（越早越前面）
+    if (a.hire_date && b.hire_date) {
+      const dateA = new Date(a.hire_date);
+      const dateB = new Date(b.hire_date);
+      
+      if (dateA.getTime() !== dateB.getTime()) {
+        return dateA - dateB;
+      }
+    } else if (a.hire_date) {
+      return -1; // a有日期，b沒有，a排前面
+    } else if (b.hire_date) {
+      return 1;  // b有日期，a沒有，b排前面
+    }
+    
+    // 4. 相同入職日期下，按照員工編號排序（越小越前面）
+    if (a.username && b.username) {
+      const numA = parseInt(a.username, 10);
+      const numB = parseInt(b.username, 10);
+      
+      if (!isNaN(numA) && !isNaN(numB)) {
+        return numA - numB;
+      }
+      
+      // 如果不能轉為數字，就按字串比較
+      return String(a.username).localeCompare(String(b.username));
+    }
+    
+    return 0;
   };
 
   // 加載用戶數據
@@ -269,8 +331,11 @@ const UserManagement = () => {
       
       const newUser = await addUser(formData);
       
-      // 添加到排序列表
-      setSortableUsers(prevUsers => [...prevUsers, newUser]);
+      // 添加新用戶到列表並重新排序
+      const updatedUsers = [...sortableUsers, newUser].sort(sortNurses);
+      
+      setSortableUsers(updatedUsers);
+      setOriginalUsers(JSON.parse(JSON.stringify(updatedUsers))); // 更新原始數據
       
       setSuccess('成功添加用戶！');
       
@@ -312,30 +377,6 @@ const UserManagement = () => {
       console.error('Error deleting user:', err);
       setLocalError('刪除用戶失敗：' + (err.response?.data?.detail || err.message));
     }
-  };
-  
-  // 處理用戶向上移動
-  const handleMoveUp = (index) => {
-    if (index === 0) return; // 已經是第一個，不能再上移
-    
-    const newUsers = [...sortableUsers];
-    const temp = newUsers[index];
-    newUsers[index] = newUsers[index - 1];
-    newUsers[index - 1] = temp;
-    
-    setSortableUsers(newUsers);
-  };
-  
-  // 處理用戶向下移動
-  const handleMoveDown = (index) => {
-    if (index === sortableUsers.length - 1) return; // 已經是最後一個，不能再下移
-    
-    const newUsers = [...sortableUsers];
-    const temp = newUsers[index];
-    newUsers[index] = newUsers[index + 1];
-    newUsers[index + 1] = temp;
-    
-    setSortableUsers(newUsers);
   };
   
   // 計算年資
@@ -433,16 +474,12 @@ const UserManagement = () => {
           <Table>
             <TableHead>
               <TableRow>
-                {editMode && (
-                  <TableCell width="100px" align="center">
-                    排序
-                  </TableCell>
-                )}
                 <TableCell>員工編號</TableCell>
                 <TableCell>姓名</TableCell>
                 <TableCell>電子郵件</TableCell>
                 <TableCell>入職日期</TableCell>
                 <TableCell>身份</TableCell>
+                {editMode && <TableCell>角色</TableCell>}
                 {editMode && <TableCell>刪除</TableCell>}
               </TableRow>
             </TableHead>
@@ -455,30 +492,6 @@ const UserManagement = () => {
                     '&:hover': { bgcolor: user.role === 'head_nurse' ? '#f0f0f0' : '#f9f9f9' }
                   }}
                 >
-                  {editMode && (
-                    <TableCell>
-                      <Box sx={{ display: 'flex', justifyContent: 'center' }}>
-                        <Tooltip title="上移">
-                          <IconButton 
-                            size="small" 
-                            onClick={() => handleMoveUp(index)}
-                            disabled={index === 0 || user.role === 'head_nurse' || user.role === 'admin'}
-                          >
-                            <ArrowUpwardIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title="下移">
-                          <IconButton 
-                            size="small" 
-                            onClick={() => handleMoveDown(index)}
-                            disabled={index === sortableUsers.length - 1 || user.role === 'head_nurse' || user.role === 'admin'}
-                          >
-                            <ArrowDownwardIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                      </Box>
-                    </TableCell>
-                  )}
                   <TableCell>{user.username}</TableCell>
                   <TableCell>{user.full_name}</TableCell>
                   <TableCell>
@@ -493,24 +506,15 @@ const UserManagement = () => {
                     )}
                   </TableCell>
                   <TableCell>
-                    {editMode && user.role !== 'head_nurse' && user.role !== 'admin' ? (
-                      <TextField
-                        size="small"
-                        type="date"
-                        value={user.hire_date || ''}
-                        onChange={(e) => handleSelectChange(user.id, 'hire_date', e.target.value)}
-                      />
-                    ) : (
+                    {user.hire_date && (
                       <>
-                        {user.hire_date} 
-                        {user.hire_date && (
-                          <span style={{ color: '#666', marginLeft: '8px' }}>
-                            {(() => {
-                              const service = calculateYearsOfService(user.hire_date);
-                              return `[${service.years}年${service.months}個月]`;
-                            })()}
-                          </span>
-                        )}
+                        {user.hire_date}
+                        <span style={{ color: '#666', marginLeft: '8px' }}>
+                          {(() => {
+                            const service = calculateYearsOfService(user.hire_date);
+                            return `[${service.years}年${service.months}個月]`;
+                          })()}
+                        </span>
                       </>
                     )}
                   </TableCell>
@@ -532,6 +536,26 @@ const UserManagement = () => {
                       user.identity
                     )}
                   </TableCell>
+                  {editMode && (
+                    <TableCell>
+                      {user.role !== 'admin' ? (
+                        <FormControl size="small" fullWidth>
+                          <Select
+                            value={user.role || 'nurse'}
+                            onChange={(e) => handleSelectChange(user.id, 'role', e.target.value)}
+                            displayEmpty
+                          >
+                            <MenuItem value="nurse">一般護理師</MenuItem>
+                            <MenuItem value="leader">Leader</MenuItem>
+                            <MenuItem value="supervise_nurse">A組護理師</MenuItem>
+                            <MenuItem value="head_nurse">護理長</MenuItem>
+                          </Select>
+                        </FormControl>
+                      ) : (
+                        user.role
+                      )}
+                    </TableCell>
+                  )}
                   <TableCell>
                     {editMode && user.role !== 'head_nurse' && user.role !== 'admin' ? (
                       <IconButton 
@@ -644,6 +668,20 @@ const UserManagement = () => {
                   {group}
                 </MenuItem>
               ))}
+            </Select>
+          </FormControl>
+          <FormControl fullWidth margin="dense">
+            <InputLabel>角色</InputLabel>
+            <Select
+              name="role"
+              value={formData.role}
+              onChange={handleInputChange}
+              label="角色"
+            >
+              <MenuItem value="nurse">一般護理師</MenuItem>
+              <MenuItem value="leader">Leader</MenuItem>
+              <MenuItem value="supervise_nurse">A組護理師</MenuItem>
+              <MenuItem value="head_nurse">護理長</MenuItem>
             </Select>
           </FormControl>
         </DialogContent>

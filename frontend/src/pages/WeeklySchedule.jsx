@@ -181,7 +181,20 @@ const WeeklySchedule = () => {
     
     // 從userStore獲取用戶排序信息
     const userStore = useUserStore.getState();
-    const userOrder = userStore.userOrder || {};
+    
+    // 準備數據：給每個護理師添加完整的用戶信息
+    sorted = sorted.map(nurse => {
+      // 從nurseUsers中查找相同ID的用戶數據
+      const userInfo = nurseUsers.find(user => user.id === nurse.id);
+      if (userInfo) {
+        // 合併用戶數據，優先使用排班中已有的值
+        return {
+          ...userInfo,  // 先添加用戶完整信息（含hire_date, username等）
+          ...nurse,     // 再添加排班信息（覆蓋共有的字段）
+        };
+      }
+      return nurse;
+    });
     
     // 按身份分組
     const nursesByIdentity = {};
@@ -206,33 +219,77 @@ const WeeklySchedule = () => {
         '麻醉科Leader': 2,
         '麻醉專科護理師': 3,
         '恢復室護理師': 4,
-        '麻醉科書記': 5
+        '麻醉科書記': 5,
+        'admin': 6
       };
       return weights[identity] || 999;
     };
     
+    // 角色排序權重
+    const getRoleWeight = (role) => {
+      const weights = {
+        'leader': 1,
+        'supervise_nurse': 2,
+        'nurse': 3,
+        'head_nurse': 1, // 護理長通常用identity區分，但為了完整性也給一個權重
+        'admin': 4
+      };
+      return weights[role] || 999;
+    };
+    
+    // 護理師排序函數 - 結合多層級排序規則
+    const sortNurses = (a, b) => {
+      // 1. 首先按照身份(identity)排序
+      const weightA = getIdentityWeight(a.identity);
+      const weightB = getIdentityWeight(b.identity);
+      
+      if (weightA !== weightB) {
+        return weightA - weightB;
+      }
+      
+      // 2. 相同身份下，按照角色(role)排序
+      const roleWeightA = getRoleWeight(a.role);
+      const roleWeightB = getRoleWeight(b.role);
+      
+      if (roleWeightA !== roleWeightB) {
+        return roleWeightA - roleWeightB;
+      }
+      
+      // 3. 相同角色下，按照入職日期排序（越早越前面）
+      if (a.hire_date && b.hire_date) {
+        const dateA = new Date(a.hire_date);
+        const dateB = new Date(b.hire_date);
+        
+        if (dateA.getTime() !== dateB.getTime()) {
+          return dateA - dateB;
+        }
+      } else if (a.hire_date) {
+        return -1; // a有日期，b沒有，a排前面
+      } else if (b.hire_date) {
+        return 1;  // b有日期，a沒有，b排前面
+      }
+      
+      // 4. 相同入職日期下，按照員工編號排序（越小越前面）
+      if (a.username && b.username) {
+        const numA = parseInt(a.username, 10);
+        const numB = parseInt(b.username, 10);
+        
+        if (!isNaN(numA) && !isNaN(numB)) {
+          return numA - numB;
+        }
+        
+        // 如果不能轉為數字，就按字串比較
+        return String(a.username).localeCompare(String(b.username));
+      }
+      
+      // 5. 默認按姓名排序
+      return (a.name || '').localeCompare(b.name || '');
+    };
+    
     // 對每個身份組的護理師進行排序
     Object.keys(nursesByIdentity).forEach(identity => {
-      const orderIds = userOrder[identity] || [];
-      
-      if (orderIds.length > 0) {
-        // 如果有保存的排序，按排序順序排列
-        nursesByIdentity[identity].sort((a, b) => {
-          const indexA = orderIds.indexOf(a.id);
-          const indexB = orderIds.indexOf(b.id);
-          
-          // 如果ID不在排序列表中，放在最後
-          if (indexA === -1) return 1;
-          if (indexB === -1) return -1;
-          
-          return indexA - indexB;
-        });
-      } else {
-        // 如果沒有保存的排序，按姓名排序
-        nursesByIdentity[identity].sort((a, b) => 
-          (a.name || '').localeCompare(b.name || '')
-        );
-      }
+      // 直接使用sortNurses函數排序，不再使用userOrder
+      nursesByIdentity[identity].sort(sortNurses);
     });
     
     // 按身份權重合併所有組
@@ -248,7 +305,8 @@ const WeeklySchedule = () => {
       sortedNurses.push(...nursesByIdentity[identity]);
     });
     
-    // 添加未知身份的護理師
+    // 添加未知身份的護理師（按照相同的排序規則排序後添加）
+    unknownIdentity.sort(sortNurses);
     sortedNurses.push(...unknownIdentity);
     
     console.log('週班表護理師排序後:', sortedNurses.map(n => `${n.full_name || n.name || '未知'}(id:${n.id},role:${n.role})`));
@@ -454,7 +512,9 @@ const WeeklySchedule = () => {
         bulkUpdates.push({
           user_id: parseInt(nurseId),
           date: dateString,
-          area_code: mission === null ? null : mission.toString()
+          area_code: mission === null ? null : mission.toString(),
+          year: year,  // 添加年份參數
+          month: month  // 添加月份參數
         });
       }
       
@@ -1740,7 +1800,9 @@ const WeeklySchedule = () => {
         user_id: nurseId,
         date: dateString,
         shift_type: 'A', // 確保是A班
-        area_code: value
+        area_code: value,
+        year: year,  // 添加年份參數
+        month: month  // 添加月份參數
       });
       
       console.log(`成功更新 user_id=${nurseId}, date=${dayOfMonth} 的area_code為${value}`);

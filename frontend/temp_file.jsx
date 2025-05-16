@@ -176,7 +176,7 @@ const DESATURATED_SHIFT_COLORS = {
 const STATUS_COLORS = {
   'pending': { backgroundColor: '#ffecb3', color: '#bf360c' },
   'accepted': { backgroundColor: '#c8e6c9', color: '#1b5e20' },
-  'rejected': { backgroundColor: '#ffcdd2', color: '#b71c1c' }, // 恢復紅色背景
+  'rejected': { backgroundColor: '#ffcdd2', color: '#b71c1c' },
   'cancelled': { backgroundColor: '#eeeeee', color: '#9e9e9e' }, // 淡灰色
   'expired': { backgroundColor: '#f3e5f5', color: '#9c27b0' } // 更淡的紫色
 };
@@ -185,7 +185,7 @@ const STATUS_COLORS = {
 const statusColors = {
   'pending': { backgroundColor: '#ff9800', color: 'black' }, // 橙色
   'accepted': { backgroundColor: '#4caf50', color: 'white' }, // 綠色
-  'rejected': { backgroundColor: '#f44336', color: 'white' }, // 恢復紅色背景
+  'rejected': { backgroundColor: '#f44336', color: 'white' }, // 紅色
   'cancelled': { backgroundColor: '#9e9e9e', color: 'white' }, // 灰色
   'expired': { backgroundColor: '#ba68c8', color: 'white' }, // 更淡的紫色
   'default': { backgroundColor: '#bdbdbd', color: 'black' }  // 灰色
@@ -778,9 +778,9 @@ const ShiftSwap = () => {
   const [selectedToDateDetails, setSelectedToDateDetails] = useState(null);
 
   // 過濾相關狀態
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedStatus, setSelectedStatus] = useState([]);
   const [page, setPage] = useState(1);
+  // 添加搜索狀態變量
+  const [searchTerm, setSearchTerm] = useState('');
   const pageSize = 10;
   const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false);
   const [startDate, setStartDate] = useState(null);
@@ -796,44 +796,6 @@ const ShiftSwap = () => {
   
   // 添加分類標籤狀態
   const [currentTab, setCurrentTab] = useState(0); // 0: 全部, 1: 換班別, 2: 換工作區域, 3: 換加班
-  
-  // 添加顯示/隱藏已完成和已取消請求的狀態
-  // const [showCompleted, setShowCompleted] = useState(false); // 默認不顯示已完成請求
-  // const [showCancelled, setShowCancelled] = useState(false); // 默認不顯示已取消請求
-  // // 新增顯示/隱藏已過期請求的狀態
-  // const [showExpired, setShowExpired] = useState(false); // 默認不顯示已過期請求
-  
-  // 添加回狀態和標籤定義
-  const statuses = ['accepted', 'rejected', 'cancelled', 'expired']; // 移除 'pending'
-  const statusLabels = {
-    'pending': '待處理',
-    'accepted': '已完成',
-    'rejected': '已駁回',
-    'cancelled': '已取消',
-    'expired': '已過期'
-  };
-  
-  // 添加隱藏狀態的標籤文本
-  const hideStatusLabels = {
-    'accepted': '隱藏已完成',
-    'rejected': '隱藏已駁回',
-    'cancelled': '隱藏已取消',
-    'expired': '隱藏已過期'
-  };
-  
-  // 修改狀態變量，改為記錄被隱藏的狀態
-  const [hiddenStatuses, setHiddenStatuses] = useState([]); // 初始不隱藏任何狀態
-  
-  // 添加處理狀態隱藏/顯示的函數
-  const handleStatusVisibilityChange = (status) => {
-    setHiddenStatuses(prev => {
-      if (prev.includes(status)) {
-        return prev.filter(s => s !== status);
-      } else {
-        return [...prev, status];
-      }
-    });
-  };
   
   // 所有可能的班別
   const allShifts = ['D', 'A', 'N', 'K', 'C', 'F', 'E', 'B', 'O'];
@@ -1005,27 +967,6 @@ const ShiftSwap = () => {
       // 檢查請求是否過期
       const displayStatus = getRequestDisplayStatus(req);
       
-      // 2. 狀態篩選 - 使用 hiddenStatuses 進行過濾
-      // 如果狀態在 hiddenStatuses 中，則隱藏該請求
-      const isVisible = !hiddenStatuses.includes(displayStatus);
-      
-      // 2.1 根據顯示/隱藏設定過濾
-      // let matchesVisibility = true;
-      
-      // 處理不同狀態的顯示邏輯
-      // if (displayStatus === 'expired' && !showExpired) {
-      //   matchesVisibility = false;
-      // } else if (req.status === 'accepted' && !showCompleted) {
-      //   matchesVisibility = false;
-      // } else if (req.status === 'cancelled' && !showCancelled) {
-      //   matchesVisibility = false;
-      // }
-      
-      // 3. 申請日期範圍篩選 - 已移除
-      // const matchesDate = 
-      //   (!startDate || new Date(req.created_at || req.from_date) >= startOfDay(startDate)) &&
-      //   (!endDate || new Date(req.created_at || req.from_date) <= endOfDay(endDate));
-      
       // 4. 要換班的日期範圍篩選
       const matchesShiftDate = 
         (!shiftStartDate || new Date(req.from_date) >= startOfDay(shiftStartDate)) &&
@@ -1041,11 +982,11 @@ const ShiftSwap = () => {
       const matchesIdentity = !onlySameIdentity || 
         (user && req.requestor && req.requestor.identity === user.identity);
       
-      return matchesTab && matchesSearch && isVisible && matchesShiftDate && 
+      return matchesTab && matchesSearch && matchesShiftDate && 
              matchesShift && matchesRequestor && matchesIdentity;
     });
     
-    // 按 from_date 日期降冪排序（較新的日期在前）
+    // 按 from_date 日期排序（從近到遠）
     const sortedRequests = [...filtered].sort((a, b) => {
       // 如果沒有日期，放到最後
       if (!a.from_date) return 1;
@@ -1054,14 +995,14 @@ const ShiftSwap = () => {
       const dateA = new Date(a.from_date);
       const dateB = new Date(b.from_date);
       
-      // 按日期降冪排列（較新的日期在前）
-      return dateB - dateA;
+      // 先按日期升序排列（較早的日期在前）
+      return dateA - dateB;
     });
     
     setFilteredRequests(sortedRequests);
     // 重置頁碼
     setPage(1);
-  }, [searchTerm, hiddenStatuses, shiftStartDate, shiftEndDate, 
+  }, [searchTerm, shiftStartDate, shiftEndDate, 
       selectedShifts, requestorFilter, onlySameIdentity, user, currentTab]);
 
   // 當過濾條件變更時更新結果
@@ -1069,7 +1010,7 @@ const ShiftSwap = () => {
     if (swapRequests.length > 0) {
       updateFilteredRequests(swapRequests);
     }
-  }, [searchTerm, hiddenStatuses, shiftStartDate, shiftEndDate, 
+  }, [searchTerm, shiftStartDate, shiftEndDate, 
       selectedShifts, requestorFilter, onlySameIdentity, updateFilteredRequests, swapRequests, currentTab]);
 
   // 獲取指定月份的班表及相關數據
@@ -2278,8 +2219,8 @@ const ShiftSwap = () => {
                 variant="body1" 
                 sx={{ 
                   fontWeight: 'bold',
-                  // 已取消、已過期或已駁回的請求標題淡化
-                  color: displayStatus === 'cancelled' || displayStatus === 'expired' || displayStatus === 'rejected' ? '#9e9e9e' : 'inherit'
+                  // 已取消或已過期的請求標題淡化
+                  color: displayStatus === 'cancelled' || displayStatus === 'expired' ? '#9e9e9e' : 'inherit'
                 }}
               >
                 {selectedRequest.requestor?.full_name || '未知用戶'} 的換班申請
@@ -2287,7 +2228,7 @@ const ShiftSwap = () => {
               <Chip 
                 label={displayStatus === 'pending' ? '待處理' : 
                       displayStatus === 'accepted' ? '已完成' : 
-                      displayStatus === 'rejected' ? '已駁回' : 
+                      displayStatus === 'rejected' ? '已拒絕' : 
                       displayStatus === 'expired' ? '已過期' : '已取消'} 
                 sx={{ 
                   ...STATUS_COLORS[displayStatus] 
@@ -2969,8 +2910,7 @@ const ShiftSwap = () => {
                 記錄內容: overtimeRecords
               });
               
-              // 使用專為換班流程設計的API端點，並確保數據格式正確
-              await apiService.overtime.updateOvertimeMonth({ records: overtimeRecords });
+              await apiService.overtime.bulkUpdate(overtimeRecords);
               console.log('加班記錄交換成功更新！');
             }
           } catch (err) {
@@ -3155,7 +3095,7 @@ const ShiftSwap = () => {
               }
               
               if (overtimeRecords.length > 0) {
-                await apiService.overtime.updateOvertimeMonth({ records: overtimeRecords });
+                await apiService.overtime.bulkUpdate(overtimeRecords);
               }
             }
             
@@ -3218,8 +3158,6 @@ const ShiftSwap = () => {
 
   // 清除所有過濾器
   const handleClearFilters = () => {
-    setSelectedStatus([]);
-    setHiddenStatuses([]);
     setShiftStartDate(null);
     setShiftEndDate(null);
     setSelectedShifts([]);
@@ -3260,18 +3198,20 @@ const ShiftSwap = () => {
 
   // 計算活動過濾器數量
   const activeFilterCount = useMemo(() => {
+
+  // 計算活動過濾器數量
+  const activeFilterCount = useMemo(() => {
     let count = 0;
-    if (selectedStatus.length > 0) count++;
-    if (hiddenStatuses.length > 0) count++;
     if (startDate || endDate) count++;
     if (shiftStartDate || shiftEndDate) count++;
     if (selectedShifts.length > 0) count++;
     if (requestorFilter) count++;
     if (onlySameIdentity) count++;
     return count;
-  }, [selectedStatus, hiddenStatuses, startDate, endDate, shiftStartDate, shiftEndDate, 
+  }, [startDate, endDate, shiftStartDate, shiftEndDate, 
       selectedShifts, requestorFilter, onlySameIdentity]);
 
+  // 處理頁碼變更
   // 處理頁碼變更
   const handlePageChange = (event, newPage) => {
     setPage(newPage);
@@ -3299,21 +3239,9 @@ const ShiftSwap = () => {
   };
 
   // 處理狀態變更
-  const handleStatusChange = (status) => {
-    setSelectedStatus(prev => {
-      if (prev.includes(status)) {
-        return prev.filter(s => s !== status);
-      } else {
-        return [...prev, status];
-      }
-    });
-  };
-
-  // 處理相同身份過濾切換
   const handleSameIdentityChange = (event) => {
     setOnlySameIdentity(event.target.checked);
   };
-
   // 新增獨立的數據刷新函數，避免複雜的強制更新邏輯
   const refreshShiftSwapData = async () => {
     try {
@@ -3545,8 +3473,7 @@ const ShiftSwap = () => {
               <List component={Paper}>
                 {paginatedRequests.map((request, index) => {
                   const displayStatus = getRequestDisplayStatus(request);
-                  const isFaded = displayStatus === 'cancelled' || displayStatus === 'expired' || displayStatus === 'accepted' || displayStatus === 'rejected';
-
+                  
                   return (
                     <React.Fragment key={request.id || index}>
                       <ListItem button onClick={() => handleOpenDetail(request)}>
@@ -3554,11 +3481,11 @@ const ShiftSwap = () => {
                           primary={
                             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                               <Typography 
-                                variant="subtitle1"
-                                sx={{
+                                variant="subtitle1" 
+                                sx={{ 
                                   fontWeight: 'bold',
-                                  // 已取消、已過期、已駁回的請求標題淡化
-                                  color: isFaded ? '#bdbdbd' : 'inherit'
+                                  // 已取消或已過期的請求標題淡化
+                                  color: displayStatus === 'cancelled' || displayStatus === 'expired' ? '#9e9e9e' : 'inherit'
                                 }}
                               >
                                 {request.requestor?.full_name || '未知用戶'} {
@@ -3570,7 +3497,7 @@ const ShiftSwap = () => {
                               <Chip 
                                 label={displayStatus === 'pending' ? '待處理' : 
                                      displayStatus === 'accepted' ? '已完成' : 
-                                     displayStatus === 'rejected' ? '已駁回' : 
+                                     displayStatus === 'rejected' ? '已拒絕' : 
                                      displayStatus === 'expired' ? '已過期' : '已取消'} 
                                 size="small" 
                                 sx={{ ...STATUS_COLORS[displayStatus] }} 
@@ -3578,7 +3505,7 @@ const ShiftSwap = () => {
                             </Box>
                           }
                           secondary={
-                            <Box sx={{ color: isFaded ? '#bdbdbd' : 'inherit' }}>
+                            <Box>
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                 <Typography variant="body2" component="span">
                                   {request.from_date || '未知日期'}
@@ -3606,7 +3533,7 @@ const ShiftSwap = () => {
                                     )}
                                     {request.to_overtime && (
                                       <>
-                                        <ArrowForwardIcon sx={{ fontSize: 16, color: isFaded ? '#bdbdbd' : '#666' }} />
+                                        <ArrowForwardIcon sx={{ fontSize: 16, color: '#666' }} />
                                         <Chip 
                                           label={request.to_overtime === '未指定' ? '不加班' : request.to_overtime}
                                           size="small" 
@@ -3645,7 +3572,7 @@ const ShiftSwap = () => {
                                         }
                                       }}
                                     />
-                                    <ArrowForwardIcon sx={{ fontSize: 16, color: isFaded ? '#bdbdbd' : '#666' }} />
+                                    <ArrowForwardIcon sx={{ fontSize: 16, color: '#666' }} />
                                     <Chip 
                                       label={request.to_mission || '未指定'} 
                                       size="small" 
@@ -3655,22 +3582,6 @@ const ShiftSwap = () => {
                                         height: '20px',
                                         minWidth: '28px',
                                         borderRadius: '4px',
-                                        '& .MuiChip-label': {
-                                          padding: '0 4px',
-                                          fontSize: '11px',
-                                          fontWeight: 'bold'
-                                        }
-                                      }}
-                                    />
-                                    <ArrowForwardIcon sx={{ fontSize: 16, color: isFaded ? '#bdbdbd' : '#666' }} />
-                                    <Chip 
-                                      label={request.to_shift || 'O'} 
-                                      size="small" 
-                                      sx={{ 
-                                        backgroundColor: SHIFT_COLORS[request.to_shift] || '#9e9e9e',
-                                        color: request.to_shift === 'O' ? 'black' : 'white',
-                                        height: '20px',
-                                        minWidth: '20px',
                                         '& .MuiChip-label': {
                                           padding: '0 4px',
                                           fontSize: '11px',
@@ -3697,7 +3608,7 @@ const ShiftSwap = () => {
                                         }
                                       }}
                                     />
-                                    <ArrowForwardIcon sx={{ fontSize: 16, color: isFaded ? '#bdbdbd' : '#666' }} />
+                                    <ArrowForwardIcon sx={{ fontSize: 16, color: '#666' }} />
                                     <Chip 
                                       label={request.to_shift || 'O'} 
                                       size="small" 
@@ -3717,21 +3628,13 @@ const ShiftSwap = () => {
                                 )}
                               </Box>
                               {request.target_nurse_id && (
-                                <Typography variant="body2" component="span" sx={{
-                                  ml: 1,
-                                  color: isFaded ? '#bdbdbd' : '#f57c00'
-                                }}>
+                                <Typography variant="body2" component="span" sx={{ ml: 1, color: '#f57c00' }}>
                                   【指定對象: {request.target_nurse?.full_name || '特定用戶'}】
                                 </Typography>
                               )}
                               {/* 顯示用戶備註 */}
                               {request.notes && (
-                                <Typography variant="body2" component="span" sx={{
-                                  display: 'block',
-                                  mt: 0.5,
-                                  color: isFaded ? '#bdbdbd' : '#616161',
-                                  fontSize: '12px'
-                                }}>
+                                <Typography variant="body2" component="span" sx={{ display: 'block', mt: 0.5, color: '#616161', fontSize: '12px' }}>
                                   備註: {request.notes}
                                 </Typography>
                               )}
@@ -3772,28 +3675,6 @@ const ShiftSwap = () => {
         <DialogTitle>篩選換班請求</DialogTitle>
         <DialogContent dividers>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, pt: 1 }}>
-            {/* 狀態篩選 - 修改為隱藏/顯示操作 */}
-            <Box>
-              <Typography component="legend" variant="subtitle2" sx={{ mb: 0.5 }}>狀態顯示設定：</Typography>
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                {statuses.map(status => (
-                  <Chip
-                    key={status}
-                    label={hideStatusLabels[status] || `隱藏${statusLabels[status]}`}
-                    onClick={() => handleStatusVisibilityChange(status)}
-                    color={hiddenStatuses.includes(status) ? "primary" : "default"}
-                    variant={hiddenStatuses.includes(status) ? "filled" : "outlined"}
-                    sx={{ 
-                      margin: 0.5,
-                      ...(hiddenStatuses.includes(status) ? { backgroundColor: '#e0e0e0', color: '#757575' } : STATUS_COLORS[status])
-                    }}
-                  />
-                ))}
-              </Box>
-            </Box>
-            
-            {/* 移除顯示設定部分，因為已經整合到狀態篩選中 */}
-            
             {/* 要換班的日期範圍篩選 */}
             <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={zhTW}>
               <Typography component="legend" variant="subtitle2" sx={{ mb: 0.5 }}>依要換班的日期篩選：</Typography>
@@ -3886,10 +3767,5 @@ const ShiftSwap = () => {
           sx={{ width: '100%' }}
         >
           {notification.message}
-        </Alert>
-      </Snackbar>
     </Box>
   );
-};
-
-export default ShiftSwap; 

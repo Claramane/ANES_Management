@@ -7,44 +7,56 @@ class ShiftSwapRequest(Base):
     __tablename__ = "shift_swap_requests"
 
     id = Column(Integer, primary_key=True, index=True)
-    requester_id = Column(Integer, ForeignKey("users.id"))
+    requestor_id = Column(Integer, ForeignKey("users.id"))
     acceptor_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     
-    # 原班詳情
-    original_date = Column(Date)
-    original_shift_type = Column(String)
-    original_area_code = Column(String)
+    # 日期和班別信息
+    from_date = Column(Date)
+    from_shift = Column(String)
+    from_mission = Column(String, nullable=True)
+    from_overtime = Column(String, nullable=True)
     
-    # 目標班詳情
-    target_date = Column(Date)
-    target_shift_type = Column(String)
-    target_area_code = Column(String)
+    to_date = Column(Date)
+    to_shift = Column(String)
+    to_mission = Column(String, nullable=True)
+    to_overtime = Column(String, nullable=True)
+    
+    # 目標護理師
+    target_nurse_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    
+    # 換班類型
+    swap_type = Column(String)  # shift, mission, overtime
+    
+    # 備註
+    notes = Column(Text, nullable=True)
     
     # 狀態追蹤
-    status = Column(String)  # 待審核/已換班/拒絕
-    validation_result = Column(Boolean)  # 驗證結果
-    validation_message = Column(Text)  # 驗證訊息
+    status = Column(String, default="pending")  # pending, accepted, rejected
+    validation_result = Column(Boolean, nullable=True)  # 驗證結果
+    validation_message = Column(Text, nullable=True)  # 驗證訊息
     
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
     accepted_at = Column(DateTime, nullable=True)
     
     # 關聯
-    requester = relationship("User", foreign_keys=[requester_id], back_populates="shift_swap_requests")
-    acceptor = relationship("User", foreign_keys=[acceptor_id], back_populates="shift_swap_acceptors")
+    requestor = relationship("User", foreign_keys=[requestor_id], back_populates="swap_requests")
+    acceptor = relationship("User", foreign_keys=[acceptor_id], back_populates="swap_accepts")
+    target_nurse = relationship("User", foreign_keys=[target_nurse_id])
 
 class ShiftRule(Base):
     __tablename__ = "shift_rules"
 
     id = Column(Integer, primary_key=True, index=True)
-    shift_type = Column(String)  # D, A, N, O
-    start_time = Column(String)  # 開始時間
-    end_time = Column(String)  # 結束時間
-    min_rest_hours = Column(Integer)  # 最小休息時間(小時)
-    max_weekly_shifts = Column(Integer)  # 每週最大班數
-    max_monthly_shifts = Column(Integer)  # 每月最大班數
-    description = Column(String)
+    name = Column(String, nullable=False)
+    shift_type = Column(String, nullable=False)
+    start_time = Column(String, nullable=False)
+    end_time = Column(String, nullable=False)
+    max_consecutive = Column(Integer)
+    min_rest_hours = Column(Integer)
+    max_weekly_shifts = Column(Integer)
+    max_monthly_shifts = Column(Integer)
+    description = Column(Text)
     is_active = Column(Boolean, default=True)
-    
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now()) 

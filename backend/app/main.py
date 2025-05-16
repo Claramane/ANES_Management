@@ -10,6 +10,7 @@ from .routes import users, schedules
 from .routes import announcements  # 導入公告路由
 from .routes import overtime  # 導入加班記錄路由
 from .routes import formula_schedules  # 導入公式班表路由
+from .routes import shift_swap  # 導入換班路由
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -35,6 +36,7 @@ app.include_router(schedules.router, prefix="/api", tags=["班表管理"])
 app.include_router(announcements.router, prefix="/api", tags=["公告管理"])
 app.include_router(overtime.router, prefix="/api", tags=["加班管理"])
 app.include_router(formula_schedules.router, prefix="/api", tags=["公式班表管理"])
+app.include_router(shift_swap.router, prefix="/api", tags=["換班管理"])
 
 @app.on_event("startup")
 async def startup_event():

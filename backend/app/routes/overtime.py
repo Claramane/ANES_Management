@@ -1,11 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import date, datetime, timedelta
 import logging
 
 from ..core.database import get_db
-from ..core.security import get_current_active_user, get_head_nurse_user
+from ..core.security import get_current_active_user, get_head_nurse_user, get_current_user, get_shift_swap_privileged_user
 from ..models.user import User
 from ..models.overtime import OvertimeRecord, OvertimeMonthlyScore
 from ..models.log import Log
@@ -146,9 +146,10 @@ async def create_user_overtime_record(
 async def bulk_create_overtime_records(
     bulk_records: BulkOvertimeRecordCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_head_nurse_user)
+    current_user: User = Depends(get_shift_swap_privileged_user),  # 允許換班操作特權
+    request: Request = None  # 添加可選的請求參數
 ):
-    """批量創建加班記錄（僅護理長可操作）"""
+    """批量創建加班記錄（護理長或換班流程可操作）"""
     user_id = bulk_records.user_id or current_user.id
     
     # 檢查用戶是否存在
@@ -204,12 +205,15 @@ async def bulk_create_overtime_records(
 async def bulk_month_update_overtime_records(
     updates: MultipleDatesOvertimeUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_head_nurse_user)
+    current_user: User = Depends(get_shift_swap_privileged_user),  # 允許換班操作特權
+    request: Request = None  # 添加可選的請求參數
 ):
-    """批量更新多個日期的加班記錄（僅護理長可操作）"""
+    """批量更新多個日期的加班記錄（護理長或換班流程可操作）"""
     total_updated_count = 0
     
+    # 記錄詳細的處理過程
     logger.info(f"處理整月加班批量更新: 共 {len(updates.records)} 條更新記錄")
+    logger.info(f"更新記錄詳情: {updates.records}")
     
     # 收集所有需要更新的用戶ID和日期，用於清理舊數據
     all_user_ids = set()
@@ -218,10 +222,16 @@ async def bulk_month_update_overtime_records(
     # 先分析所有記錄，收集用戶ID和日期信息
     for record in updates.records:
         try:
+            # 檢查 record 是否是字典類型
+            if not isinstance(record, dict):
+                logger.warning(f"跳過非字典類型記錄: {record}")
+                continue
+                
             date_str = record.get('date')
             user_ids = record.get('user_ids', [])
             
             if not date_str or not user_ids:
+                logger.warning(f"跳過缺少日期或用戶ID的記錄: {record}")
                 continue
                 
             # 解析日期
@@ -232,10 +242,11 @@ async def bulk_month_update_overtime_records(
                 # 添加用戶ID
                 for user_id in user_ids:
                     all_user_ids.add(user_id)
-            except ValueError:
+            except ValueError as e:
+                logger.error(f"日期格式解析錯誤: {date_str}, 錯誤: {str(e)}")
                 continue
         except Exception as e:
-            logger.error(f"分析記錄時出錯: {str(e)}")
+            logger.error(f"分析記錄時出錯: {str(e)}, 記錄: {record}")
             continue
     
     # 如果有收集到日期和用戶，先清理整月的加班記錄
@@ -316,15 +327,15 @@ async def bulk_month_update_overtime_records(
     
     return total_updated_count
 
-# 更新加班記錄 - 僅限護理長和admin
+# 更新加班記錄 - 允許換班流程或護理長操作
 @router.put("/overtime/{record_id}", response_model=OvertimeRecordSchema)
 async def update_overtime_record(
     record_id: int,
     record_in: OvertimeRecordUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_head_nurse_user)  # 修改為僅限護理長
+    current_user: User = Depends(get_shift_swap_privileged_user)  # 允許換班操作特權
 ):
-    """更新加班記錄（僅限護理長）"""
+    """更新加班記錄（護理長或換班流程可操作）"""
     db_record = db.query(OvertimeRecord).filter(OvertimeRecord.id == record_id).first()
     
     if not db_record:
@@ -391,21 +402,55 @@ async def get_all_overtime_records(
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
     user_id: Optional[int] = None,
+    _cb: Optional[str] = None,  # 添加緩存破壞參數，但不使用它
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_head_nurse_user)
+    current_user: User = Depends(get_current_active_user)
 ):
-    """獲取所有加班記錄（僅護理長可操作）"""
+    """獲取加班記錄（所有用戶均可訪問所有用戶的記錄）"""
+    # 詳細記錄所有收到的請求參數
+    logger.info(f"獲取加班記錄請求開始處理")
+    logger.debug(f"請求參數: start_date={start_date} ({type(start_date)}), end_date={end_date} ({type(end_date)}), user_id={user_id} ({type(user_id)}), _cb={_cb}")
+    logger.debug(f"當前用戶: id={current_user.id}, username={current_user.username}, role={current_user.role}")
+    
     query = db.query(OvertimeRecord)
     
+    # 移除權限檢查，允許所有用戶查看所有記錄
+    # 如果指定了user_id，則過濾特定用戶
     if user_id:
+        # 確保user_id是整數
+        if isinstance(user_id, str) and user_id.isdigit():
+            user_id = int(user_id)
+            logger.debug(f"將字符串user_id轉換為整數: {user_id}")
         query = query.filter(OvertimeRecord.user_id == user_id)
-    if start_date:
-        query = query.filter(OvertimeRecord.date >= start_date)
-    if end_date:
-        query = query.filter(OvertimeRecord.date <= end_date)
+        logger.debug(f"查詢特定用戶ID: {user_id}")
+    else:
+        logger.debug(f"查詢所有用戶記錄")
+    
+    # 嘗試處理日期參數
+    try:
+        if start_date:
+            logger.debug(f"過濾開始日期: {start_date}, 類型: {type(start_date)}")
+            query = query.filter(OvertimeRecord.date >= start_date)
+        if end_date:
+            logger.debug(f"過濾結束日期: {end_date}, 類型: {type(end_date)}")
+            query = query.filter(OvertimeRecord.date <= end_date)
         
-    records = query.order_by(OvertimeRecord.date).all()
-    return records
+        # 執行查詢
+        records = query.order_by(OvertimeRecord.date).all()
+        logger.info(f"查詢成功，返回 {len(records)} 條加班記錄")
+        
+        # 日誌記錄查詢結果
+        if len(records) > 0:
+            first_record = records[0]
+            last_record = records[-1] if len(records) > 1 else first_record
+            logger.debug(f"第一條記錄: user_id={first_record.user_id}, date={first_record.date}")
+            logger.debug(f"最後一條記錄: user_id={last_record.user_id}, date={last_record.date}")
+        
+        return records
+    except Exception as e:
+        logger.error(f"查詢加班記錄時發生錯誤: {str(e)}")
+        # 返回空列表而非拋出異常，避免前端出錯
+        return []
 
 # 以下是針對 overtime_monthly_scores 表的新API
 

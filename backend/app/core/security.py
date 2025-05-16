@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from typing import Any, Union, Optional
 from jose import jwt
 from passlib.context import CryptContext
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from .config import settings
@@ -82,4 +82,45 @@ def get_head_nurse_user(current_user: User = Depends(get_current_user)) -> User:
             status_code=status.HTTP_403_FORBIDDEN,
             detail="沒有足夠的權限執行此操作"
         )
-    return current_user 
+    return current_user
+
+def get_shift_swap_privileged_user(request: Request, current_user: User = Depends(get_current_user)) -> User:
+    """換班特權用戶（允許在換班工作流程中修改排班）
+    
+    此函數用於換班功能相關的API，允許一般護理師在處理換班時獲得臨時權限來修改資料庫。
+    系統會檢查:
+    1. 請求路徑是否來自換班相關API（包含"shift-swap"）
+    2. 用戶是否已登入
+    
+    如果上述條件滿足，即使是一般護理師也能獲得修改排班的權限。
+    """
+    path = request.url.path
+    
+    # 檢查請求路徑是否包含換班相關字串
+    is_from_shift_swap = "shift-swap" in path
+    
+    # 檢查請求頭或查詢參數是否表明這是來自換班流程的請求
+    from_shift_swap_header = request.headers.get("X-From-Shift-Swap", "").lower() == "true"
+    from_shift_swap_param = request.query_params.get("from_shift_swap", "").lower() == "true"
+    
+    # 檢查是否是加班相關請求
+    is_overtime_request = "overtime" in path
+    
+    # 如果用戶已經是護理長或管理員，直接允許
+    if current_user.role == "head_nurse" or current_user.role == "admin" or current_user.username == "admin":
+        return current_user
+    
+    # 如果請求來自換班功能，允許一般護理師獲得臨時權限
+    if is_from_shift_swap or from_shift_swap_header or from_shift_swap_param:
+        return current_user
+    
+    # 如果是加班請求且包含特定參數或來源，也允許
+    if is_overtime_request and (request.query_params.get("shift_swap_flow") == "true" or 
+                              request.headers.get("X-Shift-Swap-Flow") == "true"):
+        return current_user
+    
+    # 其他情況，需要護理長或管理員權限
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="沒有足夠的權限執行此操作"
+    ) 

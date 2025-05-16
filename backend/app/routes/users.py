@@ -118,9 +118,9 @@ async def read_users(
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_head_nurse_user)
+    current_user: User = Depends(get_current_active_user)
 ):
-    """獲取所有用戶列表（僅護理長可查看）"""
+    """獲取所有用戶列表（所有登錄用戶可查看）"""
     users = db.query(User).offset(skip).limit(limit).all()
     return users
 

@@ -80,6 +80,11 @@ const apiService = {
     updateProfile: (profileData) => api.put('/users/me', profileData),
   },
   
+  // 用戶相關 - 另一個命名空間(兼容現有代碼)
+  users: {
+    getUsers: () => api.get('/users'),
+  },
+  
   // 公式班表相關
   formulaSchedule: {
     getAll: () => api.get('/formula-schedules'),
@@ -105,24 +110,52 @@ const apiService = {
   // 班表相關
   schedule: {
     generateMonth: (year, month, options = {}) => api.post('/schedules/generate', { year, month, ...options }),
-    getMonthlySchedule: (year, month) => api.get(`/schedules/monthly/${year}/${month}`),
+    getMonthlySchedule: (year, month) => {
+      console.log(`正在獲取月班表: ${year}年${month}月`);
+      // 確保year和month為字符串
+      const yearStr = String(year);
+      const monthStr = String(month).padStart(2, '0');
+      return api.get(`/schedules/monthly/${yearStr}/${monthStr}`)
+        .then(response => {
+          console.log('月班表API響應成功:', {
+            狀態: response.status,
+            數據長度: JSON.stringify(response.data).length,
+            數據類型: typeof response.data,
+            是數組: Array.isArray(response.data),
+            鍵列表: response.data ? Object.keys(response.data) : []
+          });
+          return response;
+        })
+        .catch(error => {
+          console.error('獲取月班表失敗:', error);
+          throw error;
+        });
+    },
     updateSchedule: (scheduleId, data) => api.put(`/schedules/${scheduleId}`, data),
     publishSchedule: (versionId) => api.post(`/schedules/versions/${versionId}/publish`),
     saveMonth: (data) => api.post('/schedules/saveMonth', data),
-    updateShift: (shiftData) => api.post('/schedules/updateShift', shiftData),
+    updateShift: (shiftData) => api.post('/shift-swap/update-shift', shiftData), // 更新個別班表內容
     resetAreaCodes: (year, month) => api.post('/schedules/resetAreaCodes', { year, month }),
-    bulkUpdateAreaCodes: (updates) => api.post('/schedules/bulkUpdateAreaCodes', updates),
+    bulkUpdateAreaCodes: (updates) => api.post('/shift-swap/update-areas', updates), // 批量更新班表區域代碼，工作位置分配
     getScheduleDetails: (year, month) => api.get(`/schedules/details?year=${year}&month=${month}`)
   },
   
   // 換班相關
   shiftSwap: {
-    getRequests: () => api.get('/shift-swaps'),
-    createRequest: (data) => api.post('/shift-swaps', data),
-    acceptRequest: (requestId) => api.post(`/shift-swaps/${requestId}/accept`),
-    validateRequest: (requestId) => api.post(`/shift-swaps/${requestId}/validate`),
-    getShiftRules: () => api.get('/shift-rules'),
-    updateShiftRule: (ruleId, data) => api.put(`/shift-rules/${ruleId}`, data),
+    getRequests: () => api.get('/shift-swap'),
+    getById: (id) => api.get(`/shift-swap/${id}`),
+    getMyRequests: () => api.get('/shift-swap/me'),
+    create: (data) => api.post('/shift-swap', data),
+    update: (id, data) => api.put(`/shift-swap/${id}`, data),
+    accept: (requestId, data) => api.put(`/shift-swap/${requestId}/accept`, data),
+    reject: (requestId) => api.put(`/shift-swap/${requestId}/reject`),
+    cancel: (requestId) => api.put(`/shift-swap/${requestId}`, { status: 'cancelled' }),
+    getRules: () => api.get('/shift-swap/rules'),
+    createRule: (data) => api.post('/shift-swap/rules', data),
+    updateRule: (ruleId, data) => api.put(`/shift-swap/rules/${ruleId}`, data),
+    deleteRule: (ruleId) => api.delete(`/shift-swap/rules/${ruleId}`),
+    getAvailableMonths: () => api.get('/shift-swap/available-months'),
+    validate: (requestId) => api.post('/shift-swap/validate', { request_id: requestId }),
   },
   
   // 公告相關
@@ -142,7 +175,10 @@ const apiService = {
   overtime: {
     // 獲取自己的加班記錄
     getMyRecords: (startDate, endDate) => api.get('/overtime/me', {
-      params: { start_date: startDate, end_date: endDate }
+      params: { 
+        start_date: startDate, 
+        end_date: endDate
+      }
     }),
     
     // 獲取所有加班記錄（僅護理長/admin）
@@ -150,7 +186,7 @@ const apiService = {
       params: { 
         start_date: startDate, 
         end_date: endDate,
-        user_id: userId 
+        ...(userId ? { user_id: userId } : {})
       }
     }),
     
@@ -166,31 +202,31 @@ const apiService = {
     // 刪除加班記錄（僅護理長/admin）
     delete: (recordId) => api.delete(`/overtime/${recordId}`),
     
-    // 批量創建加班記錄（僅護理長/admin）
-    bulkCreate: (records, userId) => api.post('/overtime/bulk', {
-      records: records,
-      user_id: userId
+    // 批量更新加班記錄 - 用於換班功能
+    bulkUpdate: (records) => api.put('/overtime/bulk-month', {
+      records: records
     }),
     
-    // 批量更新加班記錄（僅護理長/admin）
-    bulkUpdate: async (recordsArray) => {
-      console.log('API Call: 批量更新整月加班記錄', { 記錄數量: recordsArray.length });
+    // 在換班流程中更新加班記錄 - 專為換班功能提供
+    updateOvertime: (overtimeData) => api.post('/shift-swap/update-overtime', overtimeData),
+    
+    // 在換班流程中批量更新加班記錄 - 專為換班功能提供
+    updateOvertimeMonth: (records) => {
+      // 檢查 records 是否已經包含 records 屬性，避免雙重嵌套
+      const data = Array.isArray(records) ? { records } : records;
       
-      // 處理每個記錄中的overtime_shift值
-      const processedRecords = recordsArray.map(record => ({
-        date: record.date,
-        overtime_shift: record.overtime_shift === null || record.overtime_shift === undefined ? '' : record.overtime_shift,
-        user_ids: record.user_ids
-      }));
+      // 添加診斷日誌
+      console.log('發送加班記錄更新請求:', data);
       
-      return api.put('/overtime/bulk-month', {
-        records: processedRecords
-      });
+      return api.post('/shift-swap/update-overtime-month', data);
     },
     
-    // 獲取自己的月度加班分數
+    // 獲取月度加班分數（個人）
     getMyMonthlyScores: (year, month) => api.get('/overtime/monthly-scores/me', {
-      params: { year, month }
+      params: { 
+        year, 
+        month
+      }
     }),
     
     // 獲取所有用戶的月度加班分數（僅護理長/admin）

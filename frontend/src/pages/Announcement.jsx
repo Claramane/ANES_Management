@@ -77,11 +77,33 @@ const Announcement = () => {
   const categories = ['長官佈達', '政令宣導', '系統公告', '交班', '閒聊'];
   
   // 檢查使用者權限，判斷是否有發布公告的權限
+  const allowedPublishCategories = useMemo(() => {
+    if (!user || !user.role) return [];
+    const userRole = user.role.toLowerCase(); // 確保角色比較時大小寫一致
+
+    // 完整的類別列表，供 'admin' 和 'head_nurse' 使用
+    const allCategoriesList = [...categories];
+
+    switch (userRole) {
+      case 'admin':
+      case 'head_nurse':
+        return allCategoriesList;
+      case 'leader':
+        // leader 可以發布 "閒聊" 和 "政令宣導"
+        // 請確保 "政令宣導" 存在於 categories 陣列中
+        return ['閒聊', '政令宣導'].filter(cat => categories.includes(cat));
+      case 'nurse':
+        // nurse 只能發布 "閒聊"
+        // 請確保 "閒聊" 存在於 categories 陣列中
+        return ['閒聊'].filter(cat => categories.includes(cat));
+      default:
+        return [];
+    }
+  }, [user, categories]); // categories 應為穩定依賴，但明確加入
+
   const canPublishAnnouncement = useMemo(() => {
-    if (!user) return false;
-    // 可以根據貴司需求調整權限邏輯，例如只有特定角色可以發布公告
-    return ['admin', 'head_nurse', 'supervisor'].includes(user.role);
-  }, [user]);
+    return allowedPublishCategories.length > 0;
+  }, [allowedPublishCategories]);
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
@@ -491,6 +513,8 @@ const Announcement = () => {
          <PublishAnnouncementForm 
             onSubmit={handlePublishSubmit} 
             onCancel={handleClosePublishForm} 
+            allowedCategories={allowedPublishCategories} // 傳遞允許的類別
+            allCategories={categories} // 傳遞所有可用類別
          />
       </Dialog>
 

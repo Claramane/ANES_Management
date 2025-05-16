@@ -22,8 +22,8 @@ class User(Base):
 
     # 關聯
     monthly_schedules = relationship("MonthlySchedule", back_populates="user")
-    shift_swap_requests = relationship("ShiftSwapRequest", foreign_keys="ShiftSwapRequest.requester_id", back_populates="requester")
-    shift_swap_acceptors = relationship("ShiftSwapRequest", foreign_keys="ShiftSwapRequest.acceptor_id", back_populates="acceptor")
+    swap_requests = relationship("ShiftSwapRequest", foreign_keys="ShiftSwapRequest.requestor_id", back_populates="requestor")
+    swap_accepts = relationship("ShiftSwapRequest", foreign_keys="ShiftSwapRequest.acceptor_id", back_populates="acceptor")
     announcements = relationship("Announcement", back_populates="author")
     formula_assignments = relationship("NurseFormulaAssignment", back_populates="user")
     pattern_assignments = relationship("PatternNurseAssignment", back_populates="user")

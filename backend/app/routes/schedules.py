@@ -6,9 +6,10 @@ import calendar
 import json
 import copy
 import logging
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from ..core.database import get_db
-from ..core.security import get_current_active_user, get_head_nurse_user, get_current_user
+from ..core.security import get_current_active_user, get_head_nurse_user, get_current_user, get_shift_swap_privileged_user
 from ..models.user import User
 from ..models.schedule import MonthlySchedule, ScheduleVersion, ScheduleVersionDiff
 from ..models.log import Log
@@ -825,7 +826,7 @@ async def compare_versions(
 async def update_shift(
     shift_data: Dict[str, Any],
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_head_nurse_user)  # 只允許護理長和管理員更新
+    current_user: User = Depends(get_shift_swap_privileged_user)  # 允許換班相關請求使用特權
 ):
     """更新單一護理師的單日班次，不創建新版本"""
     
@@ -1218,147 +1219,73 @@ async def get_monthly_schedule_details(
 async def bulk_update_area_codes(
     updates: List[Dict[str, Any]],
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_head_nurse_user)  # 只允許護理長和管理員操作
+    current_user: User = Depends(get_current_user)
 ):
-    """批量更新多條排班記錄的area_code"""
+    """批量更新工作區域分配"""
     try:
-        if not updates:
-            return {
-                "success": True,
-                "message": "沒有需要更新的記錄",
-                "updated_count": 0
-            }
-        
-        # 從請求中提取所有的year-month組合
-        date_patterns = set()
+        results = []
         for update in updates:
-            date_str = update.get("date")
-            if date_str:
-                try:
-                    dt = datetime.strptime(date_str, "%Y-%m-%d")
-                    date_patterns.add(f"{dt.year}{dt.month:02d}")
-                except ValueError:
-                    continue
-        
-        # 獲取所有相關月份的最新版本ID
-        version_ids = {}
-        for month_str in date_patterns:
-            version = db.query(ScheduleVersion).filter(
+            user_id = update.get("user_id")
+            date = update.get("date")
+            area_code = update.get("area_code")
+            year = update.get("year")
+            month = update.get("month")
+            
+            if not user_id or not date or not year or not month:
+                raise HTTPException(status_code=400, detail="Missing required fields")
+            
+            # 將month確保為字符串格式，並處理可能的前導零
+            if isinstance(month, int):
+                month_str = f"{year}{month:02d}"
+            else:
+                # 如果month已經是字符串，確保它是兩位數格式
+                month_str = f"{year}{month.zfill(2)}"
+            
+            # 查找當前最新版本
+            latest_version = db.query(ScheduleVersion).filter(
                 ScheduleVersion.month == month_str
             ).order_by(ScheduleVersion.id.desc()).first()
             
-            if version:
-                version_ids[month_str] = version.id
-        
-        updated_count = 0
-        failed_count = 0
-        
-        # 更新每條記錄
-        for update in updates:
-            try:
-                user_id = update.get("user_id")
-                date_str = update.get("date")
-                area_code = update.get("area_code")
-                
-                if not user_id or not date_str:
-                    failed_count += 1
-                    continue
-                
-                try:
-                    dt = datetime.strptime(date_str, "%Y-%m-%d")
-                    schedule_date = dt.date()
-                    month_str = f"{dt.year}{dt.month:02d}"
-                except ValueError:
-                    failed_count += 1
-                    continue
-                
-                # 獲取對應月份的版本ID
-                version_id = version_ids.get(month_str)
-                if not version_id:
-                    failed_count += 1
-                    continue
-                
-                # 找到對應的排班記錄
-                schedule = db.query(MonthlySchedule).filter(
-                    MonthlySchedule.user_id == user_id,
-                    MonthlySchedule.date == schedule_date,
-                    MonthlySchedule.version_id == version_id
-                ).first()
-                
-                if not schedule:
-                    failed_count += 1
-                    continue
-                
-                # 更新area_code
-                schedule.area_code = area_code
-                updated_count += 1
-                
-            except Exception as e:
-                error_msg = f"更新記錄時發生錯誤: {str(e)}"
-                
-                # 記錄錯誤信息到日誌
-                logger.error(error_msg)
-                
-                # 添加到系統日誌表
-                try:
-                    log = Log(
-                        user_id=current_user.id if current_user else None,
-                        action="update_record_error",
-                        operation_type="error",
-                        description=error_msg
-                    )
-                    db.add(log)
-                    db.commit()
-                except Exception:
-                    # 如果記錄日誌失敗，忽略它，不要再產生異常
-                    pass
-                    
-                failed_count += 1
-        
-        # 提交所有更新
-        db.commit()
-        
-        # 添加操作日誌
-        log = Log(
-            user_id=current_user.id,
-            action="bulk_update_area_codes",
-            operation_type="update_schedule",
-            description=f"批量更新 {updated_count} 條排班記錄的工作分配"
-        )
-        db.add(log)
-        db.commit()
-        
-        return {
-            "success": True,
-            "message": f"成功更新 {updated_count} 條排班記錄的工作分配",
-            "updated_count": updated_count,
-            "failed_count": failed_count
-        }
-        
-    except Exception as e:
-        import traceback
-        error_msg = f"批量更新工作分配時發生錯誤: {str(e)}"
-        error_trace = traceback.format_exc()
-        
-        # 記錄錯誤信息到日誌
-        logger.error(error_msg)
-        logger.error(error_trace)
-        
-        # 添加到系統日誌表
-        try:
-            log = Log(
-                user_id=current_user.id if current_user else None,
-                action="bulk_update_area_codes_error",
-                operation_type="error",
-                description=error_msg
-            )
-            db.add(log)
-            db.commit()
-        except Exception:
-            # 如果記錄日誌失敗，忽略它，不要再產生異常
-            pass
+            if not latest_version:
+                raise HTTPException(status_code=404, detail=f"找不到 {year}年{month}月的排班表版本")
             
-        raise HTTPException(
-            status_code=500,
-            detail=error_msg
-        ) 
+            # 查找此用戶在該日期的排班記錄
+            schedule = db.query(MonthlySchedule).filter(
+                MonthlySchedule.user_id == user_id,
+                MonthlySchedule.date == date
+            ).first()
+            
+            if schedule:
+                # 更新工作區域編碼
+                schedule.area_code = area_code
+                db.commit()
+                results.append({
+                    "user_id": user_id,
+                    "date": date,
+                    "area_code": area_code,
+                    "status": "updated"
+                })
+            else:
+                # 如果找不到記錄，創建一個新的
+                new_schedule = MonthlySchedule(
+                    user_id=user_id,
+                    date=date,
+                    area_code=area_code,
+                    version_id=latest_version.id
+                )
+                db.add(new_schedule)
+                db.commit()
+                results.append({
+                    "user_id": user_id,
+                    "date": date,
+                    "area_code": area_code,
+                    "status": "created"
+                })
+        
+        return {"success": True, "results": results}
+    except ValueError as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"數據格式錯誤: {str(e)}")
+    except SQLAlchemyError as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"數據庫錯誤: {str(e)}") 

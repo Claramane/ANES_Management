@@ -111,7 +111,7 @@ const MonthlySchedule = () => {
   const [isEditMode, setIsEditMode] = useState(false);
   
   // 標籤頁狀態
-  const [activeTab, setActiveTab] = useState(0); // 0: 常規月班表, 1: 小夜班包班, 2: 大夜班包班
+  const [activeTab, setActiveTab] = useState(0); // 0: 常規月班表, 1: 小夜班包班, 2: 大夜班包班, 3: 恢復室
   
   // 確認對話框狀態
   const [openGenerateDialog, setOpenGenerateDialog] = useState(false);
@@ -231,8 +231,13 @@ const MonthlySchedule = () => {
     
     // 根據當前標籤過濾數據
     if (activeTab === 0) {
-      // 常規月班表: 過濾掉待分派或夜班人員 (SNP 或 LNP)
+      // 常規月班表: 過濾掉待分派或夜班人員 (SNP 或 LNP)，以及恢復室護理師和麻醉科書記
       sorted = sorted.filter(nurse => {
+        // 過濾掉恢復室護理師和麻醉科書記
+        if (nurse.identity === '恢復室護理師' || nurse.identity === '麻醉科書記') {
+          return false;
+        }
+        
         // 首先檢查是否有special_type屬性（由更新包班人員按鈕設置）
         if (nurse.special_type === 'SNP' || nurse.special_type === 'LNP') {
           return false; // 過濾掉有特殊類型標記的護理師
@@ -348,11 +353,29 @@ const MonthlySchedule = () => {
         // 默認過濾掉不是LNP的護理師
         return false;
       });
+    } else if (activeTab === 3) {
+      // 恢復室標籤: 只顯示恢復室護理師和麻醉科書記
+      sorted = sorted.filter(nurse => {
+        return nurse.identity === '恢復室護理師' || nurse.identity === '麻醉科書記';
+      });
     }
     
     // 從userStore獲取用戶排序信息
     const userStore = useUserStore.getState();
-    const userOrder = userStore.userOrder || {};
+    
+    // 準備數據：給每個護理師添加完整的用戶信息
+    sorted = sorted.map(nurse => {
+      // 從nurseUsers中查找相同ID的用戶數據
+      const userInfo = nurseUsers.find(user => user.id === nurse.id);
+      if (userInfo) {
+        // 合併用戶數據，優先使用排班中已有的值
+        return {
+          ...userInfo,  // 先添加用戶完整信息（含hire_date, username等）
+          ...nurse,     // 再添加排班信息（覆蓋共有的字段）
+        };
+      }
+      return nurse;
+    });
     
     // 按身份分組
     const nursesByIdentity = {};
@@ -377,33 +400,77 @@ const MonthlySchedule = () => {
         '麻醉科Leader': 2,
         '麻醉專科護理師': 3,
         '恢復室護理師': 4,
-        '麻醉科書記': 5
+        '麻醉科書記': 5,
+        'admin': 6
       };
       return weights[identity] || 999;
     };
     
+    // 角色排序權重
+    const getRoleWeight = (role) => {
+      const weights = {
+        'leader': 1,
+        'supervise_nurse': 2,
+        'nurse': 3,
+        'head_nurse': 1, // 護理長通常用identity區分，但為了完整性也給一個權重
+        'admin': 4
+      };
+      return weights[role] || 999;
+    };
+    
+    // 護理師排序函數 - 結合多層級排序規則
+    const sortNurses = (a, b) => {
+      // 1. 首先按照身份(identity)排序
+      const weightA = getIdentityWeight(a.identity);
+      const weightB = getIdentityWeight(b.identity);
+      
+      if (weightA !== weightB) {
+        return weightA - weightB;
+      }
+      
+      // 2. 相同身份下，按照角色(role)排序
+      const roleWeightA = getRoleWeight(a.role);
+      const roleWeightB = getRoleWeight(b.role);
+      
+      if (roleWeightA !== roleWeightB) {
+        return roleWeightA - roleWeightB;
+      }
+      
+      // 3. 相同角色下，按照入職日期排序（越早越前面）
+      if (a.hire_date && b.hire_date) {
+        const dateA = new Date(a.hire_date);
+        const dateB = new Date(b.hire_date);
+        
+        if (dateA.getTime() !== dateB.getTime()) {
+          return dateA - dateB;
+        }
+      } else if (a.hire_date) {
+        return -1; // a有日期，b沒有，a排前面
+      } else if (b.hire_date) {
+        return 1;  // b有日期，a沒有，b排前面
+      }
+      
+      // 4. 相同入職日期下，按照員工編號排序（越小越前面）
+      if (a.username && b.username) {
+        const numA = parseInt(a.username, 10);
+        const numB = parseInt(b.username, 10);
+        
+        if (!isNaN(numA) && !isNaN(numB)) {
+          return numA - numB;
+        }
+        
+        // 如果不能轉為數字，就按字串比較
+        return String(a.username).localeCompare(String(b.username));
+      }
+      
+      // 5. 默認按姓名排序
+      return (a.name || '').localeCompare(b.name || '');
+    };
+    
     // 對每個身份組的護理師進行排序
     Object.keys(nursesByIdentity).forEach(identity => {
-      const orderIds = userOrder[identity] || [];
-      
-      if (orderIds.length > 0) {
-        // 如果有保存的排序，按排序順序排列
-        nursesByIdentity[identity].sort((a, b) => {
-          const indexA = orderIds.indexOf(a.id);
-          const indexB = orderIds.indexOf(b.id);
-          
-          // 如果ID不在排序列表中，放在最後
-          if (indexA === -1) return 1;
-          if (indexB === -1) return -1;
-          
-          return indexA - indexB;
-        });
-      } else {
-        // 如果沒有保存的排序，按姓名排序
-        nursesByIdentity[identity].sort((a, b) => 
-          (a.name || '').localeCompare(b.name || '')
-        );
-      }
+      // 直接使用sortNurses函數排序，不再使用userOrder
+      nursesByIdentity[identity].sort(sortNurses);
     });
     
     // 按身份權重合併所有組
@@ -419,7 +486,8 @@ const MonthlySchedule = () => {
       result.push(...nursesByIdentity[identity]);
     });
     
-    // 添加未知身份的護理師
+    // 添加未知身份的護理師（按照相同的排序規則排序後添加）
+    unknownIdentity.sort(sortNurses);
     result.push(...unknownIdentity);
     
     // 處理空的shifts數組
@@ -1073,6 +1141,7 @@ const MonthlySchedule = () => {
           <StyledTab label="常規月班表" />
           <StyledTab label="小夜班包班" />
           <StyledTab label="大夜班包班" />
+          <StyledTab label="恢復室" />
         </Tabs>
       </Box>
       
