@@ -177,7 +177,7 @@ const WeeklySchedule = () => {
     if (!monthlySchedule.length) return [];
 
     // 複製一份避免直接修改原數據
-    const sorted = [...monthlySchedule];
+    let sorted = [...monthlySchedule];
     
     // 從userStore獲取用戶排序信息
     const userStore = useUserStore.getState();

@@ -15,12 +15,22 @@ class Settings(BaseSettings):
     
     # 數據庫配置
     DATABASE_URL: str = "postgresql://anes_user:anes_password@localhost/anes_db"
-    
+
+    # 新增前端與 RP_ID 環境變數
+    FRONTEND_ORIGIN: str = "http://localhost:3000"
+    WEBAUTHN_RP_ID: str = "localhost"
+
     # CORS設置
-    BACKEND_CORS_ORIGINS: List[str] = ["http://localhost", "http://localhost:3000"]
+    BACKEND_CORS_ORIGINS: List[str] = []
+
+    WEBAUTHN_EXPECTED_ORIGIN: str = "http://localhost:3000"
 
     @field_validator("BACKEND_CORS_ORIGINS", mode="before")
-    def assemble_cors_origins(cls, v: Union[str, List[str]]) -> List[str]:
+    def assemble_cors_origins(cls, v: Union[str, List[str]], values) -> List[str]:
+        if not v or v == []:
+            # 若未指定則用 FRONTEND_ORIGIN
+            frontend = values.get("FRONTEND_ORIGIN", "http://localhost:3000")
+            return [frontend]
         if isinstance(v, str) and not v.startswith("["):
             return [i.strip() for i in v.split(",")]
         elif isinstance(v, (list, str)):

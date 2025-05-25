@@ -4,6 +4,7 @@ import axios from 'axios';
 const api = axios.create({
   baseURL: 'http://localhost:8000/api', // 後端 API 地址，添加 /api 前綴
   timeout: 10000, // 請求超時時間
+  withCredentials: true, // 預設帶上 cookie，支援 session
 });
 
 // 添加請求攔截器
@@ -44,12 +45,20 @@ api.interceptors.response.use(
         errorMessage = responseData;
       } else if (responseData && responseData.detail) {
         if (typeof responseData.detail === 'object') {
-          errorMessage = JSON.stringify(responseData.detail);
+          try {
+            errorMessage = JSON.stringify(responseData.detail);
+          } catch (e) {
+            errorMessage = '無法序列化錯誤詳情';
+          }
         } else {
           errorMessage = responseData.detail;
         }
       } else if (responseData && typeof responseData === 'object') {
-        errorMessage = JSON.stringify(responseData);
+        try {
+          errorMessage = JSON.stringify(responseData);
+        } catch (e) {
+          errorMessage = '無法序列化錯誤響應數據';
+        }
       }
       
       error.message = errorMessage;
@@ -59,8 +68,35 @@ api.interceptors.response.use(
       error.message = errorMessage;
     } else {
       // 請求設置過程中出錯
-      errorMessage = error.message || '請求處理錯誤';
+      if (typeof error === 'object' && error !== null) {
+        try {
+          // 嘗試從錯誤對象中提取有用的信息
+          if (error.message) {
+            errorMessage = error.message;
+          } else {
+            // 嘗試將整個對象序列化為字符串
+            errorMessage = JSON.stringify(error);
+          }
+        } catch (e) {
+          errorMessage = '發生無法序列化的錯誤';
+        }
+      } else {
+        errorMessage = error?.message || '請求處理錯誤';
+      }
       error.message = errorMessage;
+    }
+    
+    // 確保error是可序列化的
+    if (typeof error === 'object' && error !== null) {
+      try {
+        // 測試是否可以序列化
+        JSON.stringify(error);
+      } catch (e) {
+        // 如果不能序列化，創建一個新的Error對象
+        const serializableError = new Error(errorMessage);
+        serializableError.originalError = '原始錯誤無法序列化';
+        return Promise.reject(serializableError);
+      }
     }
     
     return Promise.reject(error);

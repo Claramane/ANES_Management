@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback, memo } from 'react';
 import { 
   Box, 
   Typography, 
@@ -91,6 +91,12 @@ const isSunday = (date) => {
   return getDay(date) === 0;
 };
 
+// 獲取星期幾名稱
+const getDayName = (day) => {
+  const dayNames = ['日', '一', '二', '三', '四', '五', '六'];
+  return dayNames[day] || '?';
+};
+
 // 加班分數計算邏輯
 const calculateOvertimeScore = (overtimeShift) => {
   switch (overtimeShift) {
@@ -153,6 +159,172 @@ const useApiCache = () => {
   return { fetchWithCache, clearCache, cache };
 };
 
+// 將OvertimeRow抽出來作為獨立組件，使用memo優化渲染
+const OvertimeRow = memo(({ 
+  dayData, 
+  canEdit, 
+  markings, 
+  onMarkStaff, 
+  isCompliant 
+}) => {
+  // 預先計算常用樣式
+  const chipStyle = useMemo(() => ({ 
+    m: 0.3, 
+    cursor: canEdit ? 'pointer' : 'default' 
+  }), [canEdit]);
+  
+  // 建立處理加班標記的回調函數
+  const handleMarkStaffCallback = useCallback((staffId) => {
+    return () => onMarkStaff(dayData.date, staffId);
+  }, [dayData.date, onMarkStaff]);
+  
+  return (
+    <TableRow 
+      sx={{ 
+        '&:nth-of-type(odd)': { bgcolor: 'rgba(0, 0, 0, 0.03)' },
+        ...(dayData.weekday === '六' ? { bgcolor: 'rgba(255, 220, 220, 0.1)' } : {})
+      }}
+    >
+      <TableCell>
+        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          {dayData.day}({dayData.weekday})
+          {isCompliant && (
+            <Tooltip title="符合加班規則">
+              <CheckCircleIcon 
+                color="success" 
+                sx={{ ml: 1, fontSize: 18 }} 
+              />
+            </Tooltip>
+          )}
+        </Box>
+      </TableCell>
+      <TableCell>
+        {dayData.staffList.length}人
+      </TableCell>
+      <TableCell>
+        {dayData.staffList.length > 0 ? (
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+            {dayData.staffList.map((staff) => {
+              const mark = markings[dayData.date]?.[staff.id] || '';
+              const chipLabel = mark ? `${staff.name}${mark}` : staff.name;
+              const isLeader = staff.identity === '麻醉科Leader';
+              
+              return (
+                <Tooltip key={staff.id} title={canEdit ? `點擊標記排序${isLeader ? ' (Leader僅手動加班)' : ''}` : "只有護理長和管理員可以修改"}>
+                  <Chip 
+                    label={chipLabel}
+                    variant={mark ? "filled" : "outlined"}
+                    color={isLeader ? "secondary" : (mark ? "primary" : "default")}
+                    size="small"
+                    onClick={canEdit ? handleMarkStaffCallback(staff.id) : undefined}
+                    sx={{ 
+                      ...chipStyle,
+                      fontWeight: mark ? 'bold' : 'normal',
+                      border: isLeader ? '1px dashed purple' : 'none'
+                    }}
+                  />
+                </Tooltip>
+              );
+            })}
+          </Box>
+        ) : (
+          <Typography variant="body2" color="text.secondary">
+            無加班人員
+          </Typography>
+        )}
+      </TableCell>
+    </TableRow>
+  );
+}, (prevProps, nextProps) => {
+  // 優化渲染，只有在必要時才重新渲染
+  return (
+    prevProps.isCompliant === nextProps.isCompliant &&
+    prevProps.canEdit === nextProps.canEdit &&
+    prevProps.dayData.date === nextProps.dayData.date &&
+    JSON.stringify(prevProps.markings[prevProps.dayData.date]) === 
+    JSON.stringify(nextProps.markings[nextProps.dayData.date])
+  );
+});
+
+// 獨立的統計行組件
+const StatRow = memo(({ staff, daysInMonth, selectedDate }) => {
+  return (
+    <TableRow 
+      sx={{ 
+        '&:nth-of-type(odd)': { bgcolor: 'rgba(0, 0, 0, 0.03)' }
+      }}
+    >
+      <TableCell component="th" scope="row">
+        {staff.name}
+      </TableCell>
+      <TableCell>
+        <Chip 
+          label={staff.totalScore} 
+          color={staff.totalScore >= 0 ? "success" : "error"}
+          size="small"
+        />
+      </TableCell>
+      {staff.dailyScores
+        .filter(dayData => {
+          // 過濾掉週日
+          const date = parseISO(dayData.date);
+          return !isSunday(date);
+        })
+        .map((dayData) => {
+          // 計算顏色 - 正分數為綠色，負分數為紅色，零分為灰色
+          let color = 'text.secondary';
+          if (dayData.score > 0) color = 'success.main';
+          if (dayData.score < 0) color = 'error.main';
+          
+          // 顯示分數
+          const displayScore = dayData.score === 0 ? 
+            '-' : 
+            dayData.score.toFixed(1);
+          
+          return (
+            <TableCell 
+              key={dayData.date} 
+              align="center"
+              sx={{ color }}
+            >
+              <Tooltip title={`班別: ${dayData.shift}${dayData.overtimeShift ? `, 加班: ${dayData.overtimeShift}` : ''}, 分數: ${dayData.score}`}>
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 24 }}>
+                    {/* 如果有加班，只顯示加班班別的藍色圓圈；否則顯示原班別 */}
+                    {dayData.overtimeShift ? (
+                      <Box 
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          width: 22,
+                          height: 22,
+                          borderRadius: '50%',
+                          bgcolor: 'primary.main',
+                          color: 'white',
+                          fontWeight: 'bold',
+                          fontSize: '0.7rem',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
+                        }}
+                      >
+                        {dayData.overtimeShift.toUpperCase()}
+                      </Box>
+                    ) : (
+                      <Typography variant="caption">
+                        {dayData.shift}
+                      </Typography>
+                    )}
+                  </Box>
+                  <Typography variant="body2">{displayScore}</Typography>
+                </Box>
+              </Tooltip>
+            </TableCell>
+          );
+        })}
+    </TableRow>
+  );
+});
+
 const OvertimeStaff = () => {
   const { 
     monthlySchedule: storeMonthlySchedule, 
@@ -182,9 +354,6 @@ const OvertimeStaff = () => {
   // 新增統計數據狀態
   const [statisticsData, setStatisticsData] = useState([]);
   const [isLoadingStatistics, setIsLoadingStatistics] = useState(false);
-  
-  // 新增年度統計相關狀態
-  // const [apiData, setApiData] = useState(null);  // 移除這行
   
   // 新增標記變更狀態
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -246,6 +415,69 @@ const OvertimeStaff = () => {
     }
   }, [selectedDate]);
 
+  // 使用 useMemo 計算 filteredSchedule
+  const filteredSchedule = useMemo(() => {
+    if (!hasSchedule || !storeMonthlySchedule || !Array.isArray(storeMonthlySchedule) || storeMonthlySchedule.length === 0) {
+      return [];
+    }
+    // 過濾出有班次數據的護理師
+    return storeMonthlySchedule.filter(nurse =>
+      nurse && nurse.shifts && Array.isArray(nurse.shifts) && nurse.shifts.length > 0
+    );
+  }, [storeMonthlySchedule, hasSchedule]);
+
+  // 使用 useMemo 計算 overtimeData
+  const overtimeData = useMemo(() => {
+    if (!hasSchedule || !storeMonthlySchedule || !Array.isArray(storeMonthlySchedule) || storeMonthlySchedule.length === 0) {
+      return {};
+    }
+    
+    const nursesWithShifts = storeMonthlySchedule.filter(nurse =>
+      nurse && nurse.shifts && Array.isArray(nurse.shifts) && nurse.shifts.length > 0
+    );
+    
+    const overtimeByDate = {};
+    for (let day = 1; day <= daysInMonth; day++) {
+      const currentDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), day);
+      if (isSunday(currentDate)) continue;
+      const dateKey = format(currentDate, 'yyyy-MM-dd');
+      const weekday = getDay(currentDate);
+      overtimeByDate[dateKey] = { date: dateKey, day: day, weekday: getDayName(weekday), staffList: [] };
+    }
+    
+    nursesWithShifts.forEach(nurse => {
+      const isAnesthesiaNurse = nurse.identity === '麻醉專科護理師' || nurse.identity === '麻醉科Leader';
+      const isNotHeadNurse = nurse.role !== 'head_nurse';
+      const isNotCC = nurse.position !== 'CC';
+      if (!isNotHeadNurse || !isNotCC || !isAnesthesiaNurse) return;
+      
+      const isLeader = nurse.identity === '麻醉科Leader';
+      if (!nurse.shifts || !Array.isArray(nurse.shifts)) return;
+      
+      nurse.shifts.forEach((shift, index) => {
+        if (shift === 'A') {
+          const day = index + 1;
+          if (day <= daysInMonth) {
+            const currentDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), day);
+            if (isSunday(currentDate)) return;
+            if (isLeader && isSaturday(currentDate)) return;
+            const dateKey = format(currentDate, 'yyyy-MM-dd');
+            if (overtimeByDate[dateKey]) {
+              overtimeByDate[dateKey].staffList.push({ 
+                id: nurse.id, 
+                name: nurse.name || nurse.full_name || '未知姓名', 
+                position: nurse.position || '一般護理師', 
+                identity: nurse.identity || '未知身份' 
+              });
+            }
+          }
+        }
+      });
+    });
+    
+    return overtimeByDate;
+  }, [storeMonthlySchedule, selectedDate, daysInMonth, hasSchedule]);
+
   // 添加臨時日期狀態
   const [tempDate, setTempDate] = useState(null);
 
@@ -269,38 +501,76 @@ const OvertimeStaff = () => {
     }
   };
 
-  // 獲取星期幾名稱
-  const getDayName = (day) => {
-    const dayNames = ['日', '一', '二', '三', '四', '五', '六'];
-    return dayNames[day] || '?';
-  };
-  
-  // 處理點擊標記
-  const handleMarkStaff = (dateKey, staffId) => {
-    try {
-      const date = parseISO(dateKey);
-      
-      // 檢查護理師信息
-      const nurse = filteredSchedule.find(n => n.id === staffId);
-      if (!nurse) {
-        logger.error(`未找到護理師數據 (staffId: ${staffId})`);
-        setApiError('未找到護理師數據');
-        setOpenSnackbar(true);
-        return;
-      }
-      
-      // 檢查是否為麻醉科Leader的情況
-      const isLeader = nurse.identity === '麻醉科Leader';
-      
-      // 處理週六的特殊邏輯，只允許有一個A班加班人員，並且麻醉科Leader不能排週六加班
-      if (isSaturday(date)) {
-        // 如果是Leader，不允許在週六加班
-        if (isLeader) {
-          setApiError('麻醉科Leader不能在週六加班');
+  // 處理點擊標記 - 已經使用useCallback優化，但進一步添加了註釋提示
+  const handleMarkStaff = useCallback(
+    (dateKey, staffId) => {
+      try {
+        const date = parseISO(dateKey);
+        
+        // 檢查護理師信息
+        const nurse = filteredSchedule.find(n => n.id === staffId);
+        if (!nurse) {
+          logger.error(`未找到護理師數據 (staffId: ${staffId})`);
+          setApiError('未找到護理師數據');
           setOpenSnackbar(true);
           return;
         }
         
+        // 檢查是否為麻醉科Leader的情況
+        const isLeader = nurse.identity === '麻醉科Leader';
+        
+        // 處理週六的特殊邏輯，只允許有一個A班加班人員，並且麻醉科Leader不能排週六加班
+        if (isSaturday(date)) {
+          // 如果是Leader，不允許在週六加班
+          if (isLeader) {
+            setApiError('麻醉科Leader不能在週六加班');
+            setOpenSnackbar(true);
+            return;
+          }
+          
+          setMarkings(prevMarkings => {
+            // 深拷貝當前標記狀態
+            const newMarkings = { ...prevMarkings };
+            
+            // 初始化該日期的標記對象，如果不存在
+            if (!newMarkings[dateKey]) {
+              newMarkings[dateKey] = {};
+            }
+            
+            // 查看該護理師當前的標記
+            const currentMark = newMarkings[dateKey][staffId] || '';
+            
+            // 檢查當天是否已有其他A班加班人員
+            const existingAStaffId = Object.entries(newMarkings[dateKey] || {})
+              .find(([id, mark]) => mark === 'A' && id !== staffId)?.[0];
+            
+            if (existingAStaffId && currentMark !== 'A') {
+              // 已有其他A班加班人員，不允許設置
+              setApiError('週六只能有一位加班人員A');
+              setOpenSnackbar(true);
+              return prevMarkings;
+            }
+            
+            // 如果當前護理師是A班，則取消標記；否則設為A班
+            if (currentMark === 'A') {
+              // 移除該護理師的標記
+              delete newMarkings[dateKey][staffId];
+              // 如果該日期沒有任何標記，則移除該日期
+              if (Object.keys(newMarkings[dateKey]).length === 0) {
+                delete newMarkings[dateKey];
+              }
+            } else {
+              // 設置為A班
+              newMarkings[dateKey][staffId] = 'A';
+            }
+            
+            return newMarkings;
+          });
+          
+          return;
+        }
+        
+        // 平日的處理邏輯（不對Leader做特殊限制）
         setMarkings(prevMarkings => {
           // 深拷貝當前標記狀態
           const newMarkings = { ...prevMarkings };
@@ -310,89 +580,48 @@ const OvertimeStaff = () => {
             newMarkings[dateKey] = {};
           }
           
-          // 查看該護理師當前的標記
+          // 獲取該員工當前的標記
           const currentMark = newMarkings[dateKey][staffId] || '';
           
-          // 檢查當天是否已有其他A班加班人員
-          const existingAStaffId = Object.entries(newMarkings[dateKey] || {})
-            .find(([id, mark]) => mark === 'A' && id !== staffId)?.[0];
+          // 獲取該日期已使用的所有標記
+          const usedMarks = Object.values(newMarkings[dateKey]);
           
-          if (existingAStaffId && currentMark !== 'A') {
-            // 已有其他A班加班人員，不允許設置
-            setApiError('週六只能有一位加班人員A');
-            setOpenSnackbar(true);
-            return prevMarkings;
+          // 找出下一個可用標記
+          let nextMarkIndex = MARK_SEQUENCE.indexOf(currentMark) + 1;
+          if (nextMarkIndex >= MARK_SEQUENCE.length) {
+            nextMarkIndex = 0;
           }
           
-          // 如果當前護理師是A班，則取消標記；否則設為A班
-          if (currentMark === 'A') {
-            // 移除該護理師的標記
+          let nextMark = MARK_SEQUENCE[nextMarkIndex];
+          
+          // 如果下一個標記已被使用且不為空，則繼續尋找下一個未使用的標記
+          while (nextMark !== '' && usedMarks.includes(nextMark)) {
+            nextMarkIndex = (nextMarkIndex + 1) % MARK_SEQUENCE.length;
+            nextMark = MARK_SEQUENCE[nextMarkIndex];
+          }
+          
+          // 更新標記
+          if (nextMark === '') {
+            // 如果是空標記，則移除該員工的標記
             delete newMarkings[dateKey][staffId];
             // 如果該日期沒有任何標記，則移除該日期
             if (Object.keys(newMarkings[dateKey]).length === 0) {
               delete newMarkings[dateKey];
             }
           } else {
-            // 設置為A班
-            newMarkings[dateKey][staffId] = 'A';
+            newMarkings[dateKey][staffId] = nextMark;
           }
           
           return newMarkings;
         });
-        
-        return;
+      } catch (error) {
+        logger.error('處理標記時出錯:', error);
+        setApiError('處理標記時發生錯誤');
+        setOpenSnackbar(true);
       }
-      
-      // 平日的處理邏輯（不對Leader做特殊限制）
-      setMarkings(prevMarkings => {
-        // 深拷貝當前標記狀態
-        const newMarkings = { ...prevMarkings };
-        
-        // 初始化該日期的標記對象，如果不存在
-        if (!newMarkings[dateKey]) {
-          newMarkings[dateKey] = {};
-        }
-        
-        // 獲取該員工當前的標記
-        const currentMark = newMarkings[dateKey][staffId] || '';
-        
-        // 獲取該日期已使用的所有標記
-        const usedMarks = Object.values(newMarkings[dateKey]);
-        
-        // 找出下一個可用標記
-        let nextMarkIndex = MARK_SEQUENCE.indexOf(currentMark) + 1;
-        if (nextMarkIndex >= MARK_SEQUENCE.length) {
-          nextMarkIndex = 0;
-        }
-        
-        let nextMark = MARK_SEQUENCE[nextMarkIndex];
-        
-        // 如果下一個標記已被使用且不為空，則繼續尋找下一個未使用的標記
-        while (nextMark !== '' && usedMarks.includes(nextMark)) {
-          nextMarkIndex = (nextMarkIndex + 1) % MARK_SEQUENCE.length;
-          nextMark = MARK_SEQUENCE[nextMarkIndex];
-        }
-        
-        // 更新標記
-        if (nextMark === '') {
-          // 如果是空標記，則移除該員工的標記
-          delete newMarkings[dateKey][staffId];
-          // 如果該日期沒有任何標記，則移除該日期
-          if (Object.keys(newMarkings[dateKey]).length === 0) {
-            delete newMarkings[dateKey];
-          }
-        } else {
-          newMarkings[dateKey][staffId] = nextMark;
-        }
-        
-        return newMarkings;
-      });
-    } catch (error) {
-      logger.error('處理標記時出錯:', error);
-      setApiError('處理標記時發生錯誤');
-      setOpenSnackbar(true);
-    }
-  };
+    },
+    [filteredSchedule]
+  );
 
   // 保存加班記錄 - 優化版本
   const saveOvertimeRecords = async () => {
@@ -655,7 +884,7 @@ const OvertimeStaff = () => {
         logger.success('成功獲取加班記錄', { 記錄數量: response.data.length });
         processApiData(response.data);
       } else {
-        logger.error('API 返回的數據格式不正確:', response);
+        logger.warn('API返回的數據結構異常或為空');
       }
       
       return Promise.resolve(markings);
@@ -758,69 +987,6 @@ const OvertimeStaff = () => {
       loadData();
     }
   }, [scheduleLoaded, hasSchedule]); // 只依賴這兩個狀態，避免多餘的加載
-
-  // 使用 useMemo 代替 useEffect 處理 filteredSchedule 和 overtimeData
-  const filteredSchedule = useMemo(() => {
-    if (!hasSchedule || !storeMonthlySchedule || !Array.isArray(storeMonthlySchedule) || storeMonthlySchedule.length === 0) {
-      return [];
-    }
-    // 過濾出有班次數據的護理師
-    return storeMonthlySchedule.filter(nurse =>
-      nurse && nurse.shifts && Array.isArray(nurse.shifts) && nurse.shifts.length > 0
-    );
-  }, [storeMonthlySchedule, hasSchedule]);
-  
-  // 使用 useMemo 計算 overtimeData
-  const overtimeData = useMemo(() => {
-    if (!hasSchedule || !storeMonthlySchedule || !Array.isArray(storeMonthlySchedule) || storeMonthlySchedule.length === 0) {
-      return {};
-    }
-    
-    const nursesWithShifts = storeMonthlySchedule.filter(nurse =>
-      nurse && nurse.shifts && Array.isArray(nurse.shifts) && nurse.shifts.length > 0
-    );
-    
-    const overtimeByDate = {};
-    for (let day = 1; day <= daysInMonth; day++) {
-      const currentDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), day);
-      if (isSunday(currentDate)) continue;
-      const dateKey = format(currentDate, 'yyyy-MM-dd');
-      const weekday = getDay(currentDate);
-      overtimeByDate[dateKey] = { date: dateKey, day: day, weekday: getDayName(weekday), staffList: [] };
-    }
-    
-    nursesWithShifts.forEach(nurse => {
-      const isAnesthesiaNurse = nurse.identity === '麻醉專科護理師' || nurse.identity === '麻醉科Leader';
-      const isNotHeadNurse = nurse.role !== 'head_nurse';
-      const isNotCC = nurse.position !== 'CC';
-      if (!isNotHeadNurse || !isNotCC || !isAnesthesiaNurse) return;
-      
-      const isLeader = nurse.identity === '麻醉科Leader';
-      if (!nurse.shifts || !Array.isArray(nurse.shifts)) return;
-      
-      nurse.shifts.forEach((shift, index) => {
-        if (shift === 'A') {
-          const day = index + 1;
-          if (day <= daysInMonth) {
-            const currentDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), day);
-            if (isSunday(currentDate)) return;
-            if (isLeader && isSaturday(currentDate)) return;
-            const dateKey = format(currentDate, 'yyyy-MM-dd');
-            if (overtimeByDate[dateKey]) {
-              overtimeByDate[dateKey].staffList.push({ 
-                id: nurse.id, 
-                name: nurse.name || nurse.full_name || '未知姓名', 
-                position: nurse.position || '一般護理師', 
-                identity: nurse.identity || '未知身份' 
-              });
-            }
-          }
-        }
-      });
-    });
-    
-    return overtimeByDate;
-  }, [storeMonthlySchedule, selectedDate, daysInMonth, hasSchedule]);
 
   // 優化：當標記變更時重新生成統計 - 減少不必要的依賴
   useEffect(() => {
@@ -1735,6 +1901,23 @@ const OvertimeStaff = () => {
     };
   }, []);
 
+  // 使用 useMemo 計算每天的加班合規性，避免重複計算
+  const complianceMap = useMemo(() => {
+    const map = {};
+    Object.keys(markings).forEach(dateKey => {
+      map[dateKey] = checkDateCompliance(dateKey, markings[dateKey]);
+    });
+    return map;
+  }, [markings]);
+
+  // 預先定義通用樣式
+  const tableCellSx = useMemo(() => ({ padding: '10px 16px' }), []);
+  const tableHeaderSx = useMemo(() => ({ 
+    fontWeight: 'bold', 
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    ...tableCellSx
+  }), [tableCellSx]);
+
   return (
     <Box sx={{ padding: 2 }}>
       <Typography variant="h4" gutterBottom>
@@ -1828,12 +2011,6 @@ const OvertimeStaff = () => {
         </Alert>
       )}
       
-      {(isLoading || isLoadingOvertimeRecords) && (
-        <Box sx={{ display: 'flex', justifyContent: 'center', my: 2 }}>
-          <CircularProgress />
-        </Box>
-      )}
-      
       {storeError && (
         <Alert severity="error" sx={{ mb: 2 }}>
           {formatErrorMessage(storeError)}
@@ -1858,84 +2035,30 @@ const OvertimeStaff = () => {
           <Table stickyHeader aria-label="加班人員列表">
             <TableHead>
               <TableRow>
-                <TableCell width="150px">日期</TableCell>
-                <TableCell width="80px">人數</TableCell>
-                <TableCell>加班人員</TableCell>
+                <TableCell width="150px" sx={tableHeaderSx}>日期</TableCell>
+                <TableCell width="80px" sx={tableHeaderSx}>人數</TableCell>
+                <TableCell sx={tableHeaderSx}>加班人員</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {Object.values(overtimeData)
                 .sort((a, b) => a.day - b.day) // 確保按日期排序
-                .map((dayData) => {
-                  // 檢查該日期是否符合加班規則
-                  const isCompliant = checkDateCompliance(dayData.date, markings[dayData.date]);
-                  
-                  return (
-                    <TableRow 
-                      key={dayData.date}
-                      sx={{ 
-                        '&:nth-of-type(odd)': { bgcolor: 'rgba(0, 0, 0, 0.03)' },
-                        ...(dayData.weekday === '六' ? { bgcolor: 'rgba(255, 220, 220, 0.1)' } : {})
-                      }}
-                    >
-                      <TableCell>
-                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                          {selectedDate.getMonth() + 1}/{dayData.day}({dayData.weekday})
-                          {isCompliant && (
-                            <Tooltip title="符合加班規則">
-                              <CheckCircleIcon 
-                                color="success" 
-                                sx={{ ml: 1, fontSize: 18 }} 
-                              />
-                            </Tooltip>
-                          )}
-                        </Box>
-                      </TableCell>
-                      <TableCell>
-                        {dayData.staffList.length}人
-                      </TableCell>
-                      <TableCell>
-                        {dayData.staffList.length > 0 ? (
-                          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                            {dayData.staffList.map((staff) => {
-                              const mark = markings[dayData.date]?.[staff.id] || '';
-                              const chipLabel = mark ? `${staff.name}${mark}` : staff.name;
-                              const isLeader = staff.identity === '麻醉科Leader';
-                              
-                              return (
-                                <Tooltip key={staff.id} title={canEdit ? `點擊標記排序${isLeader ? ' (Leader僅手動加班)' : ''}` : "只有護理長和管理員可以修改"}>
-                                  <Chip 
-                                    label={chipLabel}
-                                    variant={mark ? "filled" : "outlined"}
-                                    color={isLeader ? "secondary" : (mark ? "primary" : "default")}
-                                    size="small"
-                                    onClick={canEdit ? () => handleMarkStaff(dayData.date, staff.id) : undefined}
-                                    sx={{ 
-                                      m: 0.3, 
-                                      cursor: canEdit ? 'pointer' : 'default',
-                                      fontWeight: mark ? 'bold' : 'normal',
-                                      border: isLeader ? '1px dashed purple' : 'none'
-                                    }}
-                                  />
-                                </Tooltip>
-                              );
-                            })}
-                          </Box>
-                        ) : (
-                          <Typography variant="body2" color="text.secondary">
-                            無加班人員
-                          </Typography>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
+                .map((dayData) => (
+                  <OvertimeRow
+                    key={dayData.date}
+                    dayData={dayData}
+                    canEdit={canEdit}
+                    markings={markings}
+                    onMarkStaff={handleMarkStaff}
+                    isCompliant={complianceMap[dayData.date]}
+                  />
+                ))}
             </TableBody>
           </Table>
         </TableContainer>
       )}
       
-      {/* 加班統計表格 - 只有當班表存在時才顯示 */}
+      {/* 加班統計表格 - 使用優化的StatRow組件 */}
       {hasSchedule && (
         <>
           <Divider sx={{ my: 4 }} />
@@ -1949,21 +2072,14 @@ const OvertimeStaff = () => {
             統計規則：A班加班 = 1.0分，B班加班 = 0.8分，C班加班 = 0.7分，D班加班 = 0.2分，E和F班加班 = 0分，白班未排加班 = -0.3分，夜班或休假 = 0分。每月分數需保持在±{scoreLimit.toFixed(1)}分以內。
           </Alert>
           
-          {/* 載入狀態 */}
-          {(isLoading || isLoadingStatistics) && (
-            <Box sx={{ display: 'flex', justifyContent: 'center', my: 2 }}>
-              <CircularProgress />
-            </Box>
-          )}
-          
           {/* 月度加班統計表 */}
           {!isLoading && !isLoadingStatistics && statisticsData.length > 0 && (
             <TableContainer component={Paper} sx={{ mt: 2 }}>
               <Table stickyHeader aria-label="加班統計表格">
                 <TableHead>
                   <TableRow>
-                    <TableCell>護理師</TableCell>
-                    <TableCell>總分</TableCell>
+                    <TableCell sx={tableHeaderSx}>護理師</TableCell>
+                    <TableCell sx={tableHeaderSx}>總分</TableCell>
                     {[...Array(daysInMonth)].map((_, index) => {
                       const day = index + 1;
                       const currentDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), day);
@@ -1975,7 +2091,7 @@ const OvertimeStaff = () => {
                       
                       const weekday = getDayName(getDay(currentDate));
                       return (
-                        <TableCell key={day} align="center">
+                        <TableCell key={day} align="center" sx={tableHeaderSx}>
                           {day}<br/>({weekday})
                         </TableCell>
                       );
@@ -1984,80 +2100,12 @@ const OvertimeStaff = () => {
                 </TableHead>
                 <TableBody>
                   {statisticsData.map((staff) => (
-                    <TableRow 
+                    <StatRow
                       key={staff.id}
-                      sx={{ 
-                        '&:nth-of-type(odd)': { bgcolor: 'rgba(0, 0, 0, 0.03)' }
-                      }}
-                    >
-                      <TableCell component="th" scope="row">
-                        {staff.name}
-                      </TableCell>
-                      <TableCell>
-                        <Chip 
-                          label={staff.totalScore} 
-                          color={staff.totalScore >= 0 ? "success" : "error"}
-                          size="small"
-                        />
-                      </TableCell>
-                      {staff.dailyScores
-                        .filter(dayData => {
-                          // 過濾掉週日
-                          const date = parseISO(dayData.date);
-                          return !isSunday(date);
-                        })
-                        .map((dayData) => {
-                          // 計算顏色 - 正分數為綠色，負分數為紅色，零分為灰色
-                          let color = 'text.secondary';
-                          if (dayData.score > 0) color = 'success.main';
-                          if (dayData.score < 0) color = 'error.main';
-                          
-                          // 顯示分數
-                          const displayScore = dayData.score === 0 ? 
-                            '-' : 
-                            dayData.score.toFixed(1);
-                          
-                          return (
-                            <TableCell 
-                              key={dayData.date} 
-                              align="center"
-                              sx={{ color }}
-                            >
-                              <Tooltip title={`班別: ${dayData.shift}${dayData.overtimeShift ? `, 加班: ${dayData.overtimeShift}` : ''}, 分數: ${dayData.score}`}>
-                                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5 }}>
-                                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 24 }}>
-                                    {/* 如果有加班，只顯示加班班別的藍色圓圈；否則顯示原班別 */}
-                                    {dayData.overtimeShift ? (
-                                      <Box 
-                                        sx={{
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          justifyContent: 'center',
-                                          width: 22,
-                                          height: 22,
-                                          borderRadius: '50%',
-                                          bgcolor: 'primary.main',
-                                          color: 'white',
-                                          fontWeight: 'bold',
-                                          fontSize: '0.7rem',
-                                          boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
-                                        }}
-                                      >
-                                        {dayData.overtimeShift.toUpperCase()}
-                                      </Box>
-                                    ) : (
-                                      <Typography variant="caption">
-                                        {dayData.shift}
-                                      </Typography>
-                                    )}
-                                  </Box>
-                                  <Typography variant="body2">{displayScore}</Typography>
-                                </Box>
-                              </Tooltip>
-                            </TableCell>
-                          );
-                        })}
-                    </TableRow>
+                      staff={staff}
+                      daysInMonth={daysInMonth}
+                      selectedDate={selectedDate}
+                    />
                   ))}
                 </TableBody>
               </Table>

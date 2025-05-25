@@ -63,7 +63,7 @@ function Layout() {
     navigate('/login');
   };
 
-  // 所有用戶的選單
+  // 一般選單項目
   const menuItems = [
     { text: '儀表板', icon: <DashboardIcon />, path: '/dashboard' },
     { text: '週班表', icon: <ViewWeekIcon />, path: '/weekly-schedule' },
@@ -97,7 +97,6 @@ function Layout() {
           }}
         >
           恩主公麻醉科
-
         </Typography>
       </Toolbar>
       <Divider />
@@ -258,9 +257,13 @@ function Layout() {
       </Box>
       <Box
         component="main"
-        sx={{ flexGrow: 1, p: 3, width: { sm: `calc(100% - ${drawerWidth}px)` } }}
+        sx={{
+          flexGrow: 1,
+          p: 3,
+          width: { sm: `calc(100% - ${drawerWidth}px)` },
+          mt: '64px',
+        }}
       >
-        <Toolbar />
         <Outlet />
       </Box>
     </Box>

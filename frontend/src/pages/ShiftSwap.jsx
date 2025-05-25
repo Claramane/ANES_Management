@@ -3555,6 +3555,7 @@ const ShiftSwap = () => {
                             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                               <Typography 
                                 variant="subtitle1"
+                                component="span"
                                 sx={{
                                   fontWeight: 'bold',
                                   // 已取消、已過期、已駁回的請求標題淡化
@@ -3578,8 +3579,8 @@ const ShiftSwap = () => {
                             </Box>
                           }
                           secondary={
-                            <Box sx={{ color: isFaded ? '#bdbdbd' : 'inherit' }}>
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Box component="div" sx={{ color: isFaded ? '#bdbdbd' : 'inherit' }}>
+                              <Box component="div" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                 <Typography variant="body2" component="span">
                                   {request.from_date || '未知日期'}
                                 </Typography>

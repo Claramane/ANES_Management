@@ -12,4 +12,6 @@ pytest==7.4.2
 httpx==0.24.1
 SQLAlchemy-Utils==0.41.1
 python-dotenv==1.0.0
-email-validator==2.2.0 
+email-validator==2.2.0
+webauthn==2.5.2
+cryptography>=41.0.0 

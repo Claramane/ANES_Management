@@ -22,7 +22,6 @@ import {
   ListItemText,
   Divider,
   Chip,
-  OutlinedInput,
   Checkbox,
   Badge,
   FormControlLabel,
@@ -30,7 +29,7 @@ import {
   Pagination
 } from '@mui/material';
 import { Close as CloseIcon, Add as AddIcon, FilterList as FilterListIcon } from '@mui/icons-material';
-import { format, parseISO, isWithinInterval, startOfDay, endOfDay } from 'date-fns';
+import { format, startOfDay, endOfDay } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -418,7 +417,7 @@ const Announcement = () => {
                     <ListItemText
                       primary={
                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                             <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>{ann.title}</Typography>
+                             <Typography variant="subtitle1" component="span" sx={{ fontWeight: 'bold' }}>{ann.title}</Typography>
                              <Chip 
                                label={ann.category} 
                                size="small" 
