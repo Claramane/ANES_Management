@@ -70,76 +70,100 @@
 
 ### 後端 (Backend)
 ```
-backend/
-├── app/
-│   ├── core/          # 核心功能：設置、安全性、數據庫連接等
-│   ├── models/        # 數據庫模型定義 (SQLAlchemy)
-│   │   ├── user.py    # 用戶模型
-│   │   ├── schedule.py # 班表模型
-│   │   ├── formula.py # 公式班表與模式模型
-│   │   ├── shift_swap.py # 換班模型
-│   │   ├── announcement.py # 公告模型
-│   │   ├── overtime.py # 加班記錄模型
-│   │   └── log.py     # 日誌模型
-│   ├── routes/        # API 路由 (FastAPI)
-│   │   ├── users.py   # 用戶相關 API
-│   │   ├── schedules.py # 班表相關 API
-│   │   ├── formula_schedules.py # 公式班表相關 API
-│   │   ├── overtime.py # 加班記錄相關 API
-│   │   └── announcements.py # 公告相關 API
-│   ├── schemas/       # Pydantic 模型（資料驗證）
-│   │   ├── user.py
-│   │   ├── schedule.py
-│   │   ├── shift_swap.py
-│   │   ├── overtime.py
-│   │   └── announcement.py
-│   └── main.py        # 主應用入口 (FastAPI App)
-├── migrations/        # 數據庫遷移腳本
-├── scripts/           # 輔助腳本 (例如，數據遷移、檢查)
-├── init_db.py         # 數據庫初始化腳本
-├── requirements.txt   # Python 依賴項
-├── .env.example       # 環境變數範例檔
-└── run.py             # Gunicorn 啟動腳本
+backend
+├── app
+│   ├── core
+│   │   ├── config.py
+│   │   ├── database.py
+│   │   └── security.py
+│   ├── models
+│   │   ├── __init__.py
+│   │   ├── announcement.py
+│   │   ├── formula.py
+│   │   ├── log.py
+│   │   ├── overtime.py
+│   │   ├── schedule.py
+│   │   ├── shift_swap.py
+│   │   ├── user.py
+│   │   └── webauthn.py
+│   ├── routes
+│   │   ├── __init__.py
+│   │   ├── announcements.py
+│   │   ├── formula_schedules.py
+│   │   ├── overtime.py
+│   │   ├── schedules.py
+│   │   ├── shift_swap.py
+│   │   ├── users.py
+│   │   └── webauthn.py
+│   └── schemas
+│       ├── __init__.py
+│       ├── announcement.py
+│       ├── overtime.py
+│       ├── schedule.py
+│       ├── shift_swap.py
+│       ├── user.py
+│       └── webauthn.py
+├── check_users.py
+├── create_tables.py
+├── init_db.py
+├── main.py
+├── migrations
+│   ├── add_hire_date.sql
+│   ├── add_is_pinned_to_announcements.py
+│   ├── add_special_type_to_schedules.py
+│   └── initial_data.py
+├── requirements.txt
+└── scripts
+    ├── reset_logs.py
+    └── run_reset_logs.sh
+
+8 directories, 38 files
 ```
 
 ### 前端 (Frontend)
 ```
-frontend/
-├── public/           # 靜態資源 (例如 index.html, favicons)
-├── src/
-│   ├── assets/       # 圖片、字體等資源
-│   ├── components/   # 可重用 React 組件
-│   │   └── Layout.jsx   # 主要頁面佈局
-│   │   └── OvertimeStaff.jsx # 加班人員相關組件 (可能需要移動到 pages 或更具體目錄)
-│   ├── pages/        # 頁面級 React 組件
-│   │   ├── Login.jsx           # 登入頁
-│   │   ├── Dashboard.jsx       # 儀表板
-│   │   ├── UserManagement.jsx  # 用戶管理
-│   │   ├── Formula.jsx         # 公式班表設定頁
-│   │   ├── MonthlySchedule.jsx # 月班表頁
-│   │   ├── WeeklySchedule.jsx  # 週班表與工作分配頁
-│   │   ├── BigSchedule.jsx     # 大班表頁
-│   │   ├── OvertimeStaff.jsx   # 加班人員管理頁
-│   │   ├── ShiftSwap.jsx       # 換班管理頁
-│   │   ├── Announcement.jsx    # 公告列表頁
-│   │   ├── PublishAnnouncementForm.jsx # 發布公告表單
-│   │   ├── VersionHistory.jsx  # 版本歷史頁 (班表)
-│   │   ├── Settings.jsx        # 設置頁
-│   │   └── NotFound.jsx        # 404 頁面
-│   ├── store/        # 狀態管理 (Zustand)
-│   │   ├── authStore.js      # 認證狀態
-│   │   ├── userStore.js      # 用戶狀態
-│   │   ├── scheduleStore.js  # 班表狀態
-│   │   └── settingsStore.js  # 設置狀態
-│   ├── utils/        # 工具函數
-│   │   ├── api.js    # API 請求封裝 (Axios)
-│   │   └── migrateFormulaPatternsData.js # 數據遷移相關工具
-│   ├── App.jsx       # 應用主組件 (路由配置)
-│   ├── index.jsx     # React 應用渲染入口
-│   ├── index.css     # 全局樣式
-│   └── reportWebVitals.js # 性能監測
-├── package.json      # Node.js 項目配置與依賴
-└── .gitignore        # Git 忽略配置
+frontend
+├── package-lock.json
+├── package.json
+├── public
+│   ├── favicon.ico
+│   ├── index.html
+│   └── manifest.json
+├── src
+│   ├── App.jsx
+│   ├── components
+│   │   ├── Layout.jsx
+│   │   └── OvertimeStaff.jsx
+│   ├── index.css
+│   ├── index.jsx
+│   ├── pages
+│   │   ├── Announcement.jsx
+│   │   ├── BigSchedule.jsx
+│   │   ├── Dashboard.jsx
+│   │   ├── Formula.jsx
+│   │   ├── Login.jsx
+│   │   ├── MonthlySchedule.jsx
+│   │   ├── NotFound.jsx
+│   │   ├── OvertimeStaff.jsx
+│   │   ├── PublishAnnouncementForm.jsx
+│   │   ├── Settings.jsx
+│   │   ├── ShiftSwap.jsx
+│   │   ├── StrictModeDroppable.jsx
+│   │   ├── UserManagement.jsx
+│   │   ├── VersionHistory.jsx
+│   │   └── WeeklySchedule.jsx
+│   ├── reportWebVitals.js
+│   ├── store
+│   │   ├── authStore.js
+│   │   ├── scheduleStore.js
+│   │   ├── settingsStore.js
+│   │   └── userStore.js
+│   └── utils
+│       ├── api.js
+│       └── migrateFormulaPatternsData.js
+└── temp_file.jsx
+
+7 directories, 33 files
 ```
 
 ## 技術架構與設計邏輯
