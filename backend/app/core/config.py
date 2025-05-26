@@ -1,3 +1,19 @@
+# 本設定檔所有欄位皆可用環境變數（.env）覆蓋
+# 建議務必在.env中設置SECRET_KEY，避免每次啟動隨機產生
+# 例如：
+# APP_NAME=恩主公麻醉科班表管理系統
+# SECRET_KEY=your-very-secret-key
+# ALGORITHM=HS256
+# ACCESS_TOKEN_EXPIRE_MINUTES=525600
+# DEBUG=false
+# DATABASE_URL=postgresql://anes_user:anes_password@localhost/anes_db
+# FRONTEND_ORIGIN=http://localhost:3000
+# WEBAUTHN_RP_ID=localhost
+# BACKEND_CORS_ORIGINS=http://localhost:3000
+# WEBAUTHN_EXPECTED_ORIGIN=http://localhost:3000
+# ADMIN_USERNAME=admin
+# ADMIN_PASSWORD=changeme
+
 import os
 import secrets
 from typing import List, Union, Optional
@@ -8,7 +24,7 @@ class Settings(BaseSettings):
     APP_NAME: str = "恩主公麻醉科班表管理系統"
     SECRET_KEY: str = secrets.token_urlsafe(32)
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 525600  # 修改為 525600 分鐘 (一年)，實現長期登入狀態
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 480  # 修改為 480 分鐘 (8小時)，提升安全性
     
     # 應用配置
     DEBUG: bool = False
@@ -26,10 +42,10 @@ class Settings(BaseSettings):
     WEBAUTHN_EXPECTED_ORIGIN: str = "http://localhost:3000"
 
     @field_validator("BACKEND_CORS_ORIGINS", mode="before")
-    def assemble_cors_origins(cls, v: Union[str, List[str]], values) -> List[str]:
+    def assemble_cors_origins(cls, v: Union[str, List[str]], info) -> List[str]:
         if not v or v == []:
             # 若未指定則用 FRONTEND_ORIGIN
-            frontend = values.get("FRONTEND_ORIGIN", "http://localhost:3000")
+            frontend = info.data.get("FRONTEND_ORIGIN", "http://localhost:3000")
             return [frontend]
         if isinstance(v, str) and not v.startswith("["):
             return [i.strip() for i in v.split(",")]

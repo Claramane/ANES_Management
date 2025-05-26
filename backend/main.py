@@ -1,8 +1,11 @@
+from dotenv import load_dotenv
+load_dotenv()
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import logging
 import uvicorn
 from starlette.middleware.sessions import SessionMiddleware
+from sqlalchemy import text
 
 from app.core.config import settings
 from app.core.database import engine, Base
@@ -35,8 +38,21 @@ for router in routers:
 
 @app.on_event("startup")
 async def startup_event():
-    Base.metadata.create_all(bind=engine)
-    logger.info("應用啟動，數據庫表已創建")
+    try:
+        # 測試資料庫連接
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+            db_name = engine.url.database
+            logger.info(f"資料庫連接成功，資料庫名稱：{db_name}")
+        # 列出所有 ORM 定義的表名
+        table_names = list(Base.metadata.tables.keys())
+        logger.info(f"預期建立的資料表：{table_names}")
+        # 創建資料庫表
+        Base.metadata.create_all(bind=engine)
+        logger.info("資料表建立流程完成（如表已存在則不會重複建立）")
+    except Exception as e:
+        logger.error(f"資料庫連接失敗: {str(e)}")
+        raise Exception("無法連接到資料庫，請檢查資料庫配置和連接狀態")
 
 @app.get("/")
 async def root():
