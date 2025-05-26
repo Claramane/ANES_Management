@@ -20,7 +20,7 @@ import {
 } from '@mui/material';
 import {
   Menu as MenuIcon,
-  Dashboard as DashboardIcon,
+  Home as HomeIcon,
   Event as EventIcon,
   CalendarMonth as CalendarMonthIcon,
   ViewWeek as ViewWeekIcon,
@@ -42,12 +42,17 @@ function Layout() {
   const location = useLocation();
   const { user, logout } = useAuthStore();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [desktopOpen, setDesktopOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);
 
   const isHeadNurse = user?.role === 'head_nurse' || user?.role === 'admin';
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
+  };
+
+  const handleDesktopDrawerToggle = () => {
+    setDesktopOpen(!desktopOpen);
   };
 
   const handleProfileMenuOpen = (event) => {
@@ -65,10 +70,10 @@ function Layout() {
 
   // 一般選單項目
   const menuItems = [
-    { text: '儀表板', icon: <DashboardIcon />, path: '/dashboard' },
+    { text: '首頁', icon: <HomeIcon />, path: '/dashboard' },
     { text: '週班表', icon: <ViewWeekIcon />, path: '/weekly-schedule' },
     { text: '月班表', icon: <CalendarMonthIcon />, path: '/monthly-schedule' },
-    { text: '大班表', icon: <EventIcon />, path: '/big-schedule' },
+    // { text: '大班表', icon: <EventIcon />, path: '/big-schedule' },
     { text: '換班申請', icon: <SyncIcon />, path: '/shift-swap' },
     { text: '加班人員', icon: <WorkIcon />, path: '/overtime-staff' },
     { text: '公告專區', icon: <AnnouncementIcon />, path: '/announcements' },
@@ -78,7 +83,7 @@ function Layout() {
   // 護理長專用選單 
   const headNurseMenuItems = [
     { text: '公式班表', icon: <EventIcon />, path: '/formula' },
-    { text: '用戶管理', icon: <PeopleIcon />, path: '/users' },
+    { text: '用戶管理', icon: <PeopleIcon />, path: '/user-management' },
     { text: '系統設定', icon: <SettingsIcon />, path: '/settings' },
   ];
 
@@ -108,6 +113,7 @@ function Layout() {
               onClick={() => {
                 navigate(item.path);
                 setMobileOpen(false);
+                setDesktopOpen(false);
               }}
             >
               <ListItemIcon>{item.icon}</ListItemIcon>
@@ -127,6 +133,7 @@ function Layout() {
                   onClick={() => {
                     navigate(item.path);
                     setMobileOpen(false);
+                    setDesktopOpen(false);
                   }}
                 >
                   <ListItemIcon>{item.icon}</ListItemIcon>
@@ -146,8 +153,8 @@ function Layout() {
       <AppBar
         position="fixed"
         sx={{
-          width: { sm: `calc(100% - ${drawerWidth}px)` },
-          ml: { sm: `${drawerWidth}px` },
+          width: '100%',
+          ml: 0,
         }}
       >
         <Toolbar>
@@ -157,6 +164,15 @@ function Layout() {
             edge="start"
             onClick={handleDrawerToggle}
             sx={{ mr: 2, display: { sm: 'none' } }}
+          >
+            <MenuIcon />
+          </IconButton>
+          <IconButton
+            color="inherit"
+            aria-label="open drawer"
+            edge="start"
+            onClick={handleDesktopDrawerToggle}
+            sx={{ mr: 2, display: { xs: 'none', sm: 'block' } }}
           >
             <MenuIcon />
           </IconButton>
@@ -225,7 +241,7 @@ function Layout() {
       </AppBar>
       <Box
         component="nav"
-        sx={{ width: { sm: drawerWidth }, flexShrink: { sm: 0 } }}
+        sx={{ width: 0, flexShrink: { sm: 0 } }}
         aria-label="mailbox folders"
       >
         {/* 手機版導航抽屜 */}
@@ -234,7 +250,7 @@ function Layout() {
           open={mobileOpen}
           onClose={handleDrawerToggle}
           ModalProps={{
-            keepMounted: true, // 更好的移動端性能
+            keepMounted: true,
           }}
           sx={{
             display: { xs: 'block', sm: 'none' },
@@ -243,14 +259,18 @@ function Layout() {
         >
           {drawer}
         </Drawer>
-        {/* 桌面版固定導航 */}
+        {/* 桌面版也用 temporary 抽屜 */}
         <Drawer
-          variant="permanent"
+          variant="temporary"
+          open={desktopOpen}
+          onClose={handleDesktopDrawerToggle}
+          ModalProps={{
+            keepMounted: true,
+          }}
           sx={{
             display: { xs: 'none', sm: 'block' },
             '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidth },
           }}
-          open
         >
           {drawer}
         </Drawer>
@@ -260,7 +280,8 @@ function Layout() {
         sx={{
           flexGrow: 1,
           p: 3,
-          width: { sm: `calc(100% - ${drawerWidth}px)` },
+          width: '100%',
+          ml: 0,
           mt: '64px',
         }}
       >
