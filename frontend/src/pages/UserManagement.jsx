@@ -31,6 +31,7 @@ import {
 import AddIcon from '@mui/icons-material/Add';
 import BlockIcon from '@mui/icons-material/Block';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import CancelIcon from '@mui/icons-material/Cancel';
 import { useUserStore } from '../store/userStore';
 
 const UserManagement = () => {
@@ -554,19 +555,13 @@ const UserManagement = () => {
                   <TableCell>{user.full_name}</TableCell>
                   <TableCell>
                     {user.is_active === false ? (
-                      <Chip 
-                        label="停權" 
-                        color="error" 
-                        size="small"
-                        icon={<BlockIcon />}
-                      />
+                      <Tooltip title="停權">
+                        <CancelIcon sx={{ color: '#f44336', fontSize: 24 }} />
+                      </Tooltip>
                     ) : (
-                      <Chip 
-                        label="正常" 
-                        color="success" 
-                        size="small"
-                        icon={<CheckCircleIcon />}
-                      />
+                      <Tooltip title="正常">
+                        <CheckCircleIcon sx={{ color: '#4caf50', fontSize: 24 }} />
+                      </Tooltip>
                     )}
                   </TableCell>
                   <TableCell>

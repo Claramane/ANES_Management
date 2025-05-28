@@ -131,6 +131,7 @@ const MonthlySchedule = () => {
   
   // 新增對話框狀態
   const [openEmptyScheduleDialog, setOpenEmptyScheduleDialog] = useState(false);
+  const [openResetDialog, setOpenResetDialog] = useState(false);
   const [pendingDate, setPendingDate] = useState(null);
   
   // 添加快速編輯狀態管理
@@ -149,6 +150,8 @@ const MonthlySchedule = () => {
   const handleCloseGenerateDialog = () => setOpenGenerateDialog(false);
   const handleOpenSaveDialog = () => setOpenSaveDialog(true);
   const handleCloseSaveDialog = () => setOpenSaveDialog(false);
+  const handleOpenResetDialog = () => setOpenResetDialog(true);
+  const handleCloseResetDialog = () => setOpenResetDialog(false);
   
   // 處理標籤切換
   const handleTabChange = (event, newValue) => {
@@ -834,6 +837,59 @@ const MonthlySchedule = () => {
     setTimeout(() => setError(null), 3000);
   };
 
+  // 重置月班表功能
+  const handleResetSchedule = async () => {
+    try {
+      handleCloseResetDialog(); // 關閉確認對話框
+      setError(null);
+      
+      // 獲取當前已知的護理師資料
+      const nurses = nurseUsers;
+      if (!nurses || nurses.length === 0) {
+        setError('無法重置班表：找不到護理師資料');
+        return;
+      }
+      
+      const year = selectedDate.getFullYear();
+      const month = selectedDate.getMonth() + 1;
+      const daysInSelectedMonth = getDaysInMonth(selectedDate);
+      
+      // 生成空白班表
+      const emptySchedule = nurses.map(nurse => {
+        // 確保護理長的身份正確設置
+        const identity = nurse.role === 'head_nurse' ? '護理長' : nurse.identity;
+        
+        return {
+          id: nurse.id,
+          name: nurse.full_name || nurse.name || `護理師 ${nurse.id}`,
+          role: nurse.role || 'nurse',
+          identity: identity || '',
+          group_data: nurse.group_data || '',
+          shifts: Array(daysInSelectedMonth).fill('O'),
+          area_codes: Array(daysInSelectedMonth).fill(null)
+        };
+      });
+      
+      // 更新本地狀態
+      setScheduleData(emptySchedule);
+      
+      // 設置為臨時班表
+      useScheduleStore.setState({ 
+        monthlySchedule: emptySchedule,
+        isTemporarySchedule: true,
+        error: null
+      });
+      
+      setSuccess(`已重置 ${year}年${month}月 班表為空白班表（尚未儲存）`);
+      setTimeout(() => setSuccess(null), 3000);
+      
+    } catch (error) {
+      console.error('重置班表失敗:', error);
+      setError('重置班表失敗: ' + (error.message || String(error)));
+      setTimeout(() => setError(null), 5000);
+    }
+  };
+
   // 修改日期變更時獲取班表的邏輯
   useEffect(() => {
     if (isValid(selectedDate)) {
@@ -1177,8 +1233,8 @@ const MonthlySchedule = () => {
         
         {hasEditPermission && (
           <Box sx={{ display: 'flex', gap: 1 }}>
-            {/* 只在編輯模式下顯示相關按鈕，且只在常規月班表標籤顯示 */}
-            {isEditMode && activeTab === 1 && (
+            {/* 在編輯模式下顯示相關按鈕，所有標籤頁都顯示 */}
+            {isEditMode && (
               <>
                 <Button 
                   variant="contained" 
@@ -1196,6 +1252,15 @@ const MonthlySchedule = () => {
                   disabled={isLoading}
                 >
                   帶入排班公式
+                </Button>
+                <Button 
+                  variant="contained" 
+                  color="error"
+                  onClick={handleOpenResetDialog}
+                  disabled={isLoading}
+                  title="重置為全部休假的空白班表"
+                >
+                  重置月班表
                 </Button>
               </>
             )}
@@ -1685,6 +1750,32 @@ const MonthlySchedule = () => {
           </Button>
           <Button onClick={generateEmptySchedule} color="primary" autoFocus>
             創建空白班表
+          </Button>
+        </DialogActions>
+      </Dialog>
+      
+      {/* 重置班表確認對話框 */}
+      <Dialog
+        open={openResetDialog}
+        onClose={handleCloseResetDialog}
+        aria-labelledby="reset-dialog-title"
+        aria-describedby="reset-dialog-description"
+      >
+        <DialogTitle id="reset-dialog-title">
+          確認重置月班表
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText id="reset-dialog-description">
+            您即將重置 {formattedDate} 的班表為空白班表。這個操作會將所有護理師的班次設為休假(O)，
+            但不會立即儲存到資料庫，直到您點擊「儲存班表」按鈕。確定要重置嗎？
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseResetDialog} color="primary">
+            取消
+          </Button>
+          <Button onClick={handleResetSchedule} color="error" autoFocus>
+            確認重置
           </Button>
         </DialogActions>
       </Dialog>

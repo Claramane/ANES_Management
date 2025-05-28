@@ -259,7 +259,7 @@ export const useUserStore = create(
       deactivateUser: async (userId) => {
         set({ isLoading: true, error: null });
         try {
-          // 使用真實 API
+          // 使用正確的停權 API，而不是 DELETE
           await api.delete(`/users/${userId}`);
           
           // 重新獲取用戶列表以更新狀態
