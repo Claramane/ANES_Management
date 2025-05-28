@@ -255,25 +255,45 @@ export const useUserStore = create(
         }
       },
 
-      // 刪除用戶
-      deleteUser: async (userId) => {
+      // 停權用戶
+      deactivateUser: async (userId) => {
         set({ isLoading: true, error: null });
         try {
           // 使用真實 API
           await api.delete(`/users/${userId}`);
           
-          set(state => ({ 
-            users: state.users.filter(user => user.id !== userId),
-            nurseUsers: state.nurseUsers.filter(user => user.id !== userId),
-            isLoading: false 
-          }));
+          // 重新獲取用戶列表以更新狀態
+          await get().fetchUsers();
           
           return true;
         } catch (error) {
-          console.error('API刪除用戶失敗：', error);
+          console.error('API停權用戶失敗：', error);
                     
           set({ 
-            error: error.response?.data?.detail || '刪除用戶失敗', 
+            error: error.response?.data?.detail || '停權用戶失敗', 
+            isLoading: false 
+          });
+          
+          throw error;
+        }
+      },
+
+      // 啟用用戶
+      activateUser: async (userId) => {
+        set({ isLoading: true, error: null });
+        try {
+          // 使用真實 API
+          await api.post(`/users/${userId}/activate`);
+          
+          // 重新獲取用戶列表以更新狀態
+          await get().fetchUsers();
+          
+          return true;
+        } catch (error) {
+          console.error('API啟用用戶失敗：', error);
+                    
+          set({ 
+            error: error.response?.data?.detail || '啟用用戶失敗', 
             isLoading: false 
           });
           

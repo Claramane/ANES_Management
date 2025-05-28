@@ -885,15 +885,20 @@ const MonthlySchedule = () => {
       const daysInSelectedMonth = getDaysInMonth(selectedDate);
       
       // 生成空白班表
-      const emptySchedule = nurses.map(nurse => ({
-        id: nurse.id,
-        name: nurse.full_name || nurse.name || `護理師 ${nurse.id}`,
-        role: nurse.role || 'nurse',
-        identity: nurse.identity || '',
-        group_data: nurse.group_data || '',
-        shifts: Array(daysInSelectedMonth).fill('O'),
-        area_codes: Array(daysInSelectedMonth).fill(null)
-      }));
+      const emptySchedule = nurses.map(nurse => {
+        // 確保護理長的身份正確設置
+        const identity = nurse.role === 'head_nurse' ? '護理長' : nurse.identity;
+        
+        return {
+          id: nurse.id,
+          name: nurse.full_name || nurse.name || `護理師 ${nurse.id}`,
+          role: nurse.role || 'nurse',
+          identity: identity || '',
+          group_data: nurse.group_data || '',
+          shifts: Array(daysInSelectedMonth).fill('O'),
+          area_codes: Array(daysInSelectedMonth).fill(null)
+        };
+      });
       
       // 更新本地狀態
       setScheduleData(emptySchedule);

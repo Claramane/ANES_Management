@@ -15,6 +15,8 @@ class User(Base):
     identity = Column(String)  # 護理師身份（一般護理師、資深護理師等）
     group_data = Column(Text, nullable=True)  # 用於儲存使用者分組資料，JSON格式
     hire_date = Column(Date, nullable=True)  # 入職日期
+    is_active = Column(Boolean, default=True, nullable=False)  # 是否啟用
+    deactivated_at = Column(DateTime, nullable=True)  # 停權時間
     last_login_ip = Column(String)
     last_login_time = Column(DateTime)
     created_at = Column(DateTime, default=func.now())

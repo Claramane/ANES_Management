@@ -11,6 +11,8 @@ class UserBase(BaseModel):
     identity: Optional[str] = None  # Optional: 護理師身份（一般護理師、資深護理師等）
     group_data: Optional[str] = None  # 儲存使用者分組資料，JSON字符串格式
     hire_date: Optional[date] = None  # 入職日期
+    is_active: Optional[bool] = True  # 是否啟用
+    deactivated_at: Optional[datetime] = None  # 停權時間
 
 # 用於創建用戶
 class UserCreate(UserBase):
@@ -26,6 +28,8 @@ class UserUpdate(BaseModel):
     identity: Optional[str] = None
     group_data: Optional[str] = None
     hire_date: Optional[date] = None
+    is_active: Optional[bool] = None
+    deactivated_at: Optional[datetime] = None
 
 # 用戶登入
 class UserLogin(BaseModel):

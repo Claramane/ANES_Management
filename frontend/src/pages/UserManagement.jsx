@@ -25,21 +25,24 @@ import {
   TableHead,
   TableRow,
   Tooltip,
-  Typography
+  Typography,
+  Chip
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
-import DeleteIcon from '@mui/icons-material/Delete';
+import BlockIcon from '@mui/icons-material/Block';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import { useUserStore } from '../store/userStore';
 
 const UserManagement = () => {
-  const { users, isLoading, error, fetchUsers, addUser, updateUser, deleteUser } = useUserStore();
+  const { users, isLoading, error, fetchUsers, addUser, updateUser, deactivateUser, activateUser } = useUserStore();
   const [localError, setLocalError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [errors, setErrors] = useState({});
   
   // 對話框狀態
   const [openAddDialog, setOpenAddDialog] = useState(false);
-  const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
+  const [openDeactivateDialog, setOpenDeactivateDialog] = useState(false);
+  const [openActivateDialog, setOpenActivateDialog] = useState(false);
   
   // 當前選中的用戶
   const [selectedUser, setSelectedUser] = useState(null);
@@ -66,16 +69,24 @@ const UserManagement = () => {
   // 存儲原始用戶數據用於比較
   const [originalUsers, setOriginalUsers] = useState([]);
   
+  // 顯示停權用戶的開關
+  const [showInactiveUsers, setShowInactiveUsers] = useState(false);
+  
   // 初始化排序用戶列表
   useEffect(() => {
     if (users && users.length > 0) {
+      // 根據 showInactiveUsers 過濾用戶
+      const filteredUsers = showInactiveUsers 
+        ? users 
+        : users.filter(user => user.is_active !== false);
+      
       // 按照複合條件進行排序
-      const sorted = [...users].sort(sortNurses);
+      const sorted = [...filteredUsers].sort(sortNurses);
       
       setSortableUsers(sorted);
       setOriginalUsers(JSON.parse(JSON.stringify(sorted))); // 深拷貝保存原始狀態
     }
-  }, [users]);
+  }, [users, showInactiveUsers]);
   
   const handleEditModeChange = async (event) => {
     const newEditMode = event.target.checked;
@@ -352,30 +363,58 @@ const UserManagement = () => {
   };
 
   // 處理刪除用戶
-  const handleDelete = (user) => {
+  const handleDeactivate = (user) => {
     setSelectedUser(user);
-    setOpenDeleteDialog(true);
+    setOpenDeactivateDialog(true);
   };
 
-  // 提交刪除用戶
-  const submitDeleteUser = async () => {
+  // 處理啟用用戶
+  const handleActivate = (user) => {
+    setSelectedUser(user);
+    setOpenActivateDialog(true);
+  };
+
+  // 提交啟用用戶
+  const submitActivateUser = async () => {
     try {
-      await deleteUser(selectedUser.id);
+      await activateUser(selectedUser.id);
       
-      // 從排序列表中移除
-      setSortableUsers(prevUsers => prevUsers.filter(user => user.id !== selectedUser.id));
+      // 重新獲取用戶列表
+      await fetchUsers();
       
-      setSuccess('成功刪除用戶！');
+      setSuccess('成功啟用用戶！');
       
       // 3秒後自動清除成功訊息
       setTimeout(() => {
         setSuccess(null);
       }, 3000);
       
-      setOpenDeleteDialog(false);
+      setOpenActivateDialog(false);
     } catch (err) {
-      console.error('Error deleting user:', err);
-      setLocalError('刪除用戶失敗：' + (err.response?.data?.detail || err.message));
+      console.error('Error activating user:', err);
+      setLocalError('啟用用戶失敗：' + (err.response?.data?.detail || err.message));
+    }
+  };
+
+  // 提交停權用戶
+  const submitDeactivateUser = async () => {
+    try {
+      await deactivateUser(selectedUser.id);
+      
+      // 重新獲取用戶列表
+      await fetchUsers();
+      
+      setSuccess('成功停權用戶！');
+      
+      // 3秒後自動清除成功訊息
+      setTimeout(() => {
+        setSuccess(null);
+      }, 3000);
+      
+      setOpenDeactivateDialog(false);
+    } catch (err) {
+      console.error('Error deactivating user:', err);
+      setLocalError('停權用戶失敗：' + (err.response?.data?.detail || err.message));
     }
   };
   
@@ -447,17 +486,31 @@ const UserManagement = () => {
       )}
       
       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-        <FormControlLabel
-          control={
-            <Switch
-              checked={editMode}
-              onChange={handleEditModeChange}
-              name="editMode"
-              color="primary"
-            />
-          }
-          label="編輯"
-        />
+        <Box sx={{ display: 'flex', gap: 2 }}>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={editMode}
+                onChange={handleEditModeChange}
+                name="editMode"
+                color="primary"
+              />
+            }
+            label="編輯"
+          />
+          
+          <FormControlLabel
+            control={
+              <Switch
+                checked={showInactiveUsers}
+                onChange={(e) => setShowInactiveUsers(e.target.checked)}
+                name="showInactiveUsers"
+                color="secondary"
+              />
+            }
+            label="顯示停權用戶"
+          />
+        </Box>
         
         <Button
           variant="contained"
@@ -476,11 +529,12 @@ const UserManagement = () => {
               <TableRow>
                 <TableCell>員工編號</TableCell>
                 <TableCell>姓名</TableCell>
+                <TableCell>狀態</TableCell>
                 <TableCell>電子郵件</TableCell>
                 <TableCell>入職日期</TableCell>
                 <TableCell>身份</TableCell>
                 {editMode && <TableCell>角色</TableCell>}
-                {editMode && <TableCell>刪除</TableCell>}
+                {editMode && <TableCell>操作</TableCell>}
               </TableRow>
             </TableHead>
             <TableBody>
@@ -488,14 +542,35 @@ const UserManagement = () => {
                 <TableRow
                   key={user.id}
                   sx={{ 
-                    bgcolor: user.role === 'head_nurse' ? '#f5f5f5' : 'white',
-                    '&:hover': { bgcolor: user.role === 'head_nurse' ? '#f0f0f0' : '#f9f9f9' }
+                    bgcolor: user.role === 'head_nurse' ? '#f5f5f5' : 
+                             user.is_active === false ? '#ffebee' : 'white',
+                    '&:hover': { 
+                      bgcolor: user.role === 'head_nurse' ? '#f0f0f0' : 
+                               user.is_active === false ? '#ffcdd2' : '#f9f9f9' 
+                    }
                   }}
                 >
                   <TableCell>{user.username}</TableCell>
                   <TableCell>{user.full_name}</TableCell>
                   <TableCell>
-                    {editMode && user.role !== 'head_nurse' && user.role !== 'admin' ? (
+                    {user.is_active === false ? (
+                      <Chip 
+                        label="停權" 
+                        color="error" 
+                        size="small"
+                        icon={<BlockIcon />}
+                      />
+                    ) : (
+                      <Chip 
+                        label="正常" 
+                        color="success" 
+                        size="small"
+                        icon={<CheckCircleIcon />}
+                      />
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {editMode && user.role !== 'head_nurse' && user.role !== 'admin' && user.is_active !== false ? (
                       <TextField
                         size="small"
                         value={user.email || ''}
@@ -519,13 +594,14 @@ const UserManagement = () => {
                     )}
                   </TableCell>
                   <TableCell>
-                    {editMode && user.role !== 'head_nurse' && user.role !== 'admin' ? (
+                    {editMode && user.role !== 'head_nurse' && user.role !== 'admin' && user.is_active !== false ? (
                       <FormControl size="small" fullWidth>
                         <Select
                           value={user.identity || ''}
                           onChange={(e) => handleSelectChange(user.id, 'identity', e.target.value)}
                           displayEmpty
                         >
+                          <MenuItem value="護理長">護理長</MenuItem>
                           <MenuItem value="麻醉專科護理師">麻醉專科護理師</MenuItem>
                           <MenuItem value="恢復室護理師">恢復室護理師</MenuItem>
                           <MenuItem value="麻醉科Leader">麻醉科Leader</MenuItem>
@@ -538,7 +614,7 @@ const UserManagement = () => {
                   </TableCell>
                   {editMode && (
                     <TableCell>
-                      {user.role !== 'admin' ? (
+                      {user.role !== 'admin' && user.is_active !== false ? (
                         <FormControl size="small" fullWidth>
                           <Select
                             value={user.role || 'nurse'}
@@ -556,17 +632,33 @@ const UserManagement = () => {
                       )}
                     </TableCell>
                   )}
-                  <TableCell>
-                    {editMode && user.role !== 'head_nurse' && user.role !== 'admin' ? (
-                      <IconButton 
-                        color="error" 
-                        onClick={() => handleDelete(user)}
-                        size="small"
-                      >
-                        <DeleteIcon />
-                      </IconButton>
-                    ) : null }
-                  </TableCell>
+                  {editMode && (
+                    <TableCell>
+                      {user.role !== 'head_nurse' && user.role !== 'admin' ? (
+                        user.is_active === false ? (
+                          <Tooltip title="啟用用戶">
+                            <IconButton 
+                              color="success" 
+                              onClick={() => handleActivate(user)}
+                              size="small"
+                            >
+                              <CheckCircleIcon />
+                            </IconButton>
+                          </Tooltip>
+                        ) : (
+                          <Tooltip title="停權用戶">
+                            <IconButton 
+                              color="error" 
+                              onClick={() => handleDeactivate(user)}
+                              size="small"
+                            >
+                              <BlockIcon />
+                            </IconButton>
+                          </Tooltip>
+                        )
+                      ) : null }
+                    </TableCell>
+                  )}
                 </TableRow>
               ))}
             </TableBody>
@@ -649,6 +741,7 @@ const UserManagement = () => {
               onChange={handleInputChange}
               label="身份"
             >
+              <MenuItem value="護理長">護理長</MenuItem>
               <MenuItem value="麻醉專科護理師">麻醉專科護理師</MenuItem>
               <MenuItem value="恢復室護理師">恢復室護理師</MenuItem>
               <MenuItem value="麻醉科Leader">麻醉科Leader</MenuItem>
@@ -698,39 +791,65 @@ const UserManagement = () => {
         </DialogActions>
       </Dialog>
       
-      {/* 刪除用戶確認對話框 */}
-      <Dialog open={openDeleteDialog} onClose={() => setOpenDeleteDialog(false)}>
-        <DialogTitle sx={{ color: '#d32f2f' }}>⚠️ 確認刪除護理師</DialogTitle>
+      {/* 停權用戶確認對話框 */}
+      <Dialog open={openDeactivateDialog} onClose={() => setOpenDeactivateDialog(false)}>
+        <DialogTitle sx={{ color: '#d32f2f' }}>⚠️ 確認停權護理師</DialogTitle>
         <DialogContent>
           <DialogContentText sx={{ mb: 2 }}>
-            確定要刪除護理師 <strong>"{selectedUser?.full_name}"</strong> 嗎？
+            確定要停權護理師 <strong>"{selectedUser?.full_name}"</strong> 嗎？
           </DialogContentText>
-          <DialogContentText sx={{ mb: 2, color: '#d32f2f', fontWeight: 'bold' }}>
-            ⚠️ 警告：此操作將會同時刪除以下相關資料：
+          <DialogContentText sx={{ mb: 2, color: '#ff9800', fontWeight: 'bold' }}>
+            ℹ️ 說明：停權後該用戶將無法登入系統，但歷史資料會保留。
           </DialogContentText>
           <DialogContentText component="div" sx={{ ml: 2 }}>
             <ul style={{ margin: 0, paddingLeft: '20px' }}>
-              <li>所有月班表記錄</li>
-              <li>所有加班記錄</li>
-              <li>所有月度加班分數記錄</li>
-              <li>所有換班請求（作為申請者或接受者）</li>
-              <li>所有公式班表分配</li>
-              <li>所有認證憑證（Passkey等）</li>
+              <li>用戶無法登入系統</li>
+              <li>不會出現在新的班表安排中</li>
+              <li>歷史班表記錄會保留</li>
+              <li>可以隨時重新啟用</li>
             </ul>
-          </DialogContentText>
-          <DialogContentText sx={{ mt: 2, fontWeight: 'bold', color: '#d32f2f' }}>
-            此操作無法撤銷，請謹慎操作！
           </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpenDeleteDialog(false)}>取消</Button>
+          <Button onClick={() => setOpenDeactivateDialog(false)}>取消</Button>
           <Button 
-            onClick={submitDeleteUser} 
+            onClick={submitDeactivateUser} 
             variant="contained" 
             color="error"
             disabled={isLoading}
           >
-            確認刪除
+            確認停權
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* 啟用用戶確認對話框 */}
+      <Dialog open={openActivateDialog} onClose={() => setOpenActivateDialog(false)}>
+        <DialogTitle sx={{ color: '#2e7d32' }}>✅ 確認啟用護理師</DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ mb: 2 }}>
+            確定要啟用護理師 <strong>"{selectedUser?.full_name}"</strong> 嗎？
+          </DialogContentText>
+          <DialogContentText sx={{ mb: 2, color: '#2e7d32', fontWeight: 'bold' }}>
+            ✅ 啟用後該用戶將恢復正常使用權限。
+          </DialogContentText>
+          <DialogContentText component="div" sx={{ ml: 2 }}>
+            <ul style={{ margin: 0, paddingLeft: '20px' }}>
+              <li>用戶可以正常登入系統</li>
+              <li>可以參與新的班表安排</li>
+              <li>恢復所有系統功能</li>
+            </ul>
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenActivateDialog(false)}>取消</Button>
+          <Button 
+            onClick={submitActivateUser} 
+            variant="contained" 
+            color="success"
+            disabled={isLoading}
+          >
+            確認啟用
           </Button>
         </DialogActions>
       </Dialog>
