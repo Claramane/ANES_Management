@@ -55,6 +55,7 @@ import { zhTW } from 'date-fns/locale';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, parseISO, isWithinInterval, getDay, isToday, isEqual, startOfDay, endOfDay, isSameDay, addDays, subDays, isBefore, isAfter } from 'date-fns';
 import { useAuthStore } from '../store/authStore';
 import apiService from '../utils/api';
+import { cachedScheduleDetailsRequest } from '../utils/scheduleCache';
 
 // 不允許的班別組合及其最小間隔時間（小時）
 const INVALID_SHIFT_COMBINATIONS = {
@@ -1147,8 +1148,8 @@ const ShiftSwap = () => {
       try {
         // 使用 Promise.allSettled 並行請求其他數據
         const [weeklyResult, overtimeResult, nursesResult] = await Promise.allSettled([
-          // 獲取工作分配
-          apiService.schedule.getScheduleDetails(year, month),
+          // 獲取工作分配（使用緩存）
+          cachedScheduleDetailsRequest(apiService, 'shift-swap', year, month),
           
           // 獲取加班記錄 - 使用正確的 API 方法
           apiService.overtime.getMyRecords(startDateStr, endDateStr),
@@ -1166,6 +1167,10 @@ const ShiftSwap = () => {
         // 提取結果
         if (weeklyResult.status === 'fulfilled') {
           weeklyResponse = weeklyResult.value;
+          
+          if (weeklyResponse.fromCache) {
+            console.log('ShiftSwap: 使用緩存的工作分配數據');
+          }
           
           // 記錄工作分配 API 響應
           console.log('工作分配API返回數據:', {
@@ -3409,13 +3414,14 @@ const ShiftSwap = () => {
 
   return (
     <Box sx={{ padding: 3 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4" gutterBottom>
-          {currentTab === 0 ? '換班申請' :
-           currentTab === 1 ? '換班別申請' :
-           currentTab === 2 ? '換工作區域申請' :
-           '換加班申請'}
-        </Typography>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: currentTab === 0 ? 0 : 3 }}>
+        {currentTab !== 0 && (
+          <Typography variant="h4" gutterBottom>
+            {currentTab === 1 ? '換班別申請' :
+             currentTab === 2 ? '換工作區域申請' :
+             currentTab === 3 ? '換加班申請' : ''}
+          </Typography>
+        )}
         <Box sx={{ display: 'flex', gap: 2 }}>
           {canRequestSwap && (
             <Button

@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import jwtDecode from 'jwt-decode';
 import { api } from '../utils/api';
+import { clearAllCache } from '../utils/cacheUtils';
+import { clearAllScheduleCache } from '../utils/scheduleCache';
 
 // Helper function to convert ArrayBuffer to base64url
 function arrayBufferToBase64Url(buffer) {
@@ -30,6 +32,20 @@ function base64UrlToArrayBuffer(base64url) {
   return bytes.buffer;
 }
 
+// 檢查token是否過期
+const isTokenExpired = (token) => {
+  if (!token) return true;
+  
+  try {
+    const decoded = jwtDecode(token);
+    const currentTime = Date.now() / 1000;
+    return decoded.exp < currentTime;
+  } catch (error) {
+    console.error('Token解析失敗:', error);
+    return true;
+  }
+};
+
 export const useAuthStore = create(
   persist(
     (set, get) => ({
@@ -39,6 +55,21 @@ export const useAuthStore = create(
       isLoading: false,
       error: null,
       
+      // 初始化檢查token是否過期
+      initializeAuth: () => {
+        const { token } = get();
+        if (token && isTokenExpired(token)) {
+          console.log('Token已過期，自動登出');
+          get().logout();
+        }
+      },
+      
+      // 檢查token是否有效
+      isTokenValid: () => {
+        const { token } = get();
+        return token && !isTokenExpired(token);
+      },
+      
       // 登入
       login: async (username, password, isPasskeyLogin = false) => {
         set({ isLoading: true, error: null });
@@ -46,19 +77,9 @@ export const useAuthStore = create(
           let response;
           
           if (isPasskeyLogin) {
-            // Passkey登入不需要密碼
-            // 在 Login.jsx 中，我們會先呼叫 /webauthn/authenticate/finish
-            // 並用回傳的 user 資料來呼叫這個 login 方法
-            // 所以這裡我們假設 passkey 驗證已在後端完成
-            // 並且 username 欄位會是後端回傳的 user.username
+
              const userResponse = await api.get('/users/me', {
               headers: {
-                // 這裡需要一個方法來獲取 passkey 驗證後端產生的 token
-                // 暫時假設 finishResponse.data.user 已經包含了 token
-                // 或者 finish API 直接回傳 JWT token
-                // 這裡的邏輯需要配合後端 /webauthn/authenticate/finish 的回傳
-                // 目前的 authStore.js 在 isPasskeyLogin 時是寫死的 'passkey-auth-token'
-                // 這部分需要調整
                 Authorization: `Bearer passkey-auth-token` 
               }
             });
@@ -119,6 +140,10 @@ export const useAuthStore = create(
       
       // 登出
       logout: () => {
+        // 清除所有緩存資料
+        clearAllCache();
+        clearAllScheduleCache();
+        
         set({
           token: null,
           user: null,

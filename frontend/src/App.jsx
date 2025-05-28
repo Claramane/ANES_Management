@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
@@ -22,6 +22,8 @@ import NotFound from './pages/NotFound';
 
 // 自訂Hook
 import { useAuthStore } from './store/authStore';
+import apiService, { api } from './utils/api';
+import { cleanExpiredScheduleCache } from './utils/scheduleCache';
 
 // 主題設定
 const theme = createTheme({
@@ -88,6 +90,29 @@ const HeadNurseRoute = ({ children }) => {
 };
 
 function App() {
+  const { initializeAuth, token, user, setAuth } = useAuthStore();
+  
+  // 在應用啟動時檢查token是否過期，並自動同步user資料
+  useEffect(() => {
+    // 清理過期的緩存
+    cleanExpiredScheduleCache();
+    
+    initializeAuth();
+    // 只要有token就一定fetch /users/me
+    if (token) {
+      api.get('/users/me')
+        .then(res => {
+          setAuth(token, res.data);
+        })
+        .catch(err => {
+          // 若token無效自動登出
+          if (err.response && err.response.status === 401) {
+            setAuth(null, null);
+          }
+        });
+    }
+  }, [initializeAuth, token, setAuth]);
+  
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
@@ -105,26 +130,18 @@ function App() {
             <Route path="weekly-schedule" element={<WeeklySchedule />} />
             <Route path="monthly-schedule" element={<MonthlySchedule />} />
             <Route path="big-schedule" element={<BigSchedule />} />
+            <Route path="formula" element={<Formula />} />
             <Route path="shift-swap" element={<ShiftSwapPage />} />
             <Route path="announcements" element={<AnnouncementPage />} />
-            <Route path="version-history" element={<VersionHistory />} />
             <Route path="overtime-staff" element={<OvertimeStaff />} />
+            <Route path="settings" element={<SettingsPage />} />
+            <Route path="version-history" element={<VersionHistory />} />
             
             {/* 護理長專用路由 */}
-            <Route path="formula" element={
-              <HeadNurseRoute>
-                <Formula />
-              </HeadNurseRoute>
-            } />
-            <Route path="users" element={
+            <Route path="user-management" element={
               <HeadNurseRoute>
                 <UserManagement />
               </HeadNurseRoute>
-            } />
-            <Route path="settings" element={
-              <ProtectedRoute>
-                <SettingsPage />
-              </ProtectedRoute>
             } />
           </Route>
           

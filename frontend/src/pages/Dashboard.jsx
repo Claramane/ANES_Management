@@ -17,7 +17,11 @@ import {
   Chip,
   Alert,
   CircularProgress,
-  Badge
+  Badge,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions
 } from '@mui/material';
 import {
   Event as EventIcon,
@@ -28,10 +32,11 @@ import {
   Recommend as RecommendIcon
 } from '@mui/icons-material';
 import { useAuthStore } from '../store/authStore';
-import apiService from '../utils/api';
+import apiService, { api } from '../utils/api';
 import { useScheduleStore } from '../store/scheduleStore';
 import { format, startOfToday, getDate, getMonth, getYear, startOfWeek, endOfWeek, addDays, eachDayOfInterval, parseISO } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
+import { cachedScheduleDetailsRequest } from '../utils/scheduleCache';
 
 // 班次顏色和名稱的映射，可以根據需要擴展
 const shiftDetails = {
@@ -163,6 +168,11 @@ function Dashboard() {
   const [swapsLoading, setSwapsLoading] = useState(true);
   const [announcementsError, setAnnouncementsError] = useState(null);
   const [swapsError, setSwapsError] = useState(null);
+
+  // 新增防重複請求的狀態
+  const [isAreaAssignmentLoading, setIsAreaAssignmentLoading] = useState(false);
+
+  const [showPasskeyDialog, setShowPasskeyDialog] = useState(false);
 
   const today = useMemo(() => startOfToday(), []);
   const todayDate = useMemo(() => getDate(today), [today]); // 日 (1-31)
@@ -375,30 +385,36 @@ function Dashboard() {
     }
   }, [user]);
 
-  // Effect 4: 獲取工作分配數據
+  // Effect 4: 獲取工作分配數據（優化版本，使用緩存並防重複請求）
   useEffect(() => {
-    // 只有當月班表加載完成且不在加載狀態時獲取
-    if (!scheduleLoading && monthlySchedule && monthlySchedule.length > 0) {
+    // 只有當月班表加載完成且不在加載狀態時獲取，並且沒有正在進行的請求
+    if (!scheduleLoading && monthlySchedule && monthlySchedule.length > 0 && !isAreaAssignmentLoading) {
       fetchWorkAreaAssignments();
     }
-  }, [monthlySchedule, scheduleLoading, user, selectedDate]);
+  }, [monthlySchedule, scheduleLoading, user, selectedDate, isAreaAssignmentLoading]);
 
-  // 獲取工作分配數據
+  // 獲取工作分配數據（優化版本，使用緩存）
   const fetchWorkAreaAssignments = async () => {
-    if (!user) return;
+    if (!user || isAreaAssignmentLoading) return;
     
     try {
+      setIsAreaAssignmentLoading(true);
+      
       // 獲取當前年月
       const year = selectedDate.getFullYear();
       const month = selectedDate.getMonth() + 1; // 0-indexed，需 +1
       
       console.log(`正在獲取 ${year}年${month}月 的工作分配數據...`);
       
-      // 使用API獲取排班詳細信息
-      const response = await apiService.schedule.getScheduleDetails(year, month);
+      // 使用帶緩存的API請求
+      const result = await cachedScheduleDetailsRequest(apiService, 'dashboard', year, month);
       
-      if (response.data && response.data.success) {
-        const details = response.data.data || [];
+      if (result.fromCache) {
+        console.log('使用緩存數據，避免重複請求');
+      }
+      
+      if (result.data && result.data.success) {
+        const details = result.data.data || [];
         console.log(`成功獲取工作分配數據，共 ${details.length} 條記錄`);
         
         // 建立日期到工作分配的映射
@@ -442,10 +458,12 @@ function Dashboard() {
         // 由於我們不想直接修改zustand store，將更新後的數據傳遞給處理函數
         processScheduleDataWithAreaCodes(updatedSchedule);
       } else {
-        console.warn('獲取工作分配數據失敗:', response.data?.message || '未知錯誤');
+        console.warn('獲取工作分配數據失敗:', result.data?.message || '未知錯誤');
       }
     } catch (err) {
       console.error('獲取工作分配數據時出錯:', err);
+    } finally {
+      setIsAreaAssignmentLoading(false);
     }
   };
 
@@ -499,6 +517,25 @@ function Dashboard() {
     }
   };
 
+  // 檢查是否需要顯示 Passkey 提示框
+  useEffect(() => {
+    if (user) {
+      const loginMethod = localStorage.getItem('loginMethod');
+      if (loginMethod === 'password') {
+        setShowPasskeyDialog(true);
+      }
+    }
+  }, [user]);
+
+  // 處理 Passkey 提示框的關閉
+  const handlePasskeyDialogClose = (createNow = false) => {
+    setShowPasskeyDialog(false);
+    localStorage.removeItem('loginMethod');
+    if (createNow) {
+      navigate('/settings');
+    }
+  };
+
   const formattedToday = format(today, 'yyyy年MM月dd日 EEEE', { locale: zhTW });
 
   if (isLoading) {
@@ -511,6 +548,46 @@ function Dashboard() {
 
   return (
     <Box className="page-container">
+      {/* Passkey 提示框 */}
+      <Dialog
+        open={showPasskeyDialog}
+        onClose={() => handlePasskeyDialogClose(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          建議使用 Passkey 登入
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body1" paragraph>
+            Passkey 是一種更安全、更方便的登入方式，具有以下優點：
+          </Typography>
+          <Typography variant="body2" component="div" sx={{ mb: 2 }}>
+            <ul>
+              <li>無需記住複雜的密碼</li>
+              <li>使用生物識別（如指紋、臉部識別）或設備 PIN 碼進行驗證</li>
+              <li>防止釣魚攻擊，因為 Passkey 與網站域名綁定</li>
+              <li>支援跨設備同步，方便在不同設備上使用</li>
+            </ul>
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            您現在要設定 Passkey 嗎？之後隨時都可以在設定中進行設定。
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => handlePasskeyDialogClose(false)}>
+            之後再說
+          </Button>
+          <Button 
+            onClick={() => handlePasskeyDialogClose(true)} 
+            variant="contained" 
+            color="primary"
+          >
+            立即建立
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       <Typography variant="h4" gutterBottom>
         哈囉！{user?.full_name || user?.username}
       </Typography>

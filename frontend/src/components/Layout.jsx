@@ -77,7 +77,7 @@ function Layout() {
     { text: '換班申請', icon: <SyncIcon />, path: '/shift-swap' },
     { text: '加班人員', icon: <WorkIcon />, path: '/overtime-staff' },
     { text: '公告專區', icon: <AnnouncementIcon />, path: '/announcements' },
-    { text: '歷史紀錄', icon: <HistoryIcon />, path: '/version-history' },
+    // { text: '歷史紀錄', icon: <HistoryIcon />, path: '/version-history' },
   ];
 
   // 護理長專用選單 

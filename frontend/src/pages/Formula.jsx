@@ -45,7 +45,7 @@ import {
   ArrowDownward as ArrowDownwardIcon
 } from '@mui/icons-material';
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
-import { StrictModeDroppable } from './StrictModeDroppable';
+import { StrictModeDroppable } from '../components/StrictModeDroppable';
 import { api } from '../utils/api';  // 導入配置好的api實例
 
 // 定義自訂拖動樣式
@@ -296,18 +296,12 @@ const Formula = () => {
     const fetchUsers = async () => {
       try {
         setLoading(true);
-        const authStorage = localStorage.getItem('auth-storage');
-        let token = null;
-        if (authStorage) {
-          const { state } = JSON.parse(authStorage);
-          token = state.token;
-        }
-        if (!token) throw new Error('未找到認證令牌，請先登入');
-        const res = await fetch('/api/users', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (!res.ok) throw new Error('獲取用戶列表失敗: ' + res.status);
-        const data = await res.json();
+        setError(null);
+        
+        // 使用配置好的 api 實例而不是直接 fetch
+        const res = await api.get('/users');
+        const data = res.data;
+        
         if (!Array.isArray(data)) throw new Error('API返回的數據不是數組');
         setUsers(data);
         setError(null);

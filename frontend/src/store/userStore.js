@@ -80,8 +80,8 @@ export const useUserStore = create(
             };
           });
           
-          // 過濾護理相關人員 (nurse, leader, secretary)
-          const nurseRoles = ['nurse', 'leader', 'secretary'];
+          // 過濾護理相關人員 (nurse, leader, secretary, supervise_nurse, head_nurse)
+          const nurseRoles = ['nurse', 'leader', 'secretary', 'supervise_nurse', 'head_nurse'];
           
           set({ 
             users: processedUsers,
@@ -161,7 +161,7 @@ export const useUserStore = create(
           };
           
           // 是否為護理人員
-          const nurseRoles = ['nurse', 'leader', 'secretary'];
+          const nurseRoles = ['nurse', 'leader', 'secretary', 'supervise_nurse', 'head_nurse'];
           const isNurseRole = nurseRoles.includes(processedUser.role);
           
           set(state => ({ 
@@ -233,7 +233,7 @@ export const useUserStore = create(
             });
             
             // 護理相關角色
-            const nurseRoles = ['nurse', 'leader', 'secretary'];
+            const nurseRoles = ['nurse', 'leader', 'secretary', 'supervise_nurse', 'head_nurse'];
             
             return { 
               users: updatedUsers,

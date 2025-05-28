@@ -700,10 +700,26 @@ const UserManagement = () => {
       
       {/* 刪除用戶確認對話框 */}
       <Dialog open={openDeleteDialog} onClose={() => setOpenDeleteDialog(false)}>
-        <DialogTitle>確認刪除</DialogTitle>
+        <DialogTitle sx={{ color: '#d32f2f' }}>⚠️ 確認刪除護理師</DialogTitle>
         <DialogContent>
-          <DialogContentText>
-            確定要刪除護理師 "{selectedUser?.full_name}" 嗎？此操作無法撤銷。
+          <DialogContentText sx={{ mb: 2 }}>
+            確定要刪除護理師 <strong>"{selectedUser?.full_name}"</strong> 嗎？
+          </DialogContentText>
+          <DialogContentText sx={{ mb: 2, color: '#d32f2f', fontWeight: 'bold' }}>
+            ⚠️ 警告：此操作將會同時刪除以下相關資料：
+          </DialogContentText>
+          <DialogContentText component="div" sx={{ ml: 2 }}>
+            <ul style={{ margin: 0, paddingLeft: '20px' }}>
+              <li>所有月班表記錄</li>
+              <li>所有加班記錄</li>
+              <li>所有月度加班分數記錄</li>
+              <li>所有換班請求（作為申請者或接受者）</li>
+              <li>所有公式班表分配</li>
+              <li>所有認證憑證（Passkey等）</li>
+            </ul>
+          </DialogContentText>
+          <DialogContentText sx={{ mt: 2, fontWeight: 'bold', color: '#d32f2f' }}>
+            此操作無法撤銷，請謹慎操作！
           </DialogContentText>
         </DialogContent>
         <DialogActions>
@@ -714,7 +730,7 @@ const UserManagement = () => {
             color="error"
             disabled={isLoading}
           >
-            刪除
+            確認刪除
           </Button>
         </DialogActions>
       </Dialog>

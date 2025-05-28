@@ -32,6 +32,7 @@ import { format, getDaysInMonth, getDay, isValid, addDays, startOfMonth } from '
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import apiService from '../utils/api';
+import { cachedScheduleDetailsRequest } from '../utils/scheduleCache';
 
 // 班次顏色設定
 const ShiftCell = styled(TableCell)(({ shift }) => {
@@ -474,17 +475,21 @@ const WeeklySchedule = () => {
       const year = selectedDate.getFullYear();
       const month = selectedDate.getMonth() + 1;
       
-      // 獲取排班詳細數據
-      const scheduleDetails = await apiService.schedule.getScheduleDetails(year, month);
-      if (!scheduleDetails.data?.success) {
+      // 獲取排班詳細數據（使用緩存）
+      const result = await cachedScheduleDetailsRequest(apiService, 'weekly-schedule', year, month);
+      if (!result.data?.success) {
         throw new Error("無法獲取排班詳細數據");
+      }
+      
+      if (result.fromCache) {
+        console.log('saveWorkAssignments: 使用緩存數據');
       }
       
       // 排班資料 ID 映射表
       const scheduleMapping = {};
       
       // 建立映射: { "用戶ID-日期": scheduleId }
-      const details = scheduleDetails.data.data || [];
+      const details = result.data.data || [];
       details.forEach(item => {
         const dateObj = new Date(item.date);
         const day = dateObj.getDate();
@@ -2102,18 +2107,22 @@ const WeeklySchedule = () => {
         // 如果組件已卸載，不繼續執行
         if (!isMounted) return;
         
-        // 再獲取工作分配數據
+        // 再獲取工作分配數據（使用緩存）
         try {
           console.log('開始加載工作分配數據...');
-          const scheduleDetails = await apiService.schedule.getScheduleDetails(year, month);
+          const result = await cachedScheduleDetailsRequest(apiService, 'weekly-schedule', year, month);
           
           // 如果組件已卸載，不繼續執行
           if (!isMounted) return;
           
-          if (scheduleDetails.data?.success) {
+          if (result.fromCache) {
+            console.log('loadScheduleData: 使用緩存數據');
+          }
+          
+          if (result.data?.success) {
             // 將工作分配資料更新到排班資料中
             const monthlyData = [...useScheduleStore.getState().monthlySchedule];
-            const details = scheduleDetails.data.data || [];
+            const details = result.data.data || [];
             
             // 遍歷每個排班記錄，更新area_code
             details.forEach(item => {

@@ -19,7 +19,13 @@ import {
   DialogContentText,
   DialogTitle,
   Tabs,
-  Tab
+  Tab,
+  Chip,
+  Tooltip,
+  IconButton,
+  Menu,
+  MenuItem,
+  Snackbar
 } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
@@ -33,6 +39,9 @@ import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import SaveIcon from '@mui/icons-material/Save';
 import EditIcon from '@mui/icons-material/Edit';
+import { Add as AddIcon, GetApp as DownloadIcon, MoreVert as MoreVertIcon, Refresh as RefreshIcon, Warning as WarningIcon } from '@mui/icons-material';
+import { cachedApiCall, setCacheData, getCacheData } from '../utils/cacheUtils';
+import { apiForCachedData, api } from '../utils/api';
 
 // 自訂Tab樣式
 const StyledTab = styled(Tab)(({ theme }) => ({
@@ -73,14 +82,17 @@ const ShiftCell = styled(TableCell)(({ shift }) => {
     backgroundColor: colors[shift || 'O'] || 'inherit',
     color: 'black',
     cursor: 'pointer',
-    padding: '4px 2px',
+    padding: '2px 1px',
     textAlign: 'center',
     fontWeight: 'normal',
     fontSize: '14px',
-    minWidth: '28px',
-    width: '28px',
-    height: '28px',
-    border: '1px solid #ddd'
+    minWidth: '32px',
+    maxWidth: '32px',
+    width: '32px',
+    height: '32px',
+    border: '1px solid #ddd',
+    overflow: 'hidden',
+    whiteSpace: 'nowrap'
   };
 });
 
@@ -111,7 +123,7 @@ const MonthlySchedule = () => {
   const [isEditMode, setIsEditMode] = useState(false);
   
   // 標籤頁狀態
-  const [activeTab, setActiveTab] = useState(0); // 0: 常規月班表, 1: 小夜班包班, 2: 大夜班包班, 3: 恢復室
+  const [activeTab, setActiveTab] = useState(0); // 0: 全部, 1: 常規月班表, 2: 小夜班包班, 3: 大夜班包班, 4: 恢復室
   
   // 確認對話框狀態
   const [openGenerateDialog, setOpenGenerateDialog] = useState(false);
@@ -231,6 +243,9 @@ const MonthlySchedule = () => {
     
     // 根據當前標籤過濾數據
     if (activeTab === 0) {
+      // 全部: 顯示所有護理師，不過濾任何人
+      // 保持原始數據不變
+    } else if (activeTab === 1) {
       // 常規月班表: 過濾掉待分派或夜班人員 (SNP 或 LNP)，以及恢復室護理師和麻醉科書記
       sorted = sorted.filter(nurse => {
         // 過濾掉恢復室護理師和麻醉科書記
@@ -275,7 +290,7 @@ const MonthlySchedule = () => {
         // 默認保留該護理師
         return true;
       });
-    } else if (activeTab === 1) {
+    } else if (activeTab === 2) {
       // 小夜班包班: 只顯示 SNP 的護理師
       sorted = sorted.filter(nurse => {
         // 首先檢查是否有special_type屬性
@@ -314,7 +329,7 @@ const MonthlySchedule = () => {
         // 默認過濾掉不是SNP的護理師
         return false;
       });
-    } else if (activeTab === 2) {
+    } else if (activeTab === 3) {
       // 大夜班包班: 只顯示 LNP 的護理師
       sorted = sorted.filter(nurse => {
         // 首先檢查是否有special_type屬性
@@ -353,7 +368,7 @@ const MonthlySchedule = () => {
         // 默認過濾掉不是LNP的護理師
         return false;
       });
-    } else if (activeTab === 3) {
+    } else if (activeTab === 4) {
       // 恢復室標籤: 只顯示恢復室護理師和麻醉科書記
       sorted = sorted.filter(nurse => {
         return nurse.identity === '恢復室護理師' || nurse.identity === '麻醉科書記';
@@ -911,21 +926,8 @@ const MonthlySchedule = () => {
       const nurse = sortedMonthlySchedule[quickEdit.nurseIndex];
       if (!nurse) return;
       
-      const identity = nurse.identity;
-      let allowedShifts = [];
-      
-      // 根據身份設定可用班次
-      if (identity === '麻醉專科護理師') {
-        allowedShifts = ['D', 'A', 'N', 'O', 'V', 'R'];
-      } else if (identity === '恢復室護理師') {
-        allowedShifts = ['A', 'K', 'C', 'F', 'O', 'V', 'R'];
-      } else if (identity === '麻醉科Leader') {
-        allowedShifts = ['A', 'E', 'O', 'V', 'R'];
-      } else if (identity === '麻醉科書記') {
-        allowedShifts = ['B', 'E', 'O', 'V', 'R'];
-      } else {
-        allowedShifts = ['D', 'A', 'N', 'O', 'K', 'C', 'F', 'E', 'B', 'V', 'R'];
-      }
+      // 允許所有班種
+      const allowedShifts = ['D', 'A', 'N', 'O', 'K', 'C', 'F', 'E', 'B', 'V', 'R'];
       
       const key = e.key.toUpperCase();
       const daysInSelectedMonth = daysInMonth;
@@ -1000,25 +1002,8 @@ const MonthlySchedule = () => {
     // 一般的單格編輯模式
     if (!focusedCell || focusedCell.nurseIndex == null || focusedCell.dayIndex == null) return;
     
-    // 獲取護理師身份，確定可用班次
-    const nurse = sortedMonthlySchedule[focusedCell.nurseIndex];
-    if (!nurse) return;
-    
-    const identity = nurse.identity;
-    let allowedShifts = [];
-    
-    // 根據身份設定可用班次
-    if (identity === '麻醉專科護理師') {
-      allowedShifts = ['D', 'A', 'N', 'O', 'V', 'R'];
-    } else if (identity === '恢復室護理師') {
-      allowedShifts = ['A', 'K', 'C', 'F', 'O', 'V', 'R'];
-    } else if (identity === '麻醉科Leader') {
-      allowedShifts = ['A', 'E', 'O', 'V', 'R'];
-    } else if (identity === '麻醉科書記') {
-      allowedShifts = ['B', 'E', 'O', 'V', 'R'];
-    } else {
-      allowedShifts = ['D', 'A', 'N', 'O', 'K', 'C', 'F', 'E', 'B', 'V', 'R'];
-    }
+    // 允許所有班種
+    const allowedShifts = ['D', 'A', 'N', 'O', 'K', 'C', 'F', 'E', 'B', 'V', 'R'];
     
     const key = e.key.toUpperCase();
     
@@ -1054,21 +1039,13 @@ const MonthlySchedule = () => {
       // 並行發送兩個請求
       const [formulaSchedulesRes, usersRes] = await Promise.all([
         // 獲取公式班表設定
-        fetch('/api/formula-schedules/?include_patterns=true&include_assignments=true', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        }),
+        api.get('/formula-schedules/?include_patterns=true&include_assignments=true'),
         // 獲取所有用戶
-        fetch('/api/users', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        })
+        api.get('/users')
       ]);
       
-      if (!formulaSchedulesRes.ok || !usersRes.ok) {
-        throw new Error('獲取數據失敗');
-      }
-      
-      const formulaSchedules = await formulaSchedulesRes.json();
-      const users = await usersRes.json();
+      const formulaSchedules = formulaSchedulesRes.data;
+      const users = usersRes.data;
 
       // 2. 根據公式班表設定更新當前班表中護理師的分類
       // 從原始班表複製一份，準備修改
@@ -1122,6 +1099,29 @@ const MonthlySchedule = () => {
     }
   };
 
+  // 根據用戶身份自動設定初始標籤
+  useEffect(() => {
+    if (user && user.identity) {
+      let defaultTab = 0; // 預設為「全部」
+      
+      switch (user.identity) {
+        case '麻醉專科護理師':
+        case '麻醉科Leader':
+          defaultTab = 1; // 常規月班表
+          break;
+        case '恢復室護理師':
+        case '麻醉科書記':
+          defaultTab = 4; // 恢復室
+          break;
+        default:
+          defaultTab = 0; // 全部
+          break;
+      }
+      
+      setActiveTab(defaultTab);
+    }
+  }, [user]); // 只在用戶資訊變化時執行
+
   return (
     <Box sx={{ padding: 1 }} id="monthly-schedule">
       <Typography variant="h4" gutterBottom sx={{ mb: 1 }}>
@@ -1138,6 +1138,7 @@ const MonthlySchedule = () => {
           indicatorColor="primary"
           aria-label="月班表類型標籤"
         >
+          <StyledTab label="全部" />
           <StyledTab label="常規月班表" />
           <StyledTab label="小夜班包班" />
           <StyledTab label="大夜班包班" />
@@ -1172,7 +1173,7 @@ const MonthlySchedule = () => {
         {hasEditPermission && (
           <Box sx={{ display: 'flex', gap: 1 }}>
             {/* 只在編輯模式下顯示相關按鈕，且只在常規月班表標籤顯示 */}
-            {isEditMode && activeTab === 0 && (
+            {isEditMode && activeTab === 1 && (
               <>
                 <Button 
                   variant="contained" 
@@ -1279,6 +1280,22 @@ const MonthlySchedule = () => {
                 borderRight: '1px solid rgba(224, 224, 224, 0.3)',
                 borderTop: '1px solid rgba(224, 224, 224, 0.3)',
                 borderBottom: '1px solid rgba(224, 224, 224, 0.3)',
+                padding: '4px 2px',
+                fontSize: '14px',
+                lineHeight: '1.2',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap'
+              },
+              '& .MuiTableCell-head': {
+                minHeight: '40px',
+                height: '40px',
+                maxHeight: '40px'
+              },
+              '& .MuiTableCell-body': {
+                minHeight: '32px',
+                height: '32px',
+                maxHeight: '32px'
               }
             }} 
             size="small"
@@ -1286,7 +1303,21 @@ const MonthlySchedule = () => {
             >
               <TableHead>
                 <TableRow>
-                  <TableCell width="80px" align="center">姓名</TableCell>
+                  <TableCell 
+                    width="80px" 
+                    align="center"
+                    sx={{ 
+                      minWidth: '80px',
+                      maxWidth: '80px',
+                      width: '80px',
+                      position: 'sticky',
+                      left: 0,
+                      backgroundColor: '#f5f5f5',
+                      zIndex: 1
+                    }}
+                  >
+                    姓名
+                  </TableCell>
                   {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(day => {
                     try {
                       const date = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), day);
@@ -1297,10 +1328,13 @@ const MonthlySchedule = () => {
                           align="center" 
                           padding="none" 
                           sx={{ 
-                            minWidth: '30px',
+                            minWidth: '32px',
+                            maxWidth: '32px',
+                            width: '32px',
                             fontSize: '12px',
                             bgcolor: '#f5f5f5',
-                            fontWeight: 'bold'
+                            fontWeight: 'bold',
+                            padding: '2px 1px'
                           }}
                         >
                           {day}<br />
@@ -1315,10 +1349,13 @@ const MonthlySchedule = () => {
                           align="center" 
                           padding="none" 
                           sx={{ 
-                            minWidth: '30px',
+                            minWidth: '32px',
+                            maxWidth: '32px',
+                            width: '32px',
                             fontSize: '12px',
                             bgcolor: '#f5f5f5',
-                            fontWeight: 'bold'
+                            fontWeight: 'bold',
+                            padding: '2px 1px'
                           }}
                         >
                           {day}<br />?
@@ -1326,12 +1363,36 @@ const MonthlySchedule = () => {
                       );
                     }
                   })}
-                  <TableCell align="center" width="40px" sx={{ bgcolor: '#f5f5f5', fontWeight: 'bold' }}>D</TableCell>
-                  <TableCell align="center" width="40px" sx={{ bgcolor: '#f5f5f5', fontWeight: 'bold' }}>V</TableCell>
                   <TableCell 
                     align="center" 
-                    width="60px" 
                     sx={{ 
+                      minWidth: '40px',
+                      maxWidth: '40px',
+                      width: '40px',
+                      bgcolor: '#f5f5f5', 
+                      fontWeight: 'bold' 
+                    }}
+                  >
+                    D
+                  </TableCell>
+                  <TableCell 
+                    align="center" 
+                    sx={{ 
+                      minWidth: '40px',
+                      maxWidth: '40px',
+                      width: '40px',
+                      bgcolor: '#f5f5f5', 
+                      fontWeight: 'bold' 
+                    }}
+                  >
+                    V
+                  </TableCell>
+                  <TableCell 
+                    align="center" 
+                    sx={{ 
+                      minWidth: '60px',
+                      maxWidth: '60px',
+                      width: '60px',
                       whiteSpace: 'nowrap', 
                       bgcolor: '#f5f5f5', 
                       fontWeight: 'bold',
@@ -1351,12 +1412,19 @@ const MonthlySchedule = () => {
                       component="th" 
                       scope="row" 
                       sx={{ 
+                        minWidth: '80px',
+                        maxWidth: '80px',
+                        width: '80px',
                         whiteSpace: 'nowrap', 
                         padding: '6px',
+                        position: 'sticky',
+                        left: 0,
+                        backgroundColor: 'white',
+                        zIndex: 1,
                         // 當該護理師處於quickEdit模式時添加高亮
                         backgroundColor: (quickEdit && quickEdit.editing && quickEdit.nurseIndex === nurseIndex) 
                           ? '#f0f7ff' 
-                          : 'inherit'
+                          : 'white'
                       }} 
                       align="center"
                       onClick={() => {
@@ -1396,22 +1464,82 @@ const MonthlySchedule = () => {
                         {shift || 'O'}
                       </ShiftCell>
                     ))}
-                    <TableCell align="center" padding="none">{countShifts(nurse.shifts, 'D')}</TableCell>
-                    <TableCell align="center" padding="none">{countShifts(nurse.shifts, 'V')}</TableCell>
-                    <TableCell align="center" padding="none">{calculateTotalHours(nurse.shifts)}</TableCell>
+                    <TableCell 
+                      align="center" 
+                      padding="none"
+                      sx={{ 
+                        minWidth: '40px',
+                        maxWidth: '40px',
+                        width: '40px'
+                      }}
+                    >
+                      {countShifts(nurse.shifts, 'D')}
+                    </TableCell>
+                    <TableCell 
+                      align="center" 
+                      padding="none"
+                      sx={{ 
+                        minWidth: '40px',
+                        maxWidth: '40px',
+                        width: '40px'
+                      }}
+                    >
+                      {countShifts(nurse.shifts, 'V')}
+                    </TableCell>
+                    <TableCell 
+                      align="center" 
+                      padding="none"
+                      sx={{ 
+                        minWidth: '60px',
+                        maxWidth: '60px',
+                        width: '60px'
+                      }}
+                    >
+                      {calculateTotalHours(nurse.shifts)}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
               <TableBody>
                 {['A', 'E', 'N', 'D'].map(shiftType => (
                   <TableRow key={shiftType}>
-                    <TableCell padding="none" sx={{ paddingLeft: '6px' }} align="center">{shiftType}</TableCell>
+                    <TableCell 
+                      padding="none" 
+                      sx={{ 
+                        minWidth: '80px',
+                        maxWidth: '80px',
+                        width: '80px',
+                        paddingLeft: '6px',
+                        position: 'sticky',
+                        left: 0,
+                        backgroundColor: 'white',
+                        zIndex: 1
+                      }} 
+                      align="center"
+                    >
+                      {shiftType}
+                    </TableCell>
                     {Array.from({ length: daysInMonth }, (_, i) => i).map(day => (
-                      <TableCell key={day} align="center" padding="none">
+                      <TableCell 
+                        key={day} 
+                        align="center" 
+                        padding="none"
+                        sx={{ 
+                          minWidth: '32px',
+                          maxWidth: '32px',
+                          width: '32px'
+                        }}
+                      >
                         {countDailyShifts(day, shiftType)}
                       </TableCell>
                     ))}
-                    <TableCell colSpan={3} />
+                    <TableCell 
+                      colSpan={3} 
+                      sx={{ 
+                        minWidth: '140px',
+                        width: '140px'
+                      }}
+                    />
                   </TableRow>
                 ))}
               </TableBody>
@@ -1421,7 +1549,7 @@ const MonthlySchedule = () => {
       ) : !isLoading && (
         <Paper sx={{ padding: 3, marginTop: 2 }}>
           <Typography variant="body1" align="center">
-            {activeTab === 0 ? '尚未生成班表，請點擊"生成月班表"按鈕' : '目前沒有此類型護理師的班表數據'}
+            {activeTab === 1 ? '尚未生成班表，請點擊"生成月班表"按鈕' : '目前沒有此類型護理師的班表數據'}
           </Typography>
         </Paper>
       )}

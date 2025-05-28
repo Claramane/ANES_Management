@@ -50,6 +50,8 @@ function Login() {
     // 執行登入
     const success = await login(username, password);
     if (success) {
+      // 設置登入方式標記
+      localStorage.setItem('loginMethod', 'password');
       navigate('/dashboard');
     }
   };
@@ -88,7 +90,8 @@ function Login() {
 
       // 調用瀏覽器的WebAuthn API
       const credential = await navigator.credentials.get({
-        publicKey: options
+        publicKey: options,
+        mediation: 'conditional'
       });
 
       // 完成認證流程

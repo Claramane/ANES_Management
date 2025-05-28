@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // 配置 axios 實例
 const api = axios.create({
-  baseURL: 'http://localhost:8000/api', // 後端 API 地址，添加 /api 前綴
+  baseURL: process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000/api', // 使用環境變數，如果未設定則使用預設值
   timeout: 10000, // 請求超時時間
   withCredentials: true, // 預設帶上 cookie，支援 session
 });
@@ -35,6 +35,19 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
+    // 處理401未授權錯誤 - 自動跳轉到登入頁面
+    if (error.response && error.response.status === 401) {
+      // 清除本地存儲的認證資訊
+      localStorage.removeItem('auth-storage');
+      
+      // 只有在不是登入頁面時才跳轉，避免無限循環
+      if (window.location.pathname !== '/login') {
+        // 使用 window.location.href 確保完全重新載入頁面
+        window.location.href = '/login';
+        return Promise.reject(new Error('登入已過期，請重新登入'));
+      }
+    }
+    
     // 處理錯誤，確保返回標準化錯誤信息
     let errorMessage = '發生未知錯誤';
     
@@ -103,6 +116,44 @@ api.interceptors.response.use(
   }
 );
 
+// 創建一個特殊的API實例，用於緩存資料的請求，不會觸發自動跳轉
+const apiForCachedData = axios.create({
+  baseURL: process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000/api',
+  timeout: 10000,
+  withCredentials: true,
+});
+
+// 為緩存資料API添加請求攔截器
+apiForCachedData.interceptors.request.use(
+  (config) => {
+    const authStorage = localStorage.getItem('auth-storage');
+    if (authStorage) {
+      const { state } = JSON.parse(authStorage);
+      if (state.token) {
+        config.headers.Authorization = `Bearer ${state.token}`;
+      }
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+// 為緩存資料API添加響應攔截器 - 不自動跳轉，只是靜默失敗
+apiForCachedData.interceptors.response.use(
+  (response) => {
+    return response;
+  },
+  (error) => {
+    // 對於緩存資料請求，401錯誤不跳轉，只是返回錯誤
+    if (error.response && error.response.status === 401) {
+      return Promise.reject(new Error('TOKEN_EXPIRED'));
+    }
+    return Promise.reject(error);
+  }
+);
+
 // API服務
 const apiService = {
   // 用戶相關
@@ -123,9 +174,9 @@ const apiService = {
   
   // 公式班表相關
   formulaSchedule: {
-    getAll: () => api.get('/formula-schedules'),
+    getAll: () => api.get('/formula-schedules/'),
     getAllWithPatterns: () => api.get('/formula-schedules?include_patterns=true&include_assignments=true'),
-    getAllPatterns: () => api.get('/formula-schedules/patterns'),
+    getAllPatterns: () => api.get('/formula-schedules/patterns/'),
     getPatternsByFormula: (formulaId) => api.get(`/formula-schedules/patterns?formula_id=${formulaId}`),
     getPatternsByGroup: (groupNumber) => api.get(`/formula-schedules/patterns?group_number=${groupNumber}`),
     getById: (id) => api.get(`/formula-schedules/${id}`),
@@ -178,7 +229,7 @@ const apiService = {
   
   // 換班相關
   shiftSwap: {
-    getRequests: () => api.get('/shift-swap'),
+    getRequests: () => api.get('/shift-swap/'),
     getById: (id) => api.get(`/shift-swap/${id}`),
     getMyRequests: () => api.get('/shift-swap/me'),
     create: (data) => api.post('/shift-swap', data),
@@ -196,12 +247,12 @@ const apiService = {
   
   // 公告相關
   announcement: {
-    getAll: () => api.get('/announcements'),
+    getAll: () => api.get('/announcements/'),
     getById: (id) => api.get(`/announcements/${id}`),
     create: (data) => api.post('/announcements', data),
     update: (id, data) => api.put(`/announcements/${id}`, data),
     delete: (id) => api.delete(`/announcements/${id}`),
-    getCategories: () => api.get('/announcements/categories'),
+    getCategories: () => api.get('/announcements/categories/'),
     createCategory: (data) => api.post('/announcements/categories', data),
     updateCategory: (id, data) => api.put(`/announcements/categories/${id}`, data),
     deleteCategory: (id) => api.delete(`/announcements/categories/${id}`),
@@ -284,5 +335,5 @@ const apiService = {
 };
 
 // 導出 API 實例和服務
-export { api };
+export { api, apiForCachedData };
 export default apiService; 
