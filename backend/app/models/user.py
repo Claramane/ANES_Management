@@ -29,9 +29,4 @@ class User(Base):
     announcements = relationship("Announcement", back_populates="author")
     formula_assignments = relationship("NurseFormulaAssignment", back_populates="user")
     pattern_assignments = relationship("PatternNurseAssignment", back_populates="user")
-    webauthn_credentials = relationship("WebAuthnCredential", back_populates="user")
-    
-    # 虛擬屬性，不保存到數據庫
-    @property
-    def is_active(self):
-        return True 
+    webauthn_credentials = relationship("WebAuthnCredential", back_populates="user") 

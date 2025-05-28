@@ -2054,11 +2054,12 @@ const ShiftSwap = () => {
     
     const isAdmin = user.role === 'admin';
     const isLeader = user.identity === 'anesthesia_leader' || user.identity === '麻醉科Leader';
+    const isHeadNurse = user.identity === '護理長';
     const isRequester = request.requestor_id === user.id;
     
     // 檢查權限
-    if (isAdmin || isLeader) {
-      return true; // 管理員和領導可以操作任何請求
+    if (isAdmin || isLeader || isHeadNurse) {
+      return true; // 管理員、領導和護理長可以操作任何請求
     } else if (isRequester && request.status === 'pending') {
       return true; // 申請人可以取消待處理的請求
     }
@@ -2072,10 +2073,11 @@ const ShiftSwap = () => {
     
     const isAdmin = user.role === 'admin';
     const isLeader = user.identity === 'anesthesia_leader' || user.identity === '麻醉科Leader';
+    const isHeadNurse = user.identity === '護理長';
     const isRequester = request.requestor_id === user.id;
     
-    // 已接受的請求，管理員/護理長可以駁回
-    if (request.status === 'accepted' && (isAdmin || isLeader)) {
+    // 已接受的請求，管理員/護理長/領導可以駁回
+    if (request.status === 'accepted' && (isAdmin || isLeader || isHeadNurse)) {
       return '駁回並恢復班表';
     }
     
@@ -2083,7 +2085,7 @@ const ShiftSwap = () => {
     if (request.status === 'pending') {
       if (isRequester) {
         return '取消申請';
-      } else if (isAdmin || isLeader) {
+      } else if (isAdmin || isLeader || isHeadNurse) {
         return '駁回申請';
       }
     }

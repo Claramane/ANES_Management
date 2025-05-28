@@ -136,11 +136,12 @@ async def generate_monthly_schedule(
         
         # 獲取所有護理師
         all_nurses = db.query(User).filter(
-            User.role.in_(['nurse', 'secretary', 'leader', 'head_nurse'])
+            User.role.in_(['nurse', 'secretary', 'leader', 'head_nurse', 'supervise_nurse']),
+            User.is_active == True
         ).all()
         
         if not all_nurses:
-            raise ValueError("未找到任何護理師，無法生成班表")
+            raise ValueError("未找到任何啟用的護理師，無法生成班表")
             
         # 生成月度排班
         schedule_entries = []

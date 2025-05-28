@@ -62,6 +62,40 @@ const ensureValidDate = (date) => {
   return new Date();
 };
 
+// 確保班表包含所有啟用護理師的工具函數
+const ensureAllActiveNursesIncluded = (scheduleData, allNurses, selectedDate) => {
+  const activeNurses = allNurses.filter(nurse => nurse.is_active === true);
+  const missingNurses = activeNurses.filter(nurse => 
+    !scheduleData.some(scheduled => scheduled.id === nurse.id)
+  );
+  
+  if (missingNurses.length > 0) {
+    console.warn(`發現 ${missingNurses.length} 位啟用護理師不在班表中，自動補充:`);
+    missingNurses.forEach(nurse => {
+      console.warn(`- ${nurse.name || nurse.full_name} (ID: ${nurse.id}, role: ${nurse.role})`);
+    });
+    
+    const daysInSelectedMonth = getDaysInMonth(selectedDate);
+    const additionalNurses = missingNurses.map(nurse => {
+      const identity = nurse.role === 'head_nurse' ? '護理長' : nurse.identity;
+      
+      return {
+        id: nurse.id,
+        name: nurse.full_name || nurse.name || `護理師 ${nurse.id}`,
+        role: nurse.role || 'nurse',
+        identity: identity || '',
+        group_data: nurse.group_data || '',
+        shifts: Array(daysInSelectedMonth).fill('O'),
+        area_codes: Array(daysInSelectedMonth).fill(null)
+      };
+    });
+    
+    return [...scheduleData, ...additionalNurses];
+  }
+  
+  return scheduleData;
+};
+
 // 班次顏色設定
 const ShiftCell = styled(TableCell)(({ shift }) => {
   const colors = { 
@@ -736,11 +770,31 @@ const MonthlySchedule = () => {
     try {
       handleCloseGenerateDialog(); // 關閉確認對話框
       setError(null); // 清除之前的錯誤
+      
+      // 生成前先記錄當前的護理師數量
+      const activeNurses = nurseUsers.filter(nurse => nurse.is_active === true);
+      console.log('生成班表前的護理師統計:');
+      console.log(`總共 ${nurseUsers.length} 位護理師，其中 ${activeNurses.length} 位啟用中`);
+      console.log('啟用中的護理師角色分佈:', activeNurses.reduce((acc, nurse) => {
+        acc[nurse.role] = (acc[nurse.role] || 0) + 1;
+        return acc;
+      }, {}));
+      
+      // 特別檢查 supervise_nurse 角色
+      const superviseNurses = activeNurses.filter(nurse => nurse.role === 'supervise_nurse');
+      console.log(`supervise_nurse 角色護理師: ${superviseNurses.length} 位`);
+      superviseNurses.forEach(nurse => {
+        console.log(`- ${nurse.name || nurse.full_name} (ID: ${nurse.id})`);
+      });
+      
       const response = await generateMonthlySchedule();
       
-      // 如果 response 是數組，直接更新本地狀態
+      // 檢查生成的班表是否包含所有護理師
+      let generatedSchedule = [];
+      
+      // 如果 response 是數組，直接使用
       if (Array.isArray(response)) {
-        setScheduleData(response);
+        generatedSchedule = response;
       } 
       // 如果 response 是嵌套結構，提取 schedule 數組
       else if (response && typeof response === 'object') {
@@ -751,13 +805,60 @@ const MonthlySchedule = () => {
             response[year][month] && 
             response[year][month].schedule) {
           
-          const extractedData = response[year][month].schedule;
-          setScheduleData(extractedData);
+          generatedSchedule = response[year][month].schedule;
         }
       }
       
-      setSuccess('月班表已生成並顯示（尚未儲存）');
+      console.log('生成班表後的統計:');
+      console.log(`生成的班表包含 ${generatedSchedule.length} 位護理師`);
+      console.log('生成班表中的護理師角色分佈:', generatedSchedule.reduce((acc, nurse) => {
+        acc[nurse.role] = (acc[nurse.role] || 0) + 1;
+        return acc;
+      }, {}));
+      
+      // 檢查是否有遺漏的 supervise_nurse
+      const generatedSuperviseNurses = generatedSchedule.filter(nurse => nurse.role === 'supervise_nurse');
+      console.log(`生成班表中的 supervise_nurse: ${generatedSuperviseNurses.length} 位`);
+      
+      if (superviseNurses.length > generatedSuperviseNurses.length) {
+        console.warn(`遺漏了 ${superviseNurses.length - generatedSuperviseNurses.length} 位 supervise_nurse!`);
+        
+        // 找出遺漏的護理師
+        const missingNurses = superviseNurses.filter(nurse => 
+          !generatedSchedule.some(generated => generated.id === nurse.id)
+        );
+        
+        console.warn('遺漏的 supervise_nurse:', missingNurses.map(nurse => 
+          `${nurse.name || nurse.full_name} (ID: ${nurse.id})`
+        ));
+        
+        // 手動添加遺漏的護理師到班表中
+        const daysInSelectedMonth = getDaysInMonth(selectedDate);
+        const additionalNurses = missingNurses.map(nurse => {
+          const identity = nurse.role === 'head_nurse' ? '護理長' : nurse.identity;
+          
+          return {
+            id: nurse.id,
+            name: nurse.full_name || nurse.name || `護理師 ${nurse.id}`,
+            role: nurse.role || 'nurse',
+            identity: identity || '',
+            group_data: nurse.group_data || '',
+            shifts: Array(daysInSelectedMonth).fill('O'),
+            area_codes: Array(daysInSelectedMonth).fill(null)
+          };
+        });
+        
+        generatedSchedule = [...generatedSchedule, ...additionalNurses];
+        
+        console.log(`已手動添加 ${additionalNurses.length} 位遺漏的護理師`);
+        setSuccess(`月班表已生成並顯示（尚未儲存）- 已自動補充 ${additionalNurses.length} 位遺漏的護理師`);
+      } else {
+        setSuccess('月班表已生成並顯示（尚未儲存）');
+      }
+      
+      setScheduleData(generatedSchedule);
       setTimeout(() => setSuccess(null), 3000);
+      
     } catch (error) {
       console.error('生成月班表失敗:', error);
       // 避免直接渲染錯誤對象，而是顯示錯誤信息字串
@@ -843,19 +944,22 @@ const MonthlySchedule = () => {
       handleCloseResetDialog(); // 關閉確認對話框
       setError(null);
       
-      // 獲取當前已知的護理師資料
-      const nurses = nurseUsers;
-      if (!nurses || nurses.length === 0) {
+      // 獲取當前已知的護理師資料，篩選掉停權用戶
+      const allNurses = nurseUsers;
+      if (!allNurses || allNurses.length === 0) {
         setError('無法重置班表：找不到護理師資料');
         return;
       }
+      
+      // 只包含明確啟用的用戶 (is_active === true)
+      const activeNurses = allNurses.filter(nurse => nurse.is_active === true);
       
       const year = selectedDate.getFullYear();
       const month = selectedDate.getMonth() + 1;
       const daysInSelectedMonth = getDaysInMonth(selectedDate);
       
       // 生成空白班表
-      const emptySchedule = nurses.map(nurse => {
+      const emptySchedule = activeNurses.map(nurse => {
         // 確保護理長的身份正確設置
         const identity = nurse.role === 'head_nurse' ? '護理長' : nurse.identity;
         
@@ -880,7 +984,7 @@ const MonthlySchedule = () => {
         error: null
       });
       
-      setSuccess(`已重置 ${year}年${month}月 班表為空白班表（尚未儲存）`);
+      setSuccess(`已重置 ${year}年${month}月 班表為空白班表（包含 ${activeNurses.length} 位啟用護理師，尚未儲存）`);
       setTimeout(() => setSuccess(null), 3000);
       
     } catch (error) {
@@ -929,19 +1033,22 @@ const MonthlySchedule = () => {
       
       setError(null);
       
-      // 獲取當前已知的護理師資料
-      const nurses = nurseUsers;
-      if (!nurses || nurses.length === 0) {
+      // 獲取當前已知的護理師資料，篩選掉停權用戶
+      const allNurses = nurseUsers;
+      if (!allNurses || allNurses.length === 0) {
         setError('無法生成空白班表：找不到護理師資料');
         return;
       }
+      
+      // 只包含明確啟用的用戶 (is_active === true)
+      const activeNurses = allNurses.filter(nurse => nurse.is_active === true);
       
       const year = selectedDate.getFullYear();
       const month = selectedDate.getMonth() + 1;
       const daysInSelectedMonth = getDaysInMonth(selectedDate);
       
       // 生成空白班表
-      const emptySchedule = nurses.map(nurse => {
+      const emptySchedule = activeNurses.map(nurse => {
         // 確保護理長的身份正確設置
         const identity = nurse.role === 'head_nurse' ? '護理長' : nurse.identity;
         
@@ -967,7 +1074,7 @@ const MonthlySchedule = () => {
         error: null // 清除錯誤狀態
       });
       
-      setSuccess(`已為 ${year}年${month}月 生成空白班表（尚未儲存）`);
+      setSuccess(`已為 ${year}年${month}月 生成空白班表（包含 ${activeNurses.length} 位啟用護理師，尚未儲存）`);
       setTimeout(() => setSuccess(null), 3000);
       
     } catch (error) {
@@ -1107,10 +1214,29 @@ const MonthlySchedule = () => {
       
       const formulaSchedules = formulaSchedulesRes.data;
       const users = usersRes.data;
+      
+      // 檢查所有啟用的護理師
+      const activeUsers = users.filter(user => user.is_active === true);
+      console.log('更新包班人員前統計:');
+      console.log(`總共 ${users.length} 位用戶，其中 ${activeUsers.length} 位啟用中`);
+      console.log('啟用用戶的角色分佈:', activeUsers.reduce((acc, user) => {
+        acc[user.role] = (acc[user.role] || 0) + 1;
+        return acc;
+      }, {}));
+      
+      // 特別檢查 supervise_nurse 角色
+      const activeSuperviseNurses = activeUsers.filter(user => user.role === 'supervise_nurse');
+      console.log(`啟用的 supervise_nurse: ${activeSuperviseNurses.length} 位`);
+      activeSuperviseNurses.forEach(user => {
+        console.log(`- ${user.name || user.full_name} (ID: ${user.id})`);
+      });
 
       // 2. 根據公式班表設定更新當前班表中護理師的分類
       // 從原始班表複製一份，準備修改
-      const updatedScheduleData = [...scheduleData];
+      let updatedScheduleData = [...scheduleData];
+      
+      console.log('當前班表包含的護理師數量:', updatedScheduleData.length);
+      console.log('當前班表中的 supervise_nurse:', updatedScheduleData.filter(nurse => nurse.role === 'supervise_nurse').length);
 
       // 遍歷所有護理師，更新其分類標記
       for (const nurse of updatedScheduleData) {
@@ -1140,6 +1266,54 @@ const MonthlySchedule = () => {
         }
       }
       
+      // 檢查是否有啟用的護理師不在當前班表中
+      const missingActiveUsers = activeUsers.filter(user => 
+        !updatedScheduleData.some(nurse => nurse.id === user.id)
+      );
+      
+      if (missingActiveUsers.length > 0) {
+        console.warn(`發現 ${missingActiveUsers.length} 位啟用護理師不在當前班表中:`);
+        missingActiveUsers.forEach(user => {
+          console.warn(`- ${user.name || user.full_name} (ID: ${user.id}, role: ${user.role})`);
+        });
+        
+        // 手動添加遺漏的護理師到班表中
+        const daysInSelectedMonth = getDaysInMonth(selectedDate);
+        const additionalNurses = missingActiveUsers.map(user => {
+          const identity = user.role === 'head_nurse' ? '護理長' : user.identity;
+          
+          // 根據 group_data 設置 special_type
+          let special_type = null;
+          if (user.group_data) {
+            try {
+              const groupData = JSON.parse(user.group_data);
+              if (Array.isArray(groupData) && groupData.length >= 2) {
+                const groupId = groupData[1];
+                if (groupId === 'SNP' || groupId === 'LNP') {
+                  special_type = groupId;
+                }
+              }
+            } catch (e) {
+              console.error(`解析遺漏護理師 ${user.name} 的group_data出錯:`, e);
+            }
+          }
+          
+          return {
+            id: user.id,
+            name: user.full_name || user.name || `護理師 ${user.id}`,
+            role: user.role || 'nurse',
+            identity: identity || '',
+            group_data: user.group_data || '',
+            special_type: special_type,
+            shifts: Array(daysInSelectedMonth).fill('O'),
+            area_codes: Array(daysInSelectedMonth).fill(null)
+          };
+        });
+        
+        updatedScheduleData = [...updatedScheduleData, ...additionalNurses];
+        console.log(`已添加 ${additionalNurses.length} 位遺漏的護理師到班表中`);
+      }
+      
       // 3. 更新本地狀態並設置為臨時更改（尚未儲存）
       setScheduleData(updatedScheduleData);
       useScheduleStore.setState({
@@ -1148,7 +1322,13 @@ const MonthlySchedule = () => {
         isLoading: false
       });
       
-      setSuccess('已從公式班表更新護理師分類，請記得儲存班表以保存更改');
+      let successMessage = '已從公式班表更新護理師分類';
+      if (missingActiveUsers.length > 0) {
+        successMessage += `，並自動補充 ${missingActiveUsers.length} 位遺漏的護理師`;
+      }
+      successMessage += '，請記得儲存班表以保存更改';
+      
+      setSuccess(successMessage);
       setTimeout(() => setSuccess(null), 3000);
       
     } catch (error) {

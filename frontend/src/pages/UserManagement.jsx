@@ -56,7 +56,7 @@ const UserManagement = () => {
     password: '',
     role: 'nurse',
     identity: '麻醉專科護理師',
-    group: 1,
+    group: null,
     is_active: true,
     hire_date: new Date().toISOString().split('T')[0]  // 預設為今天日期
   });
@@ -75,7 +75,7 @@ const UserManagement = () => {
   
   // 初始化排序用戶列表
   useEffect(() => {
-    if (users && users.length > 0) {
+    if (users) {  // 移除 length > 0 的檢查
       // 根據 showInactiveUsers 過濾用戶
       const filteredUsers = showInactiveUsers 
         ? users 
@@ -258,6 +258,7 @@ const UserManagement = () => {
       await fetchUsers();
     } catch (err) {
       console.error('Error loading users:', err);
+      setLocalError('載入用戶列表失敗：' + (err.response?.data?.detail || err.message));
     }
   }, [fetchUsers]);
 
@@ -311,7 +312,7 @@ const UserManagement = () => {
       password: '',
       role: 'nurse',
       identity: '麻醉專科護理師',
-      group: 1,
+      group: null,
       is_active: true,
       hire_date: new Date().toISOString().split('T')[0]  // 預設為今天日期
     });
@@ -461,7 +462,7 @@ const UserManagement = () => {
           component="h1" 
           sx={{ 
             fontWeight: 'bold',
-            color: '#1976d2' // 藍色，可以根據需要調整
+            color: '#1976d2'
           }}
         >
           用戶管理
@@ -485,182 +486,195 @@ const UserManagement = () => {
           {success}
         </Alert>
       )}
-      
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-        <Box sx={{ display: 'flex', gap: 2 }}>
-          <FormControlLabel
-            control={
-              <Switch
-                checked={editMode}
-                onChange={handleEditModeChange}
-                name="editMode"
-                color="primary"
+
+      {!isLoading && !error && !localError && (
+        <>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={editMode}
+                    onChange={handleEditModeChange}
+                    name="editMode"
+                    color="primary"
+                  />
+                }
+                label="編輯"
               />
-            }
-            label="編輯"
-          />
+              
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={showInactiveUsers}
+                    onChange={(e) => setShowInactiveUsers(e.target.checked)}
+                    name="showInactiveUsers"
+                    color="secondary"
+                  />
+                }
+                label="顯示停權用戶"
+              />
+            </Box>
+            
+            <Button
+              variant="contained"
+              color="primary"
+              startIcon={<AddIcon />}
+              onClick={handleAddUser}
+            >
+              添加護理師
+            </Button>
+          </Box>
           
-          <FormControlLabel
-            control={
-              <Switch
-                checked={showInactiveUsers}
-                onChange={(e) => setShowInactiveUsers(e.target.checked)}
-                name="showInactiveUsers"
-                color="secondary"
-              />
-            }
-            label="顯示停權用戶"
-          />
-        </Box>
-        
-        <Button
-          variant="contained"
-          color="primary"
-          startIcon={<AddIcon />}
-          onClick={handleAddUser}
-        >
-          添加護理師
-        </Button>
-      </Box>
-      
-      <Paper sx={{ width: '100%', overflow: 'auto' }}>
-        <TableContainer>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>員工編號</TableCell>
-                <TableCell>姓名</TableCell>
-                <TableCell>狀態</TableCell>
-                <TableCell>電子郵件</TableCell>
-                <TableCell>入職日期</TableCell>
-                <TableCell>身份</TableCell>
-                {editMode && <TableCell>角色</TableCell>}
-                {editMode && <TableCell>操作</TableCell>}
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {sortableUsers.map((user, index) => (
-                <TableRow
-                  key={user.id}
-                  sx={{ 
-                    bgcolor: user.role === 'head_nurse' ? '#f5f5f5' : 
-                             user.is_active === false ? '#ffebee' : 'white',
-                    '&:hover': { 
-                      bgcolor: user.role === 'head_nurse' ? '#f0f0f0' : 
-                               user.is_active === false ? '#ffcdd2' : '#f9f9f9' 
-                    }
-                  }}
-                >
-                  <TableCell>{user.username}</TableCell>
-                  <TableCell>{user.full_name}</TableCell>
-                  <TableCell>
-                    {user.is_active === false ? (
-                      <Tooltip title="停權">
-                        <CancelIcon sx={{ color: '#f44336', fontSize: 24 }} />
-                      </Tooltip>
-                    ) : (
-                      <Tooltip title="正常">
-                        <CheckCircleIcon sx={{ color: '#4caf50', fontSize: 24 }} />
-                      </Tooltip>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {editMode && user.role !== 'head_nurse' && user.role !== 'admin' && user.is_active !== false ? (
-                      <TextField
-                        size="small"
-                        value={user.email || ''}
-                        onChange={(e) => handleSelectChange(user.id, 'email', e.target.value)}
-                      />
-                    ) : (
-                      user.email
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {user.hire_date && (
-                      <>
-                        {user.hire_date}
-                        <span style={{ color: '#666', marginLeft: '8px' }}>
-                          {(() => {
-                            const service = calculateYearsOfService(user.hire_date);
-                            return `[${service.years}年${service.months}個月]`;
-                          })()}
-                        </span>
-                      </>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {editMode && user.role !== 'head_nurse' && user.role !== 'admin' && user.is_active !== false ? (
-                      <FormControl size="small" fullWidth>
-                        <Select
-                          value={user.identity || ''}
-                          onChange={(e) => handleSelectChange(user.id, 'identity', e.target.value)}
-                          displayEmpty
-                        >
-                          <MenuItem value="護理長">護理長</MenuItem>
-                          <MenuItem value="麻醉專科護理師">麻醉專科護理師</MenuItem>
-                          <MenuItem value="恢復室護理師">恢復室護理師</MenuItem>
-                          <MenuItem value="麻醉科Leader">麻醉科Leader</MenuItem>
-                          <MenuItem value="麻醉科書記">麻醉科書記</MenuItem>
-                        </Select>
-                      </FormControl>
-                    ) : (
-                      user.identity
-                    )}
-                  </TableCell>
-                  {editMode && (
-                    <TableCell>
-                      {user.role !== 'admin' && user.is_active !== false ? (
-                        <FormControl size="small" fullWidth>
-                          <Select
-                            value={user.role || 'nurse'}
-                            onChange={(e) => handleSelectChange(user.id, 'role', e.target.value)}
-                            displayEmpty
-                          >
-                            <MenuItem value="nurse">一般護理師</MenuItem>
-                            <MenuItem value="leader">Leader</MenuItem>
-                            <MenuItem value="supervise_nurse">A組護理師</MenuItem>
-                            <MenuItem value="head_nurse">護理長</MenuItem>
-                          </Select>
-                        </FormControl>
-                      ) : (
-                        user.role
-                      )}
-                    </TableCell>
-                  )}
-                  {editMode && (
-                    <TableCell>
-                      {user.role !== 'head_nurse' && user.role !== 'admin' ? (
-                        user.is_active === false ? (
-                          <Tooltip title="啟用用戶">
-                            <IconButton 
-                              color="success" 
-                              onClick={() => handleActivate(user)}
+          <Paper sx={{ width: '100%', overflow: 'auto' }}>
+            <TableContainer>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>員工編號</TableCell>
+                    <TableCell>姓名</TableCell>
+                    <TableCell>狀態</TableCell>
+                    <TableCell>電子郵件</TableCell>
+                    <TableCell>入職日期</TableCell>
+                    <TableCell>身份</TableCell>
+                    {editMode && <TableCell>角色</TableCell>}
+                    {editMode && <TableCell>操作</TableCell>}
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {sortableUsers && sortableUsers.length > 0 ? (
+                    sortableUsers.map((user, index) => (
+                      <TableRow
+                        key={user.id}
+                        sx={{ 
+                          bgcolor: user.role === 'head_nurse' ? '#f5f5f5' : 
+                                   user.is_active === false ? '#ffebee' : 'white',
+                          '&:hover': { 
+                            bgcolor: user.role === 'head_nurse' ? '#f0f0f0' : 
+                                     user.is_active === false ? '#ffcdd2' : '#f9f9f9' 
+                          }
+                        }}
+                      >
+                        <TableCell>{user.username}</TableCell>
+                        <TableCell>{user.full_name}</TableCell>
+                        <TableCell>
+                          {user.is_active === false ? (
+                            <Tooltip title="停權">
+                              <CancelIcon sx={{ color: '#f44336', fontSize: 24 }} />
+                            </Tooltip>
+                          ) : (
+                            <Tooltip title="正常">
+                              <CheckCircleIcon sx={{ color: '#4caf50', fontSize: 24 }} />
+                            </Tooltip>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {editMode && user.role !== 'head_nurse' && user.role !== 'admin' && user.is_active !== false ? (
+                            <TextField
                               size="small"
-                            >
-                              <CheckCircleIcon />
-                            </IconButton>
-                          </Tooltip>
-                        ) : (
-                          <Tooltip title="停權用戶">
-                            <IconButton 
-                              color="error" 
-                              onClick={() => handleDeactivate(user)}
-                              size="small"
-                            >
-                              <BlockIcon />
-                            </IconButton>
-                          </Tooltip>
-                        )
-                      ) : null }
-                    </TableCell>
+                              value={user.email || ''}
+                              onChange={(e) => handleSelectChange(user.id, 'email', e.target.value)}
+                            />
+                          ) : (
+                            user.email
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {user.hire_date && (
+                            <>
+                              {user.hire_date}
+                              <span style={{ color: '#666', marginLeft: '8px' }}>
+                                {(() => {
+                                  const service = calculateYearsOfService(user.hire_date);
+                                  return `[${service.years}年${service.months}個月]`;
+                                })()}
+                              </span>
+                            </>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {editMode && user.role !== 'head_nurse' && user.role !== 'admin' && user.is_active !== false ? (
+                            <FormControl size="small" fullWidth>
+                              <Select
+                                value={user.identity || ''}
+                                onChange={(e) => handleSelectChange(user.id, 'identity', e.target.value)}
+                                displayEmpty
+                              >
+                                <MenuItem value="護理長">護理長</MenuItem>
+                                <MenuItem value="麻醉專科護理師">麻醉專科護理師</MenuItem>
+                                <MenuItem value="恢復室護理師">恢復室護理師</MenuItem>
+                                <MenuItem value="麻醉科Leader">麻醉科Leader</MenuItem>
+                                <MenuItem value="麻醉科書記">麻醉科書記</MenuItem>
+                              </Select>
+                            </FormControl>
+                          ) : (
+                            user.identity
+                          )}
+                        </TableCell>
+                        {editMode && (
+                          <TableCell>
+                            {user.role !== 'admin' && user.is_active !== false ? (
+                              <FormControl size="small" fullWidth>
+                                <Select
+                                  value={user.role || 'nurse'}
+                                  onChange={(e) => handleSelectChange(user.id, 'role', e.target.value)}
+                                  displayEmpty
+                                >
+                                  <MenuItem value="nurse">一般護理師</MenuItem>
+                                  <MenuItem value="leader">Leader</MenuItem>
+                                  <MenuItem value="supervise_nurse">A組護理師</MenuItem>
+                                  <MenuItem value="head_nurse">護理長</MenuItem>
+                                  <MenuItem value="clerk">書記</MenuItem>
+                                </Select>
+                              </FormControl>
+                            ) : (
+                              user.role
+                            )}
+                          </TableCell>
+                        )}
+                        {editMode && (
+                          <TableCell>
+                            {user.role !== 'head_nurse' && user.role !== 'admin' ? (
+                              user.is_active === false ? (
+                                <Tooltip title="啟用用戶">
+                                  <IconButton 
+                                    color="success" 
+                                    onClick={() => handleActivate(user)}
+                                    size="small"
+                                  >
+                                    <CheckCircleIcon />
+                                  </IconButton>
+                                </Tooltip>
+                              ) : (
+                                <Tooltip title="停權用戶">
+                                  <IconButton 
+                                    color="error" 
+                                    onClick={() => handleDeactivate(user)}
+                                    size="small"
+                                  >
+                                    <BlockIcon />
+                                  </IconButton>
+                                </Tooltip>
+                              )
+                            ) : null }
+                          </TableCell>
+                        )}
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={editMode ? 8 : 6} align="center">
+                        沒有找到用戶
+                      </TableCell>
+                    </TableRow>
                   )}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      </Paper>
-      
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Paper>
+        </>
+      )}
+
       {/* 添加用戶對話框 */}
       <Dialog open={openAddDialog} onClose={() => setOpenAddDialog(false)}>
         <DialogTitle>添加護理師</DialogTitle>
@@ -744,21 +758,6 @@ const UserManagement = () => {
             </Select>
           </FormControl>
           <FormControl fullWidth margin="dense">
-            <InputLabel>組別</InputLabel>
-            <Select
-              name="group"
-              value={formData.group}
-              onChange={handleInputChange}
-              label="組別"
-            >
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((group) => (
-                <MenuItem key={group} value={group}>
-                  {group}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          <FormControl fullWidth margin="dense">
             <InputLabel>角色</InputLabel>
             <Select
               name="role"
@@ -770,6 +769,7 @@ const UserManagement = () => {
               <MenuItem value="leader">Leader</MenuItem>
               <MenuItem value="supervise_nurse">A組護理師</MenuItem>
               <MenuItem value="head_nurse">護理長</MenuItem>
+              <MenuItem value="clerk">書記</MenuItem>
             </Select>
           </FormControl>
         </DialogContent>

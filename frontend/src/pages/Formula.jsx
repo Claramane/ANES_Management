@@ -299,11 +299,84 @@ const Formula = () => {
         setError(null);
         
         // 使用配置好的 api 實例而不是直接 fetch
-        const res = await api.get('/users');
+        const res = await api.get('/users', {
+          params: {
+            include_inactive: true,  // 獲取所有用戶以便處理復權邏輯
+            limit: 1000
+          }
+        });
         const data = res.data;
         
         if (!Array.isArray(data)) throw new Error('API返回的數據不是數組');
-        setUsers(data);
+        
+        // 篩選掉停權用戶
+        const activeUsers = data.filter(user => user.is_active !== false);
+        
+        // 處理復權用戶：確保復權用戶沒有分組資料的話，需要根據其身份設置到正確的公式班類型和待指定區域
+        const usersNeedingUpdate = [];
+        const processedUsers = activeUsers.map(user => {
+          // 如果用戶沒有group_data或group_data格式不正確，根據身份自動分配
+          if (!user.group_data || user.group_data === '' || user.group_data === 'null') {
+            let formulaTypeId = null;
+            
+            // 根據用戶身份確定公式班類型
+            switch (user.identity) {
+              case '麻醉專科護理師':
+                formulaTypeId = FORMULA_TYPE_IDS[FORMULA_TYPES.ANESTHESIA_SPECIALIST]; // 1
+                break;
+              case '恢復室護理師':
+                formulaTypeId = FORMULA_TYPE_IDS[FORMULA_TYPES.RECOVERY_NURSE]; // 2
+                break;
+              case '麻醉科Leader':
+                formulaTypeId = FORMULA_TYPE_IDS[FORMULA_TYPES.ANESTHESIA_LEADER]; // 3
+                break;
+              case '麻醉科書記':
+                formulaTypeId = FORMULA_TYPE_IDS[FORMULA_TYPES.ANESTHESIA_SECRETARY]; // 4
+                break;
+              default:
+                // 對於其他身份（如護理長），不設置group_data
+                return user;
+            }
+            
+            if (formulaTypeId) {
+              // 記錄需要更新的用戶
+              usersNeedingUpdate.push({
+                id: user.id,
+                name: user.full_name || user.name,
+                group_data: JSON.stringify([formulaTypeId, null])
+              });
+              
+              // 設置為待指定狀態 [formulaTypeId, null]
+              return {
+                ...user,
+                group_data: JSON.stringify([formulaTypeId, null])
+              };
+            }
+          }
+          
+          return user;
+        });
+        
+        setUsers(processedUsers);
+        
+        // 如果有復權用戶需要更新group_data，批次更新到資料庫
+        if (usersNeedingUpdate.length > 0) {
+          try {
+            const updatePromises = usersNeedingUpdate.map(user => 
+              api.put(`/users/${user.id}`, {
+                group_data: user.group_data
+              })
+            );
+            
+            await Promise.all(updatePromises);
+            
+            console.log(`成功為 ${usersNeedingUpdate.length} 名復權用戶設置分組資料`);
+          } catch (updateError) {
+            console.error('更新復權用戶分組資料失敗:', updateError);
+            // 不設置error狀態，因為用戶數據已經正確顯示在前端
+          }
+        }
+        
         setError(null);
       } catch (error) {
         setError('獲取護理師列表時發生錯誤: ' + (error.message || '未知錯誤'));

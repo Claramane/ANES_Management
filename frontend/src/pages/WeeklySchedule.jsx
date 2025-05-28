@@ -795,7 +795,7 @@ const WeeklySchedule = () => {
     // 麻醉專科護理師和麻醉科Leader的选项
     if (identity === '麻醉專科護理師' || identity === '麻醉科Leader') {
       // 如果是週五，OR選項要包含「1」
-      const orNumbers = isFriday 
+      const orNumbers = (isFriday || dayOfWeek === 3) 
         ? ['1', '2', '3', '5', '6', '7', '8', '9', '11', '13'] 
         : ['2', '3', '5', '6', '7', '8', '9', '11', '13'];
       
@@ -1330,7 +1330,7 @@ const WeeklySchedule = () => {
       const isFriday = dayOfWeek === 5;
       
       // 依據星期選擇不同的OR數字
-      const orNumbers = isFriday 
+      const orNumbers = (isFriday || dayOfWeek === 3) 
         ? ['1', '2', '3', '5', '6', '7', '8', '9', '11', '13'] 
         : ['2', '3', '5', '6', '7', '8', '9', '11', '13'];
       
@@ -2333,7 +2333,7 @@ const WeeklySchedule = () => {
       
       // 對於OR類型，檢查各個房間
       if (baseType === 'OR') {
-        const orNumbers = isFriday 
+        const orNumbers = (isFriday || dayOfWeek === 3) 
           ? ['1', '2', '3', '5', '6', '7', '8', '9', '11', '13'] 
           : ['2', '3', '5', '6', '7', '8', '9', '11', '13'];
         

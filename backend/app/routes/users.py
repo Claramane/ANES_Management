@@ -69,6 +69,9 @@ async def login_for_access_token(
         if request:
             user.last_login_ip = request.client.host
         
+        # 確保用戶更新被追蹤
+        db.add(user)
+        
         # 添加登入日誌
         log = Log(
             user_id=user.id,

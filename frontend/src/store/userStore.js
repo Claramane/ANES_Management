@@ -26,15 +26,15 @@ export const useUserStore = create(
 
       // 獲取所有用戶
       fetchUsers: async () => {
-        // 檢查是否已初始化
-        if (!get().initialized) {
-          get().initialize();
-        }
-
         set({ isLoading: true, error: null });
         try {
-          // 使用真實 API
-          const response = await api.get('/users');
+          // 使用真實 API，包含停權用戶
+          const response = await api.get('/users', {
+            params: {
+              include_inactive: true,
+              limit: 1000  // 確保獲取所有用戶
+            }
+          });
           const users = response.data;
           
           // 映射身份到表格類型
@@ -92,12 +92,11 @@ export const useUserStore = create(
           
           return processedUsers;
         } catch (error) {
+          console.error('API調用失敗：', error);
           set({ 
             error: error.response?.data?.detail || '獲取用戶列表失敗', 
             isLoading: false
           });
-          
-          console.error('API調用失敗：', error);
           throw error;
         }
       },

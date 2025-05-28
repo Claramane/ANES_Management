@@ -233,10 +233,26 @@ async def authenticate_finish(
         # 更新sign_count
         stored_credential.sign_count = verification.new_sign_count
         stored_credential.last_used_at = func.now()
-        db.commit()
         
         # 獲取對應的用戶
         user = db.query(User).filter(User.id == stored_credential.user_id).first()
+        
+        # 更新用戶最後登入資訊
+        user.last_login_time = func.now()
+        user.last_login_ip = request.client.host if request else None
+        
+        # 添加登入日誌
+        from ..models.log import Log
+        log = Log(
+            user_id=user.id,
+            operation_type="webauthn_login",
+            action="webauthn_login",
+            ip_address=request.client.host if request else None,
+            description=f"用戶 {user.username} 使用WebAuthn登入系統"
+        )
+        db.add(log)
+        
+        db.commit()
         
         # 產生 JWT token
         from datetime import timedelta
