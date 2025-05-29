@@ -21,7 +21,14 @@ app = FastAPI(
 )
 
 # 加入 SessionMiddleware
-app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY)
+app.add_middleware(
+    SessionMiddleware, 
+    secret_key=settings.SECRET_KEY,
+    session_cookie="session",
+    max_age=3600,  # 1小時過期
+    same_site="none",  # 跨域環境使用 none
+    https_only=settings.HTTPS_ONLY  # 根據環境變數決定
+)
 
 # 配置CORS
 app.add_middleware(

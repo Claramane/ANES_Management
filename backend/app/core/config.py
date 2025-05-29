@@ -40,6 +40,10 @@ class Settings(BaseSettings):
     BACKEND_CORS_ORIGINS: List[str] = []
 
     WEBAUTHN_EXPECTED_ORIGIN: str = "http://localhost:3000"
+    
+    # 遠端環境設定
+    IS_PRODUCTION: bool = False
+    HTTPS_ONLY: bool = False
 
     @field_validator("BACKEND_CORS_ORIGINS", mode="before")
     def assemble_cors_origins(cls, v: Union[str, List[str]], info) -> List[str]:
@@ -55,6 +59,18 @@ class Settings(BaseSettings):
         
     @field_validator("DEBUG", mode="before")
     def parse_debug(cls, v: Union[str, bool]) -> bool:
+        if isinstance(v, str):
+            return v.lower() in ("true", "1", "t", "yes")
+        return bool(v)
+        
+    @field_validator("IS_PRODUCTION", mode="before")
+    def parse_production(cls, v: Union[str, bool]) -> bool:
+        if isinstance(v, str):
+            return v.lower() in ("true", "1", "t", "yes")
+        return bool(v)
+        
+    @field_validator("HTTPS_ONLY", mode="before") 
+    def parse_https_only(cls, v: Union[str, bool]) -> bool:
         if isinstance(v, str):
             return v.lower() in ("true", "1", "t", "yes")
         return bool(v)

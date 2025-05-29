@@ -94,7 +94,9 @@ async def register_start(
         user_display_name=current_user.full_name,
     )
     # 將 challenge (bytes) 轉換為 base64url 字串後存到 session
-    request.session["webauthn_challenge"] = bytes_to_base64url(options.challenge)
+    challenge_b64 = bytes_to_base64url(options.challenge)
+    request.session["webauthn_challenge"] = challenge_b64
+    
     return {
         "publicKey": {
             "rp": {
@@ -129,11 +131,37 @@ async def register_finish(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    """完成WebAuthn註冊流程"""
     try:
-        base64url_challenge = request.session.get("webauthn_challenge")
-        if not base64url_challenge:
-            raise HTTPException(status_code=400, detail="No challenge in session")
-        expected_challenge = base64url_to_bytes(base64url_challenge)
+        # 詳細調試 session 狀態
+        print(f"DEBUG FINISH: Request cookies: {dict(request.cookies)}")
+        print(f"DEBUG FINISH: Session keys: {list(request.session.keys())}")
+        print(f"DEBUG FINISH: Session contents: {dict(request.session)}")
+        print(f"DEBUG FINISH: Session ID: {getattr(request.session, '_session_id', 'No ID')}")
+        print(f"DEBUG FINISH: User Agent: {request.headers.get('user-agent', 'Unknown')}")
+        print(f"DEBUG FINISH: Origin: {request.headers.get('origin', 'Unknown')}")
+        
+        # 從 session 中獲取 challenge
+        challenge_b64 = request.session.get("webauthn_challenge")
+        if not challenge_b64:
+            debug_info = {
+                'session_keys': list(request.session.keys()),
+                'session_id': getattr(request.session, '_session_id', 'No session ID'),
+                'user_id': current_user.id,
+                'user_agent': request.headers.get('user-agent', 'Unknown'),
+                'cookies': dict(request.cookies),
+                'origin': request.headers.get('origin', 'Unknown'),
+                'host': request.headers.get('host', 'Unknown')
+            }
+            error_msg = f"Passkey registration failed: No challenge in session. Debug info: {debug_info}"
+            print(f"ERROR: {error_msg}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Passkey registration failed: {error_msg}"
+            )
+            
+        print(f"DEBUG: Found challenge: {challenge_b64[:10]}...")
+        expected_challenge = base64url_to_bytes(challenge_b64)
 
         # 將 raw_id 轉成 bytes
         raw_id_bytes = base64url_to_bytes(credential.raw_id)
@@ -406,4 +434,70 @@ async def delete_credential(
     db.delete(credential)
     db.commit()
     
-    return {"status": "success", "message": "Credential deleted successfully"} 
+    return {"status": "success", "message": "Credential deleted successfully"}
+
+@router.get("/debug/session")
+async def debug_session(
+    request: Request,
+    current_user: User = Depends(get_current_user)
+):
+    """調試端點：檢查session狀態"""
+    import time
+    
+    # 嘗試寫入和讀取 session 來測試是否正常工作
+    test_key = f"test_{int(time.time())}"
+    request.session[test_key] = "test_value"
+    test_read = request.session.get(test_key)
+    
+    return {
+        "session_contents": dict(request.session),
+        "session_keys": list(request.session.keys()),
+        "user_id": current_user.id,
+        "user_agent": request.headers.get("user-agent", "Unknown"),
+        "origin": request.headers.get("origin", "Unknown"),
+        "referer": request.headers.get("referer", "Unknown"),
+        "host": request.headers.get("host", "Unknown"),
+        "rp_id": RP_ID,
+        "expected_origin": settings.WEBAUTHN_EXPECTED_ORIGIN,
+        "cors_origins": settings.BACKEND_CORS_ORIGINS,
+        "https_only": settings.HTTPS_ONLY,
+        "is_production": settings.IS_PRODUCTION,
+        "secret_key_length": len(settings.SECRET_KEY),
+        "secret_key_preview": settings.SECRET_KEY[:10] + "..." if settings.SECRET_KEY else "None",
+        "test_session_write": test_read == "test_value",
+        "cookies": dict(request.cookies),
+        "session_cookie_name": "session",  # 從 middleware 配置中得知
+        "request_url": str(request.url),
+        "request_method": request.method
+    }
+
+@router.post("/test/session")
+async def test_session(
+    request: Request,
+    current_user: User = Depends(get_current_user)
+):
+    """測試端點：檢查 session cookie 是否正確設置"""
+    import time
+    from fastapi.responses import JSONResponse
+    
+    # 設置一個測試值
+    test_key = f"test_{int(time.time())}"
+    request.session[test_key] = "test_session_cookie"
+    
+    # 準備回應和調試信息
+    debug_info = {
+        "session_contents": dict(request.session),
+        "session_keys": list(request.session.keys()),
+        "user_id": current_user.id,
+        "cookies_received": dict(request.cookies),
+        "origin": request.headers.get("origin", "Unknown"),
+        "host": request.headers.get("host", "Unknown"),
+        "user_agent": request.headers.get("user-agent", "Unknown"),
+        "is_production": settings.IS_PRODUCTION,
+        "https_only": settings.HTTPS_ONLY
+    }
+    
+    # 創建回應並設置 cookie
+    response = JSONResponse(content=debug_info)
+    
+    return response 
