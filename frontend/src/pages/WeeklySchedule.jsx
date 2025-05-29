@@ -554,6 +554,13 @@ const WeeklySchedule = () => {
         // 更新store中的數據
         useScheduleStore.setState({ monthlySchedule: updatedSchedule });
         
+        // 保存成功後，清除所有相關頁面的快取，確保其他使用者能看到最新資料
+        console.log('保存成功，清除相關頁面快取');
+        const { clearScheduleCache } = await import('../utils/scheduleCache');
+        clearScheduleCache('dashboard', year, month);
+        clearScheduleCache('weekly-schedule', year, month);
+        clearScheduleCache('shift-swap', year, month);
+        
         setSuccess(`成功儲存 ${response.data.updated_count} 個工作分配`);
         if (response.data.failed_count > 0) {
           setSuccess(`成功儲存 ${response.data.updated_count} 個工作分配，但有 ${response.data.failed_count} 個失敗`);
@@ -2107,16 +2114,28 @@ const WeeklySchedule = () => {
         // 如果組件已卸載，不繼續執行
         if (!isMounted) return;
         
-        // 再獲取工作分配數據（使用緩存）
+        // 再獲取工作分配數據（首次載入強制刷新）
         try {
           console.log('開始加載工作分配數據...');
-          const result = await cachedScheduleDetailsRequest(apiService, 'weekly-schedule', year, month);
+          
+          // 檢查是否為首次載入或重新載入
+          const currentSchedule = useScheduleStore.getState().monthlySchedule;
+          const hasAreaCodes = currentSchedule.some(nurse => 
+            nurse.area_codes && nurse.area_codes.some(code => code !== null)
+          );
+          
+          // 如果沒有工作分配資料或者是新的月份，強制刷新
+          const forceRefresh = !hasAreaCodes;
+          
+          const result = await cachedScheduleDetailsRequest(apiService, 'weekly-schedule', year, month, forceRefresh);
           
           // 如果組件已卸載，不繼續執行
           if (!isMounted) return;
           
           if (result.fromCache) {
             console.log('loadScheduleData: 使用緩存數據');
+          } else {
+            console.log('loadScheduleData: 從API獲取最新數據');
           }
           
           if (result.data?.success) {
