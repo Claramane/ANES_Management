@@ -77,6 +77,7 @@ function Layout() {
     { text: '換班申請', icon: <SyncIcon />, path: '/shift-swap' },
     { text: '加班人員', icon: <WorkIcon />, path: '/overtime-staff' },
     { text: '公告專區', icon: <AnnouncementIcon />, path: '/announcements' },
+    { text: '系統設定', icon: <SettingsIcon />, path: '/settings' },
     // { text: '歷史紀錄', icon: <HistoryIcon />, path: '/version-history' },
   ];
 
@@ -84,7 +85,6 @@ function Layout() {
   const headNurseMenuItems = [
     { text: '公式班表', icon: <EventIcon />, path: '/formula' },
     { text: '用戶管理', icon: <PeopleIcon />, path: '/user-management' },
-    { text: '系統設定', icon: <SettingsIcon />, path: '/settings' },
   ];
 
   const drawer = (

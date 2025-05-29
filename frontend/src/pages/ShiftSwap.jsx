@@ -2054,7 +2054,7 @@ const ShiftSwap = () => {
     
     const isAdmin = user.role === 'admin';
     const isLeader = user.identity === 'anesthesia_leader' || user.identity === '麻醉科Leader';
-    const isHeadNurse = user.identity === '護理長';
+    const isHeadNurse = user.role === 'head_nurse';
     const isRequester = request.requestor_id === user.id;
     
     // 檢查權限
@@ -2073,7 +2073,7 @@ const ShiftSwap = () => {
     
     const isAdmin = user.role === 'admin';
     const isLeader = user.identity === 'anesthesia_leader' || user.identity === '麻醉科Leader';
-    const isHeadNurse = user.identity === '護理長';
+    const isHeadNurse = user.role === 'head_nurse';
     const isRequester = request.requestor_id === user.id;
     
     // 已接受的請求，管理員/護理長/領導可以駁回

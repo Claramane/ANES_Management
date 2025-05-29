@@ -12,6 +12,7 @@ class WebAuthnCredential(Base):
     public_key = Column(String, nullable=False)
     sign_count = Column(Integer, default=0)
     device_name = Column(String)
+    device_fingerprint = Column(String, index=True, nullable=True)  # 設備指紋，用於識別唯一設備
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=func.now())
     last_used_at = Column(DateTime, nullable=True)

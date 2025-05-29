@@ -17,6 +17,7 @@ from typing import List, Optional
 import json
 from sqlalchemy.sql import func
 import base64
+import hashlib
 
 from ..core.database import get_db
 from ..models.user import User
@@ -38,6 +39,45 @@ def safe_base64url_to_bytes(s):
     s = s + '=' * (-len(s) % 4)
     from webauthn.helpers import base64url_to_bytes as _b2b
     return _b2b(s)
+
+def generate_device_fingerprint(user_agent: str, client_data_json: str = None) -> str:
+    """
+    生成設備指紋，用於識別唯一設備
+    只使用穩定的設備特徵，不使用每次註冊都會變化的credential_id和public_key
+    """
+    import re
+    import json
+    
+    # 簡化用戶代理，移除版本號等變動較大的資訊
+    ua_simplified = re.sub(r'\d+\.\d+\.\d+', 'x.x.x', user_agent.lower())
+    ua_simplified = re.sub(r'\d+\.\d+', 'x.x', ua_simplified)
+    
+    # 從user agent中提取關鍵設備信息
+    # 提取操作系統信息
+    os_pattern = r'(mac os x|windows nt|linux|android|ios)'
+    os_match = re.search(os_pattern, ua_simplified)
+    os_info = os_match.group(1) if os_match else 'unknown'
+    
+    # 提取瀏覽器信息  
+    browser_pattern = r'(chrome|firefox|safari|edge|opera)'
+    browser_match = re.search(browser_pattern, ua_simplified)
+    browser_info = browser_match.group(1) if browser_match else 'unknown'
+    
+    # 如果有client_data_json，可以提取更多穩定的設備信息
+    origin = 'unknown'
+    if client_data_json:
+        try:
+            client_data = json.loads(client_data_json)
+            origin = client_data.get('origin', 'unknown')
+        except:
+            pass
+    
+    # 生成基於穩定設備特徵的指紋
+    # 不使用credential_id和public_key，因為它們每次註冊都不同
+    device_signature = f"{os_info}:{browser_info}:{origin}:{ua_simplified[:100]}"
+    
+    # 生成SHA256哈希作為設備指紋
+    return hashlib.sha256(device_signature.encode()).hexdigest()
 
 @router.post("/register/start")
 async def register_start(
@@ -117,12 +157,61 @@ async def register_finish(
             expected_rp_id=RP_ID,
         )
         del request.session["webauthn_challenge"]
+        
+        # 生成設備指紋
+        user_agent = request.headers.get("user-agent", "Unknown Device")
+        
+        # 正確處理client_data_json - 可能是str或bytes
+        client_data_json = None
+        if hasattr(credential.response, 'client_data_json'):
+            if isinstance(credential.response.client_data_json, bytes):
+                # 如果是bytes，先轉換為base64url string，再轉回bytes，最後decode為json string
+                try:
+                    client_data_json_bytes = base64url_to_bytes(credential.response.client_data_json)
+                    client_data_json = client_data_json_bytes.decode('utf-8')
+                except:
+                    # 如果base64解碼失敗，直接decode
+                    client_data_json = credential.response.client_data_json.decode('utf-8')
+            elif isinstance(credential.response.client_data_json, str):
+                # 如果已經是string，嘗試解碼base64url
+                try:
+                    client_data_json_bytes = base64url_to_bytes(credential.response.client_data_json)
+                    client_data_json = client_data_json_bytes.decode('utf-8')
+                except:
+                    # 如果不是base64編碼，直接使用
+                    client_data_json = credential.response.client_data_json
+        
+        device_fingerprint = generate_device_fingerprint(user_agent, client_data_json)
+        
+        # 檢查該設備是否已經被其他用戶註冊
+        existing_credential = db.query(WebAuthnCredential).filter(
+            WebAuthnCredential.device_fingerprint == device_fingerprint,
+            WebAuthnCredential.user_id != current_user.id,
+            WebAuthnCredential.is_active == True
+        ).first()
+        
+        if existing_credential:
+            # 獲取已綁定用戶的用戶名
+            existing_user = db.query(User).filter(User.id == existing_credential.user_id).first()
+            existing_username = existing_user.username if existing_user else "未知用戶"
+            
+            raise HTTPException(
+                status_code=400,
+                detail=f"此設備已經綁定到其他帳號。一台設備只能綁定一個帳號。"
+            )
+        
+        # 將憑證ID和公鑰轉換為base64url編碼
+        credential_id_b64 = bytes_to_base64url(verification.credential_id)
+        public_key_b64 = bytes_to_base64url(verification.credential_public_key)
+        
+        # 創建新的WebAuthn憑證記錄
         new_credential_db = WebAuthnCredential(
             user_id=current_user.id,
-            credential_id=bytes_to_base64url(verification.credential_id),
-            public_key=bytes_to_base64url(verification.credential_public_key),
+            credential_id=credential_id_b64,
+            public_key=public_key_b64,
             sign_count=verification.sign_count,
-            device_name=request.headers.get("user-agent", "Unknown Device")
+            device_name=user_agent,
+            device_fingerprint=device_fingerprint
         )
         db.add(new_credential_db)
         db.commit()

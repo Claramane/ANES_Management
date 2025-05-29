@@ -61,6 +61,21 @@ export const useAuthStore = create(
         if (token && isTokenExpired(token)) {
           console.log('Token已過期，自動登出');
           get().logout();
+          // 確保跳轉到登入頁面
+          if (window.location.pathname !== '/login') {
+            window.location.href = '/login';
+          }
+          return;
+        }
+        
+        // 如果token有效但沒有用戶資料，也進行清理
+        const { user } = get();
+        if (token && !user) {
+          console.log('Token存在但用戶資料缺失，清除認證狀態');
+          get().logout();
+          if (window.location.pathname !== '/login') {
+            window.location.href = '/login';
+          }
         }
       },
       
@@ -70,28 +85,49 @@ export const useAuthStore = create(
         return token && !isTokenExpired(token);
       },
       
+      // 檢查認證狀態（包含token和用戶資料）
+      checkAuthStatus: () => {
+        const { token, user } = get();
+        
+        // 如果沒有token，直接返回false
+        if (!token) {
+          return false;
+        }
+        
+        // 如果token過期，自動登出
+        if (isTokenExpired(token)) {
+          console.log('Token已過期，執行自動登出');
+          get().logout();
+          return false;
+        }
+        
+        // 如果沒有用戶資料，也視為未認證
+        if (!user) {
+          console.log('缺少用戶資料，清除認證狀態');
+          get().logout();
+          return false;
+        }
+        
+        return true;
+      },
+      
       // 登入
       login: async (username, password, isPasskeyLogin = false) => {
         set({ isLoading: true, error: null });
         try {
           let response;
+          let token;
+          let user;
           
           if (isPasskeyLogin) {
-
-             const userResponse = await api.get('/users/me', {
+            const userResponse = await api.get('/users/me', {
               headers: {
                 Authorization: `Bearer passkey-auth-token` 
               }
             });
-            set({
-              token: 'passkey-auth-token', // 這裡應該是真的 token
-              isAuthenticated: true,
-              isLoading: false,
-              error: null,
-              user: userResponse.data // 確保 user 資料被設定
-            });
-            return true;
-
+            
+            token = 'passkey-auth-token'; // 這裡應該是真的 token
+            user = userResponse.data;
           } else {
             // 傳統密碼登入
             const formData = new FormData();
@@ -103,34 +139,35 @@ export const useAuthStore = create(
                 'Content-Type': 'application/x-www-form-urlencoded'
               }
             });
+            
+            token = response.data.access_token;
+            
+            // 獲取用戶資料
+            const userResponse = await api.get('/users/me', {
+              headers: {
+                Authorization: `Bearer ${token}`
+              }
+            });
+            
+            user = userResponse.data;
           }
           
-          const token = response.data.access_token;
-          
-          // 設置令牌
+          // 一次性設置所有認證狀態，包含token、user和isAuthenticated
           set({
             token,
+            user,
             isAuthenticated: true,
             isLoading: false,
             error: null
-          });
-          
-          // 獲取用戶資料
-          const userResponse = await api.get('/users/me', {
-            headers: {
-              Authorization: `Bearer ${token}`
-            }
-          });
-          
-          // 更新用戶資料
-          set({
-            user: userResponse.data
           });
           
           return true;
         } catch (error) {
           console.error('登入失敗:', error);
           set({
+            token: null,
+            user: null,
+            isAuthenticated: false,
             isLoading: false,
             error: error.response?.data?.detail || '登入失敗，請檢查賬號密碼'
           });
@@ -282,11 +319,13 @@ export const useAuthStore = create(
           return true;
         } catch (error) {
           console.error('Passkey註冊失敗:', error);
+          const errorMessage = error.message || error.response?.data?.detail || 'Passkey註冊失敗';
           set({
             isLoading: false,
-            error: error.message || error.response?.data?.detail || 'Passkey註冊失敗'
+            error: errorMessage
           });
-          return false;
+          // 重新拋出錯誤，讓調用方能夠處理
+          throw error;
         }
       },
 
@@ -317,4 +356,23 @@ export const useAuthStore = create(
       getStorage: () => localStorage,
     }
   )
-); 
+);
+
+// 全域認證檢查Hook - 可在任何組件中使用
+export const useAuthCheck = () => {
+  const { checkAuthStatus, logout } = useAuthStore();
+  
+  const ensureAuth = () => {
+    if (!checkAuthStatus()) {
+      console.log('認證狀態檢查失敗，執行登出並跳轉');
+      logout();
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
+      return false;
+    }
+    return true;
+  };
+  
+  return { ensureAuth, checkAuthStatus };
+}; 

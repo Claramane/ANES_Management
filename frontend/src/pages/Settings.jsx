@@ -118,12 +118,33 @@ const Settings = () => {
     setPasskeyError('');
     
     try {
-      const success = await registerPasskey();
-      if (success) {
-        await loadPasskeys();
-      }
+      await registerPasskey();
+      // 註冊成功，重新載入Passkey列表
+      await loadPasskeys();
     } catch (error) {
-      setPasskeyError('註冊Passkey失敗');
+      console.error('Passkey註冊失敗:', error);
+      
+      // 檢查是否是設備綁定限制錯誤
+      let errorMessage = 'Passkey註冊失敗';
+      
+      if (error.response?.data?.detail) {
+        const detail = error.response.data.detail;
+        if (typeof detail === 'string' && detail.includes('此設備已經綁定到其他帳號')) {
+          errorMessage = detail;
+        } else if (typeof detail === 'string' && detail.includes('一台設備只能綁定一個帳號')) {
+          errorMessage = detail;
+        } else if (typeof detail === 'string') {
+          errorMessage = detail;
+        } else if (Array.isArray(detail)) {
+          errorMessage = detail.map(item => item.msg || item).join(', ');
+        } else {
+          errorMessage = JSON.stringify(detail);
+        }
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      setPasskeyError(errorMessage);
     } finally {
       setIsRegistering(false);
     }
