@@ -26,9 +26,10 @@ import {
   Badge,
   FormControlLabel,
   Snackbar,
-  Pagination
+  Pagination,
+  InputAdornment
 } from '@mui/material';
-import { Close as CloseIcon, Add as AddIcon, FilterList as FilterListIcon } from '@mui/icons-material';
+import { Close as CloseIcon, Add as AddIcon, FilterList as FilterListIcon, Search as SearchIcon } from '@mui/icons-material';
 import { format, startOfDay, endOfDay } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
@@ -77,32 +78,18 @@ const Announcement = () => {
   
   // 檢查使用者權限，判斷是否有發布公告的權限
   const allowedPublishCategories = useMemo(() => {
-    if (!user || !user.role) return [];
-    const userRole = user.role.toLowerCase(); // 確保角色比較時大小寫一致
+    if (!user || !user.role) return categories; // 改為返回所有分類
 
-    // 完整的類別列表，供 'admin' 和 'head_nurse' 使用
+    // 完整的類別列表，所有用戶都可以使用
     const allCategoriesList = [...categories];
 
-    switch (userRole) {
-      case 'admin':
-      case 'head_nurse':
-        return allCategoriesList;
-      case 'leader':
-        // leader 可以發布 "閒聊" 和 "政令宣導"
-        // 請確保 "政令宣導" 存在於 categories 陣列中
-        return ['閒聊', '政令宣導'].filter(cat => categories.includes(cat));
-      case 'nurse':
-        // nurse 只能發布 "閒聊"
-        // 請確保 "閒聊" 存在於 categories 陣列中
-        return ['閒聊'].filter(cat => categories.includes(cat));
-      default:
-        return [];
-    }
-  }, [user, categories]); // categories 應為穩定依賴，但明確加入
+    // 所有用戶都可以發布所有類型的公告
+    return allCategoriesList;
+  }, [user, categories]);
 
   const canPublishAnnouncement = useMemo(() => {
-    return allowedPublishCategories.length > 0;
-  }, [allowedPublishCategories]);
+    return true; // 所有用戶都可以發布公告
+  }, []);
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
@@ -368,37 +355,72 @@ const Announcement = () => {
   }, [user, selectedAnnouncement]);
 
   return (
-    <Box sx={{ padding: 1 }}>
-      {/* Filter Bar Section */}
-      <Paper sx={{ p: 1.5, mb: 3, display: 'flex', gap: 1.5, alignItems: 'center', flexWrap: 'wrap' }}>
-         <TextField
-            label="搜尋公告"
-            variant="outlined"
-            size="small"
-            value={searchTerm}
-            onChange={handleSearchChange}
-            sx={{ flexGrow: 1, minWidth: '180px' }}
-         />
-         <Button
-            variant="outlined"
-            startIcon={<FilterListIcon />}
-            onClick={handleOpenFilterDialog}
-            size="medium"
-         >
-           <Badge badgeContent={activeFilterCount} color="primary">
+    <Box sx={{ p: { xs: 0.25, sm: 2, md: 3 } }}>
+      {/* 搜尋和操作區域 */}
+      <Paper sx={{ p: 1.5, mb: 3, display: 'flex', gap: 1.5, alignItems: 'center' }}>
+        <TextField
+          label="搜尋公告"
+          variant="outlined"
+          size="small"
+          value={searchTerm}
+          onChange={handleSearchChange}
+          sx={{ 
+            flexGrow: 1, 
+            minWidth: '120px',
+            '& .MuiInputBase-root': { height: 40 }
+          }}
+          placeholder="輸入標題、內容或作者..."
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon sx={{ color: 'action.active' }} />
+              </InputAdornment>
+            )
+          }}
+        />
+        <Button
+          variant="outlined"
+          startIcon={<FilterListIcon />}
+          onClick={handleOpenFilterDialog}
+          size="medium"
+          sx={{
+            height: 40,
+            // 手機版只顯示圖標並設為正方形
+            minWidth: { xs: 40, sm: 'auto' },
+            width: { xs: 40, sm: 'auto' },
+            '& .MuiButton-startIcon': { 
+              mr: { xs: 0, sm: 1 },
+              ml: { xs: 0, sm: 0 }
+            }
+          }}
+        >
+          <Badge badgeContent={activeFilterCount} color="primary">
+            <Box sx={{ display: { xs: 'none', sm: 'inline' } }}>
               篩選
-           </Badge>
-         </Button>
-         {canPublishAnnouncement && (
-           <Button
-              variant="contained"
-              startIcon={<AddIcon />}
-              onClick={handleOpenPublishForm}
-              size="medium"
-           >
-              發布新公告
-           </Button>
-         )}
+            </Box>
+          </Badge>
+        </Button>
+        <Button
+          variant="contained"
+          color="primary"
+          startIcon={<AddIcon />}
+          onClick={handleOpenPublishForm}
+          size="medium"
+          sx={{
+            height: 40,
+            // 手機版只顯示圖標並設為正方形
+            minWidth: { xs: 40, sm: 'auto' },
+            width: { xs: 40, sm: 'auto' },
+            '& .MuiButton-startIcon': { 
+              mr: { xs: 0, sm: 1 },
+              ml: { xs: 0, sm: 0 }
+            }
+          }}
+        >
+          <Box sx={{ display: { xs: 'none', sm: 'inline' } }}>
+            發布新公告
+          </Box>
+        </Button>
       </Paper>
 
       <Box>

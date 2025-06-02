@@ -1,43 +1,13 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
-  Box,
-  Typography,
-  Paper,
-  List,
-  ListItem,
-  ListItemText,
-  Divider,
-  Button,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  CircularProgress,
-  Alert,
-  Chip,
-  IconButton,
-  TextField,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  Grid,
-  Card,
-  CardContent,
-  Snackbar,
-  Badge,
-  Drawer,
-  FormHelperText,
-  Pagination,
-  Tooltip,
-  FormControlLabel,
-  Checkbox,
-  Stack,
-  Tabs,
-  Tab,
-  FormGroup, // 添加 FormGroup 組件的導入
-  InputAdornment,
+  Box, Typography, Paper, List, ListItem, ListItemText, Chip, Alert, CircularProgress, 
+  TextField, Button, Select, MenuItem, FormControl, InputLabel, Dialog, DialogTitle, 
+  DialogContent, DialogActions, Grid, Tabs, Tab, Badge, IconButton, Drawer, Divider,
+  Card, CardContent, CardActions, Tooltip, Snackbar, Avatar, ListItemAvatar,
+  FormControlLabel, Checkbox, Collapse, InputAdornment, Pagination, Table, TableBody, 
+  TableCell, TableContainer, TableHead, TableRow
 } from '@mui/material';
+import { styled } from '@mui/material/styles';
 import {
   Add as AddIcon,
   Close as CloseIcon,
@@ -54,7 +24,7 @@ import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { DatePicker, StaticDatePicker } from '@mui/x-date-pickers';
 import { zhTW } from 'date-fns/locale';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, parseISO, isWithinInterval, getDay, isToday, isEqual, startOfDay, endOfDay, isSameDay, addDays, subDays, isBefore, isAfter } from 'date-fns';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, parseISO, isWithinInterval, getDay, isToday, isEqual, startOfDay, endOfDay, isSameDay, addDays, subDays, isBefore, isAfter, differenceInDays } from 'date-fns';
 import { useAuthStore } from '../store/authStore';
 import apiService from '../utils/api';
 import { cachedScheduleDetailsRequest } from '../utils/scheduleCache';
@@ -151,15 +121,17 @@ const SHIFT_TYPES_BY_FORMULA = {
 
 // 定義班別顏色
 const SHIFT_COLORS = {
-  'D': '#4caf50', // 白班
-  'A': '#c6c05f', // A班
-  'N': '#2196f3', // 大夜
-  'K': '#8AA6C1', // K班
-  'C': '#a9d0ab', // C班
-  'F': '#d8bd89', // F班
-  'E': '#ff9800', // 小夜
-  'B': '#e7b284', // B班
-  'O': '#9e9e9e'  // 休假
+  'D': '#c5b5ac', // 白班 22-08
+  'A': '#c6c05f', // 小夜班 8-16  
+  'N': '#aa77c4', // 大夜班 14-22
+  'K': '#8AA6C1', // 早班 9-17
+  'C': '#a9d0ab', // 中班 10-18
+  'F': '#d8bd89', // 晚班 12-20
+  'E': '#cb9cc8', // 半班 8-12
+  'B': '#e7b284', // 日班 8-17
+  'O': '#e7e7e7', // 排休 OFF
+  'V': '#e0755f', // 休假 OFF
+  'R': '#a9c4ce'  // 靜養假 OFF
 };
 
 // 低飽和度班別顏色 (用於未選中狀態)
@@ -3441,8 +3413,625 @@ const ShiftSwap = () => {
     fetchMonthData(selectedDate);
   };
 
+  // 自訂Tab樣式
+  const StyledTab = styled(Tab)(({ theme }) => ({
+    fontWeight: 'bold',
+    minHeight: '30px',
+    fontSize: '1rem',
+    flex: 1, // 讓每個Tab平分寬度
+    [theme.breakpoints.up('md')]: {
+      fontSize: '0.9rem',
+    },
+  }));
+
+  // 班次顏色映射
+  const shiftColors = {
+    'D': '#4caf50', // 白班
+    'A': '#c6c05f', // A班
+    'N': '#2196f3', // 大夜
+    'K': '#8AA6C1', // K班
+    'C': '#a9d0ab', // C班
+    'F': '#d8bd89', // F班
+    'E': '#ff9800', // 小夜
+    'B': '#e7b284', // B班
+    'O': '#9e9e9e'  // 休假
+  };
+
+  // 低飽和度班別顏色 (用於未選中狀態)
+  const desaturatedShiftColors = {
+    'D': '#a5d6a7', // 淡化的白班顏色
+    'A': '#e7e6c3', // 淡化的A班顏色
+    'N': '#90caf9', // 淡化的大夜顏色
+    'K': '#c6d5e3', // 淡化的K班顏色
+    'C': '#d4e9d5', // 淡化的C班顏色
+    'F': '#f0e4d0', // 淡化的F班顏色
+    'E': '#ffcc80', // 淡化的小夜顏色
+    'B': '#f2d7c0', // 淡化的B班顏色
+    'O': '#e0e0e0'  // 淡化的休假顏色
+  };
+
+  // 狀態顏色配置
+  const statusColors = {
+    'pending': { backgroundColor: '#ffecb3', color: '#bf360c' },
+    'accepted': { backgroundColor: '#c8e6c9', color: '#1b5e20' },
+    'rejected': { backgroundColor: '#ffcdd2', color: '#b71c1c' }, // 恢復紅色背景
+    'cancelled': { backgroundColor: '#eeeeee', color: '#9e9e9e' }, // 淡灰色
+    'expired': { backgroundColor: '#f3e5f5', color: '#9c27b0' } // 更淡的紫色
+  };
+
+  // 狀態顏色映射
+  const statusColors = {
+    'pending': { backgroundColor: '#ff9800', color: 'black' }, // 橙色
+    'accepted': { backgroundColor: '#4caf50', color: 'white' }, // 綠色
+    'rejected': { backgroundColor: '#f44336', color: 'white' }, // 恢復紅色背景
+    'cancelled': { backgroundColor: '#9e9e9e', color: 'white' }, // 灰色
+    'expired': { backgroundColor: '#ba68c8', color: 'white' }, // 更淡的紫色
+    'default': { backgroundColor: '#bdbdbd', color: 'black' }  // 灰色
+  };
+
+  // 獲取狀態風格
+  const getStatusStyle = (status) => {
+    return statusColors[status] || statusColors.default;
+  };
+
+  // 添加日曆樣式
+  const calendarStyles = `
+    .calendar-container {
+      width: 100%;
+      margin-top: 20px;
+    }
+    
+    .calendar-table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+    
+    .calendar-table th {
+      padding: 8px;
+      text-align: center;
+      background-color: #f5f5f5;
+      border: 1px solid #ddd;
+      width: 14.285714%;
+      font-weight: bold;
+    }
+    
+    .calendar-table td {
+      border: 1px solid #ddd;
+      padding: 0;
+      vertical-align: top;
+      height: 90px;
+      width: 14.285714%;
+      position: relative;
+      transition: all 0.2s ease;
+    }
+    
+    @media (max-width: 600px) {
+      .calendar-table td {
+        height: 70px;
+      }
+      .calendar-table th {
+        padding: 6px 4px;
+        font-size: 14px;
+      }
+    }
+    
+    .empty-cell {
+      background-color: #f9f9f9;
+    }
+    
+    .expired-cell {
+      background-color: #fafafa;
+      opacity: 0.6;
+    }
+    
+    .expired-cell:hover {
+      background-color: #fafafa !important;
+      cursor: not-allowed !important;
+    }
+    
+    .cell-content {
+      padding: 5px;
+      height: 100%;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .day-number {
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
+    
+    .shift {
+      display: inline-block;
+      padding: 2px 5px;
+      border-radius: 3px;
+      font-size: 12px;
+      font-weight: bold;
+      color: white;
+      background-color: #757575;
+      margin-bottom: 5px;
+    }
+    
+    /* 麻醉專科護理師班別 */
+    .shift:is([data-shift="D"]) {
+      background-color: #4caf50;
+    }
+    
+    .shift:is([data-shift="A"]) {
+      background-color: #c6c05f;
+    }
+    
+    .shift:is([data-shift="N"]) {
+      background-color: #2196f3;
+    }
+    
+    /* 恢復室護理師班別 */
+    .shift:is([data-shift="K"]) {
+      background-color: #8AA6C1;
+    }
+    
+    .shift:is([data-shift="C"]) {
+      background-color: #a9d0ab;
+    }
+    
+    .shift:is([data-shift="F"]) {
+      background-color: #d8bd89;
+    }
+    
+    /* 麻醉科Leader和書記班別 */
+    .shift:is([data-shift="E"]) {
+      background-color: #ff9800;
+    }
+    
+    .shift:is([data-shift="B"]) {
+      background-color: #e7b284;
+    }
+    
+    /* 休假 */
+    .shift:is([data-shift="O"]) {
+      background-color: #9e9e9e;
+      color: black;
+    }
+    
+    .mission {
+      font-size: 12px;
+      color: #fff;
+      margin-top: 5px;
+      width: fit-content;
+    }
+    
+    .overtime {
+      background-color: #ffebee;
+      border-radius: 3px;
+      padding: 3px 6px;
+      color: #d32f2f;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      font-size: 11px;
+      margin-top: 5px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 100%;
+      width: fit-content;
+    }
+    
+    .today {
+      background-color: #e3f2fd;
+    }
+    
+    .selected {
+      background-color: #e8f5e9;
+      transform: scale(1.05);
+      box-shadow: 0 0 10px rgba(0,0,0,0.2);
+      z-index: 10;
+    }
+    
+    td:hover:not(.expired-cell) {
+      background-color: #f0f0f0;
+      cursor: pointer;
+    }
+  `;
+
+  // 添加日曆單元格的CSS
+  const calendarCellStyle = {
+    position: 'relative',
+    height: '100%',
+    minHeight: '70px',
+    padding: '4px',
+    border: '1px solid #e0e0e0',
+    overflow: 'hidden',
+    '&:hover': {
+      backgroundColor: '#f5f5f5',
+    },
+    '&.selected': {
+      backgroundColor: '#e3f2fd',
+      border: '2px solid #2196f3',
+    },
+    '&.disabled': {
+      backgroundColor: '#f5f5f5',
+      color: '#9e9e9e',
+      cursor: 'not-allowed',
+    }
+  };
+
+  // 渲染日曆單元格內容的組件
+  const RenderCalendarCell = ({ day }) => {
+    if (!day.date) return null;
+    
+    const commonTagStyle = {
+      fontSize: '10px',
+      padding: '2px 4px',
+      borderRadius: '0 4px 4px 4px',
+      width: '100%',
+      display: 'flex',
+      alignItems: 'center',
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+      whiteSpace: 'nowrap',
+      boxSizing: 'border-box',
+      marginTop: '2px'
+    };
+    
+    return (
+      <div className="cell-content" style={{ 
+        display: 'flex', 
+        flexDirection: 'column',
+        height: '100%',
+        width: '100%'
+      }}>
+        {/* 日期顯示在最上方 */}
+        <Box sx={{ 
+          textAlign: 'right',
+          padding: '2px 4px',
+          fontWeight: 'bold',
+          fontSize: '12px',
+          width: '100%'
+        }}>
+          {format(day.date, 'd')}
+        </Box>
+        
+        {/* 班別顯示在第二行 */}
+        {day.shift && (
+          <Box sx={{ 
+            backgroundColor: SHIFT_COLORS[day.shift] || '#9e9e9e',
+            color: day.shift === 'O' ? 'black' : 'white',
+            fontWeight: 'bold',
+            fontSize: '11px',
+            padding: '2px 4px',
+            borderRadius: '4px',
+            width: '100%',
+            textAlign: 'left',
+            marginTop: '2px'
+          }}>
+            {day.shift}
+          </Box>
+        )}
+        
+        <Box sx={{ 
+          display: 'flex', 
+          flexDirection: 'column',
+          gap: '2px',
+          overflow: 'hidden',
+          flex: 1,
+          width: '100%',
+          mt: 0.5
+        }}>
+          {/* 工作區域 */}
+          {day.mission && (
+            <Box sx={{ 
+              ...commonTagStyle,
+              backgroundColor: '#4dabf5',
+              color: 'white',
+            }}>
+              <ViewWeekIcon sx={{ fontSize: '10px', mr: 0.3 }} />
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{day.mission}</span>
+            </Box>
+          )}
+          
+          {/* 加班信息 */}
+          {day.overtime && (
+            <Box sx={{ 
+              ...commonTagStyle,
+              backgroundColor: '#ff8a65',
+              color: 'white',
+            }}>
+              <WorkIcon sx={{ fontSize: '10px', mr: 0.3 }} />
+              {day.overtimeShift && (
+                <span style={{
+                  color: 'white',
+                  fontSize: '9px',
+                  fontWeight: 'bold',
+                }}>
+                  {day.overtimeShift}
+                </span>
+              )}
+            </Box>
+          )}
+        </Box>
+      </div>
+    );
+  };
+
+  // 更新CalendarDialog組件
+  const CalendarDialog = ({ open, onClose, onSelect, selectedDate, setSelectedDate, calendarData }) => {
+    const handleSelectDate = () => {
+      onSelect(selectedDate);
+      onClose();
+    };
+
+    const handleDateClick = (day) => {
+      // 檢查日期是否過期
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      if (day < today) {
+        console.log('不能選擇過期的日期');
+        return;
+      }
+      
+      setSelectedDate(day);
+    };
+    
+    // 獲取今天的日期
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    return (
+      <Dialog
+        open={open}
+        onClose={onClose}
+        aria-labelledby="dialog-title"
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle id="dialog-title" sx={{ pb: 1 }}>
+          請選擇日期:
+          <IconButton
+            aria-label="close"
+            onClick={onClose}
+            sx={{
+              position: 'absolute',
+              right: 8,
+              top: 8,
+              color: (theme) => theme.palette.grey[500],
+            }}
+          >
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent>
+          <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={zhTW}>
+            <StaticDatePicker
+              displayStaticWrapperAs="desktop"
+              openTo="day"
+              value={selectedDate}
+              onChange={(newValue) => {
+                // 檢查是否過期
+                if (newValue < today) {
+                  console.log('不能選擇過期的日期');
+                  return;
+                }
+                setSelectedDate(newValue);
+              }}
+              renderInput={(params) => <TextField {...params} />}
+              renderDay={(day, _value, DayComponentProps) => {
+                const isDateDisabled = !isWithinInterval(day, {
+                  start: startOfMonth(selectedDate),
+                  end: endOfMonth(selectedDate)
+                });
+                
+                // 檢查日期是否過期
+                const isExpired = day < today;
+                
+                const dayData = calendarData.find(d => isSameDay(parseISO(d.date), day)) || { date: day };
+                
+                return (
+                  <Box
+                    sx={{
+                      ...calendarCellStyle,
+                      ...(DayComponentProps.selected && { backgroundColor: '#e3f2fd', border: '2px solid #2196f3' }),
+                      ...(isDateDisabled && { opacity: 0.5, pointerEvents: 'none' }),
+                      ...(isExpired && { 
+                        opacity: 0.5, 
+                        pointerEvents: 'none',
+                        cursor: 'not-allowed',
+                        backgroundColor: '#f5f5f5'
+                      })
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (!isExpired) {
+                        handleDateClick(day);
+                      }
+                    }}
+                  >
+                    <RenderCalendarCell day={dayData} />
+                  </Box>
+                );
+              }}
+              // 設置週一為一週的第一天
+              firstDayOfWeek={1}
+              shouldDisableDate={(date) => {
+                // 禁用過期的日期
+                return date < today;
+              }}
+              sx={{
+                width: '100%',
+                '& .MuiPickersDay-root': {
+                  width: '40px', 
+                  height: '40px'
+                },
+                '& .MuiDayCalendar-weekContainer': {
+                  margin: '4px 0'
+                },
+                '& .MuiPickersCalendarHeader-root': {
+                  paddingLeft: '10px',
+                  paddingRight: '10px',
+                  marginTop: '8px'
+                }
+              }}
+            />
+          </LocalizationProvider>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={onClose}>取消</Button>
+          <Button onClick={handleSelectDate} color="primary">申請換班</Button>
+        </DialogActions>
+      </Dialog>
+    );
+  };
+
+  // 檢查換班後的班表是否符合工時限制規則
+  const checkShiftCompatibility = (userSchedules, date, newShift, userId, tempChanges = {}) => {
+    if (!userSchedules || !date || !newShift || !userId) {
+      return { valid: false, message: '無法檢查班表兼容性，資料不完整' };
+    }
+
+    // 移除這個條件，因為O班換成其他班別時也需要檢查兼容性
+    // if (newShift === 'O') {
+    //   return { valid: true, message: '' };
+    // }
+
+    const targetDate = new Date(date);
+    const prevDay = subDays(targetDate, 1);
+    const nextDay = addDays(targetDate, 1);
+    
+    const prevDateStr = format(prevDay, 'yyyy-MM-dd');
+    const targetDateStr = format(targetDate, 'yyyy-MM-dd');
+    const nextDateStr = format(nextDay, 'yyyy-MM-dd');
+    
+    // 考慮臨時變更中的班別（例如還未實際換班但需要預先計算的情況）
+    const getTempOrActualShift = (dateStr, uid) => {
+      // 檢查是否有臨時變更中的班別
+      if (tempChanges[dateStr] && tempChanges[dateStr][uid]) {
+        return tempChanges[dateStr][uid];
+      }
+      
+      // 否則返回實際班表中的班別
+      if (userSchedules[dateStr] && userSchedules[dateStr][uid]) {
+        return userSchedules[dateStr][uid];
+      }
+      
+      return null;
+    };
+    
+    // 獲取前一天和後一天的班別，並考慮臨時變更
+    let prevShift = getTempOrActualShift(prevDateStr, userId);
+    let nextShift = getTempOrActualShift(nextDateStr, userId);
+    
+    // 獲取當前(待換班)日期的原班別
+    let currentShift = getTempOrActualShift(targetDateStr, userId);
+    
+    console.log(`檢查班表兼容性:`, {
+      用戶ID: userId,
+      目標日期: targetDateStr,
+      原班別: currentShift,
+      新班別: newShift,
+      前一天班別: prevShift,
+      後一天班別: nextShift,
+      已考慮臨時變更: Object.keys(tempChanges).length > 0
+    });
+    
+    // 如果前一天是休假班"O"，則不需要檢查前一天的限制
+    // 但需要檢查其他情況：即使當前是O班要換成其他班別，也要檢查與前一天的兼容性
+    if (prevShift && prevShift !== 'O') {
+      const prevCombination = `${prevShift}-${newShift}`;
+      if (INVALID_SHIFT_COMBINATIONS[prevCombination] !== undefined) {
+        const requiredHours = INVALID_SHIFT_COMBINATIONS[prevCombination];
+        if (requiredHours === 0) {
+          return { 
+            valid: false, 
+            message: `${SHIFT_NAMES[prevShift]}後不允許接${SHIFT_NAMES[newShift]}，這會違反工時限制規定` 
+          };
+        } else {
+          return { 
+            valid: false, 
+            message: `${SHIFT_NAMES[prevShift]}後至少需要間隔${requiredHours}小時才能安排${SHIFT_NAMES[newShift]}` 
+          };
+        }
+      }
+    }
+    
+    // 如果後一天是休假班"O"，則不需要檢查後一天的限制
+    // 但需要檢查其他情況：即使當前是O班要換成其他班別，也要檢查與後一天的兼容性
+    if (nextShift && nextShift !== 'O') {
+      const nextCombination = `${newShift}-${nextShift}`;
+      if (INVALID_SHIFT_COMBINATIONS[nextCombination] !== undefined) {
+        const requiredHours = INVALID_SHIFT_COMBINATIONS[nextCombination];
+        if (requiredHours === 0) {
+          return { 
+            valid: false, 
+            message: `${SHIFT_NAMES[newShift]}後不允許接${SHIFT_NAMES[nextShift]}，這會違反工時限制規定` 
+          };
+        } else {
+          return { 
+            valid: false, 
+            message: `${SHIFT_NAMES[newShift]}後至少需要間隔${requiredHours}小時才能安排${SHIFT_NAMES[nextShift]}` 
+          };
+        }
+      }
+    }
+    
+    // 通過所有檢查，班表兼容
+    return { valid: true, message: '' };
+  };
+
+  // 整理班表數據為便於檢查的格式
+  const prepareShiftSchedule = (monthlySchedules, year, month, userId) => {
+    if (!monthlySchedules || !year || !month || !userId) {
+      console.error('無法準備班表數據，參數不完整');
+      return {};
+    }
+    
+    // 嘗試構造月份鍵名
+    const monthStr = `${year}-${month.toString().padStart(2, '0')}`;
+    
+    // 檢查是否有相應月份的數據
+    if (!monthlySchedules[monthStr]) {
+      console.warn(`沒有找到 ${monthStr} 的班表數據`);
+      return {};
+    }
+    
+    const scheduleData = monthlySchedules[monthStr];
+    const userSchedules = {};
+    
+    try {
+      // 嘗試從不同的數據結構中提取班表數據
+      if (scheduleData && scheduleData.data && scheduleData.data[year] && scheduleData.data[year][month]) {
+        const nurseSchedules = scheduleData.data[year][month].schedule || [];
+        const userSchedule = nurseSchedules.find(nurse => String(nurse.id) === String(userId));
+        
+        if (userSchedule && Array.isArray(userSchedule.shifts)) {
+          // 將班表數據轉換為以日期為鍵的對象
+          const daysInMonth = new Date(year, month, 0).getDate();
+          
+          for (let day = 1; day <= daysInMonth; day++) {
+            const shiftIndex = day - 1;
+            if (shiftIndex < userSchedule.shifts.length) {
+              const dateStr = `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+              userSchedules[dateStr] = {};
+              userSchedules[dateStr][userId] = userSchedule.shifts[shiftIndex] || 'O';
+            }
+          }
+        } else {
+          console.warn(`未找到用戶 ${userId} 的班表數據或格式不符合預期`);
+        }
+      } else {
+        console.warn('班表數據結構不符合預期');
+      }
+    } catch (err) {
+      console.error('處理班表數據時出錯:', err);
+    }
+    
+    return userSchedules;
+  };
+
   return (
-    <Box sx={{ padding: 1 }}>
+    <Box sx={{ p: { xs: 0.25, sm: 2, md: 3 } }}>
       {/* 手機版不顯示標題 */}
       <Typography variant="h4" gutterBottom sx={{ display: { xs: 'none', md: 'block' }, mb: 3 }}>
         換班申請管理
@@ -3461,15 +4050,25 @@ const ShiftSwap = () => {
           onChange={handleTabChange}
           indicatorColor="primary"
           textColor="primary"
-          variant="scrollable"
-          scrollButtons="auto"
+          variant="fullWidth"
           sx={{
-            '& .MuiTabs-scrollButtons': {
-              '&.Mui-disabled': { opacity: 0.3 },
+            '& .MuiTabs-root': {
+              display: 'flex',
+            },
+            '& .MuiTab-root': {
+              flex: 1,
+              fontWeight: 'bold',
+              minHeight: '30px',
+              fontSize: '1rem',
+              '&.MuiTab-root': {
+                [theme => theme.breakpoints.up('md')]: {
+                  fontSize: '0.9rem',
+                },
+              },
             },
           }}
         >
-          <Tab 
+          <StyledTab 
             label={
               <Box sx={{ display: 'flex', alignItems: 'center' }}>
                 全部申請
@@ -3481,7 +4080,7 @@ const ShiftSwap = () => {
               </Box>
             } 
           />
-          <Tab 
+          <StyledTab 
             label={
               <Box sx={{ display: 'flex', alignItems: 'center' }}>
                 換班別
@@ -3493,7 +4092,7 @@ const ShiftSwap = () => {
               </Box>
             } 
           />
-          <Tab 
+          <StyledTab 
             label={
               <Box sx={{ display: 'flex', alignItems: 'center' }}>
                 換工作區域
@@ -3505,7 +4104,7 @@ const ShiftSwap = () => {
               </Box>
             } 
           />
-          <Tab 
+          <StyledTab 
             label={
               <Box sx={{ display: 'flex', alignItems: 'center' }}>
                 換加班
@@ -3640,173 +4239,31 @@ const ShiftSwap = () => {
                                 }
                               </Typography>
                               <Chip 
-                                label={displayStatus === 'pending' ? '待處理' : 
-                                     displayStatus === 'accepted' ? '已完成' : 
-                                     displayStatus === 'rejected' ? '已駁回' : 
-                                     displayStatus === 'expired' ? '已過期' : '已取消'} 
-                                size="small" 
-                                sx={{ ...STATUS_COLORS[displayStatus] }} 
+                                label={getStatusDisplayName(displayStatus)}
+                                size="small"
+                                sx={{
+                                  ...getStatusStyle(displayStatus),
+                                  fontWeight: 'bold',
+                                  fontSize: '12px'
+                                }}
                               />
                             </Box>
                           }
                           secondary={
-                            <Box component="div" sx={{ color: isFaded ? '#bdbdbd' : 'inherit' }}>
-                              <Box component="div" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                <Typography variant="body2" component="span">
-                                  {request.from_date || '未知日期'}
-                                </Typography>
-                                {request.swap_type === 'overtime' ? (
-                                  // 加班換班顯示
-                                  <>
-                                    {request.from_overtime && (
-                                      <Chip 
-                                        label={request.from_overtime + '加'}
-                                        size="small" 
-                                        sx={{ 
-                                          backgroundColor: '#FF8A65',
-                                          color: 'white',
-                                          height: '20px',
-                                          minWidth: '28px',
-                                          borderRadius: '4px',
-                                          '& .MuiChip-label': {
-                                            padding: '0 4px',
-                                            fontSize: '11px',
-                                            fontWeight: 'bold'
-                                          }
-                                        }}
-                                      />
-                                    )}
-                                    {request.to_overtime && (
-                                      <>
-                                        <ArrowForwardIcon sx={{ fontSize: 16, color: isFaded ? '#bdbdbd' : '#666' }} />
-                                        <Chip 
-                                          label={request.to_overtime === '未指定' ? '不加班' : request.to_overtime}
-                                          size="small" 
-                                          sx={{ 
-                                            backgroundColor: request.to_overtime === '未指定' ? '#E0E0E0' : '#FFB74D',
-                                            color: '#333',
-                                            height: '20px',
-                                            minWidth: '28px',
-                                            borderRadius: '4px',
-                                            '& .MuiChip-label': {
-                                              padding: '0 4px',
-                                              fontSize: '11px',
-                                              fontWeight: 'bold'
-                                            }
-                                          }}
-                                        />
-                                      </>
-                                    )}
-                                  </>
-                                ) : request.swap_type === 'mission' ? (
-                                  // 工作區域交換顯示
-                                  <>
-                                    <Chip 
-                                      label={request.from_mission || '未指定'} 
-                                      size="small" 
-                                      sx={{ 
-                                        backgroundColor: '#4dabf5',
-                                        color: 'white',
-                                        height: '20px',
-                                        minWidth: '28px',
-                                        borderRadius: '4px',
-                                        '& .MuiChip-label': {
-                                          padding: '0 4px',
-                                          fontSize: '11px',
-                                          fontWeight: 'bold'
-                                        }
-                                      }}
-                                    />
-                                    <ArrowForwardIcon sx={{ fontSize: 16, color: isFaded ? '#bdbdbd' : '#666' }} />
-                                    <Chip 
-                                      label={request.to_mission || '未指定'} 
-                                      size="small" 
-                                      sx={{ 
-                                        backgroundColor: '#81c784',
-                                        color: 'white',
-                                        height: '20px',
-                                        minWidth: '28px',
-                                        borderRadius: '4px',
-                                        '& .MuiChip-label': {
-                                          padding: '0 4px',
-                                          fontSize: '11px',
-                                          fontWeight: 'bold'
-                                        }
-                                      }}
-                                    />
-                                    <ArrowForwardIcon sx={{ fontSize: 16, color: isFaded ? '#bdbdbd' : '#666' }} />
-                                    <Chip 
-                                      label={request.to_shift || 'O'} 
-                                      size="small" 
-                                      sx={{ 
-                                        backgroundColor: SHIFT_COLORS[request.to_shift] || '#9e9e9e',
-                                        color: request.to_shift === 'O' ? 'black' : 'white',
-                                        height: '20px',
-                                        minWidth: '20px',
-                                        '& .MuiChip-label': {
-                                          padding: '0 4px',
-                                          fontSize: '11px',
-                                          fontWeight: 'bold'
-                                        }
-                                      }}
-                                    />
-                                  </>
-                                ) : (
-                                  // 一般換班顯示
-                                  <>
-                                    <Chip 
-                                      label={request.from_shift || 'O'} 
-                                      size="small" 
-                                      sx={{ 
-                                        backgroundColor: SHIFT_COLORS[request.from_shift] || '#9e9e9e',
-                                        color: request.from_shift === 'O' ? 'black' : 'white',
-                                        height: '20px',
-                                        minWidth: '20px',
-                                        '& .MuiChip-label': {
-                                          padding: '0 4px',
-                                          fontSize: '11px',
-                                          fontWeight: 'bold'
-                                        }
-                                      }}
-                                    />
-                                    <ArrowForwardIcon sx={{ fontSize: 16, color: isFaded ? '#bdbdbd' : '#666' }} />
-                                    <Chip 
-                                      label={request.to_shift || 'O'} 
-                                      size="small" 
-                                      sx={{ 
-                                        backgroundColor: SHIFT_COLORS[request.to_shift] || '#9e9e9e',
-                                        color: request.to_shift === 'O' ? 'black' : 'white',
-                                        height: '20px',
-                                        minWidth: '20px',
-                                        '& .MuiChip-label': {
-                                          padding: '0 4px',
-                                          fontSize: '11px',
-                                          fontWeight: 'bold'
-                                        }
-                                      }}
-                                    />
-                                  </>
-                                )}
-                              </Box>
-                              {request.target_nurse_id && (
-                                <Typography variant="body2" component="span" sx={{
-                                  ml: 1,
-                                  color: isFaded ? '#bdbdbd' : '#f57c00'
-                                }}>
-                                  【指定對象: {request.target_nurse?.full_name || '特定用戶'}】
-                                </Typography>
-                              )}
-                              {/* 顯示用戶備註 */}
-                              {request.notes && (
-                                <Typography variant="body2" component="span" sx={{
-                                  display: 'block',
-                                  mt: 0.5,
-                                  color: isFaded ? '#bdbdbd' : '#616161',
-                                  fontSize: '12px'
-                                }}>
-                                  備註: {request.notes}
-                                </Typography>
-                              )}
+                            <Box sx={{ mt: 1 }}>
+                              <Typography 
+                                variant="body2" 
+                                color="text.secondary"
+                                sx={{ 
+                                  // 已取消、已過期、已駁回的請求內容淡化
+                                  color: isFaded ? '#bdbdbd' : 'text.secondary'
+                                }}
+                              >
+                                申請日期: {format(parseISO(request.created_at), 'MM/dd')}
+                                {request.from_date && ` • 從: ${format(parseISO(request.from_date), 'MM/dd')}`}
+                                {request.to_date && ` • 到: ${format(parseISO(request.to_date), 'MM/dd')}`}
+                                {request.notes && ` • ${request.notes}`}
+                              </Typography>
                             </Box>
                           }
                         />
