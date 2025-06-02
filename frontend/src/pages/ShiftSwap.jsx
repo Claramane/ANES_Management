@@ -35,7 +35,8 @@ import {
   Stack,
   Tabs,
   Tab,
-  FormGroup // 添加 FormGroup 組件的導入
+  FormGroup, // 添加 FormGroup 組件的導入
+  InputAdornment,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -47,6 +48,7 @@ import {
   Business as BusinessIcon,
   Work as WorkIcon,
   ViewWeek as ViewWeekIcon,
+  Search as SearchIcon,
 } from '@mui/icons-material';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -207,6 +209,7 @@ const calendarStyles = `
   .calendar-table {
     width: 100%;
     border-collapse: collapse;
+    table-layout: fixed;
   }
   
   .calendar-table th {
@@ -214,6 +217,8 @@ const calendarStyles = `
     text-align: center;
     background-color: #f5f5f5;
     border: 1px solid #ddd;
+    width: 14.285714%;
+    font-weight: bold;
   }
   
   .calendar-table td {
@@ -221,13 +226,33 @@ const calendarStyles = `
     padding: 0;
     vertical-align: top;
     height: 90px;
-    width: 14.28%;
+    width: 14.285714%;
     position: relative;
     transition: all 0.2s ease;
   }
   
+  @media (max-width: 600px) {
+    .calendar-table td {
+      height: 70px;
+    }
+    .calendar-table th {
+      padding: 6px 4px;
+      font-size: 14px;
+    }
+  }
+  
   .empty-cell {
     background-color: #f9f9f9;
+  }
+  
+  .expired-cell {
+    background-color: #fafafa;
+    opacity: 0.6;
+  }
+  
+  .expired-cell:hover {
+    background-color: #fafafa !important;
+    cursor: not-allowed !important;
   }
   
   .cell-content {
@@ -330,7 +355,7 @@ const calendarStyles = `
     z-index: 10;
   }
   
-  td:hover {
+  td:hover:not(.expired-cell) {
     background-color: #f0f0f0;
     cursor: pointer;
   }
@@ -440,21 +465,14 @@ const RenderCalendarCell = ({ day }) => {
             color: 'white',
           }}>
             <WorkIcon sx={{ fontSize: '10px', mr: 0.3 }} />
-            <span>加班</span>
             {day.overtimeShift && (
-              <Box component="span" sx={{
-                ml: 0.3,
-                backgroundColor: SHIFT_COLORS[day.overtimeShift] || '#9e9e9e',
-                color: day.overtimeShift === 'O' ? 'black' : 'white',
+              <span style={{
+                color: 'white',
                 fontSize: '9px',
                 fontWeight: 'bold',
-                padding: '0 2px',
-                borderRadius: '2px',
-                display: 'inline-block',
-                lineHeight: 1.2,
               }}>
                 {day.overtimeShift}
-              </Box>
+              </span>
             )}
           </Box>
         )}
@@ -780,6 +798,7 @@ const ShiftSwap = () => {
 
   // 過濾相關狀態
   const [searchTerm, setSearchTerm] = useState('');
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState([]);
   const [page, setPage] = useState(1);
   const pageSize = 10;
@@ -2110,6 +2129,15 @@ const ShiftSwap = () => {
         onClose={handleCloseSwapDialog}
         fullWidth
         maxWidth="md"
+        fullScreen={{ xs: true, md: false }}
+        sx={{
+          '& .MuiDialog-paper': {
+            width: { xs: '100%', md: 'auto' },
+            height: { xs: '100%', md: 'auto' },
+            maxHeight: { xs: '100%', md: '90vh' },
+            margin: { xs: 0, md: 2 },
+          }
+        }}
       >
         <DialogTitle>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -2120,18 +2148,20 @@ const ShiftSwap = () => {
           </Box>
         </DialogTitle>
         
-        <DialogContent dividers>
+        <DialogContent dividers sx={{ p: 1 }}>
           <Box sx={{ mb: 2 }}>
-            <Typography variant="subtitle1" gutterBottom>
-              請選擇月份:
-            </Typography>
             <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={zhTW}>
               <DatePicker
                 views={['year', 'month']}
                 label="選擇月份"
                 value={swapFormData.selectedMonth}
                 onChange={handleMonthChange}
-                renderInput={(params) => <TextField {...params} fullWidth />}
+                slotProps={{
+                  textField: {
+                    fullWidth: true,
+                    sx: { '& .MuiInputBase-root': { height: 40 } }
+                  }
+                }}
               />
             </LocalizationProvider>
           </Box>
@@ -2146,9 +2176,6 @@ const ShiftSwap = () => {
             </Alert>
           ) : calendarData.length > 0 ? (
             <Box sx={{ mt: 3 }}>
-              <Typography variant="subtitle1" gutterBottom>
-                請選擇日期:
-              </Typography>
               <style>{calendarStyles}</style>
               <div className="calendar-container">
                 <table className="calendar-table">
@@ -2202,7 +2229,7 @@ const ShiftSwap = () => {
           {renderOperationPanel()}
         </DialogContent>
         
-        <DialogActions>
+        <DialogActions sx={{ p: 1 }}>
           <Button onClick={handleCloseSwapDialog}>
             取消
           </Button>
@@ -3415,28 +3442,11 @@ const ShiftSwap = () => {
   };
 
   return (
-    <Box sx={{ padding: 3 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: currentTab === 0 ? 0 : 3 }}>
-        {currentTab !== 0 && (
-          <Typography variant="h4" gutterBottom>
-            {currentTab === 1 ? '換班別申請' :
-             currentTab === 2 ? '換工作區域申請' :
-             currentTab === 3 ? '換加班申請' : ''}
-          </Typography>
-        )}
-        <Box sx={{ display: 'flex', gap: 2 }}>
-          {canRequestSwap && (
-            <Button
-              variant="contained"
-              color="primary"
-              startIcon={<AddIcon />}
-              onClick={handleOpenSwapDialog}
-            >
-              申請換班
-            </Button>
-          )}
-        </Box>
-      </Box>
+    <Box sx={{ padding: 1 }}>
+      {/* 手機版不顯示標題 */}
+      <Typography variant="h4" gutterBottom sx={{ display: { xs: 'none', md: 'block' }, mb: 3 }}>
+        換班申請管理
+      </Typography>
       
       {error && (
         <Alert severity="error" sx={{ mb: 2 }}>
@@ -3451,7 +3461,13 @@ const ShiftSwap = () => {
           onChange={handleTabChange}
           indicatorColor="primary"
           textColor="primary"
-          variant="fullWidth"
+          variant="scrollable"
+          scrollButtons="auto"
+          sx={{
+            '& .MuiTabs-scrollButtons': {
+              '&.Mui-disabled': { opacity: 0.3 },
+            },
+          }}
         >
           <Tab 
             label={
@@ -3515,26 +3531,73 @@ const ShiftSwap = () => {
       />
       
       {/* 篩選工具列 */}
-      <Paper sx={{ p: 1.5, mb: 3, display: 'flex', gap: 1.5, alignItems: 'center', flexWrap: 'wrap' }}>
+      <Paper sx={{ p: 1.5, mb: 3, display: 'flex', gap: 1.5, alignItems: 'center' }}>
         <TextField
-          label="搜尋換班請求"
           variant="outlined"
           size="small"
           value={searchTerm}
           onChange={handleSearchChange}
-          sx={{ flexGrow: 1, minWidth: '180px' }}
+          onFocus={() => setIsSearchFocused(true)}
+          onBlur={() => setIsSearchFocused(false)}
+          sx={{ 
+            flexGrow: 1, 
+            minWidth: '120px',
+            '& .MuiInputBase-root': { height: 40 }
+          }}
           placeholder="輸入護理師姓名、備註..."
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon sx={{ color: 'action.active' }} />
+              </InputAdornment>
+            )
+          }}
         />
         <Button
           variant="outlined"
           startIcon={<FilterListIcon />}
           onClick={handleOpenFilterDialog}
           size="medium"
+          sx={{
+            height: 40,
+            // 手機版只顯示圖標並設為正方形
+            minWidth: { xs: 40, sm: 'auto' },
+            width: { xs: 40, sm: 'auto' },
+            '& .MuiButton-startIcon': { 
+              mr: { xs: 0, sm: 1 },
+              ml: { xs: 0, sm: 0 }
+            }
+          }}
         >
           <Badge badgeContent={activeFilterCount} color="primary">
-            篩選
+            <Box sx={{ display: { xs: 'none', sm: 'inline' } }}>
+              篩選
+            </Box>
           </Badge>
         </Button>
+        {canRequestSwap && (
+          <Button
+            variant="contained"
+            color="primary"
+            startIcon={<AddIcon />}
+            onClick={handleOpenSwapDialog}
+            size="medium"
+            sx={{
+              height: 40,
+              // 手機版只顯示圖標並設為正方形
+              minWidth: { xs: 40, sm: 'auto' },
+              width: { xs: 40, sm: 'auto' },
+              '& .MuiButton-startIcon': { 
+                mr: { xs: 0, sm: 1 },
+                ml: { xs: 0, sm: 0 }
+              }
+            }}
+          >
+            <Box sx={{ display: { xs: 'none', sm: 'inline' } }}>
+              申請換班
+            </Box>
+          </Button>
+        )}
       </Paper>
       
       {isLoading ? (

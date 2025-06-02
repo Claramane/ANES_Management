@@ -279,7 +279,7 @@ function Layout() {
         component="main"
         sx={{
           flexGrow: 1,
-          p: 3,
+          p: { xs: 0.25, sm: 2, md: 3 },  // 手機2px、平板16px、桌面24px
           width: '100%',
           ml: 0,
           mt: '64px',

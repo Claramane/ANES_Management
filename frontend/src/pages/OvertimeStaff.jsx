@@ -22,12 +22,14 @@ import {
   DialogContentText,
   DialogTitle,
   LinearProgress,
-  TextField
+  TextField,
+  IconButton
 } from '@mui/material';
 import SaveIcon from '@mui/icons-material/Save';
 import ShuffleIcon from '@mui/icons-material/Shuffle';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import InfoIcon from '@mui/icons-material/Info';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -185,7 +187,12 @@ const OvertimeRow = memo(({
         ...(dayData.weekday === '六' ? { bgcolor: 'rgba(255, 220, 220, 0.1)' } : {})
       }}
     >
-      <TableCell>
+      <TableCell
+        sx={{
+          width: { xs: 'auto', md: '150px' },
+          minWidth: { xs: '80px', md: '150px' }
+        }}
+      >
         <Box sx={{ display: 'flex', alignItems: 'center' }}>
           {dayData.day}({dayData.weekday})
           {isCompliant && (
@@ -198,7 +205,7 @@ const OvertimeRow = memo(({
           )}
         </Box>
       </TableCell>
-      <TableCell>
+      <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>
         {dayData.staffList.length}人
       </TableCell>
       <TableCell>
@@ -1920,33 +1927,47 @@ const OvertimeStaff = () => {
 
   return (
     <Box sx={{ padding: 2 }}>
-      <Typography variant="h4" gutterBottom>
+      <Typography variant="h4" gutterBottom sx={{ display: { xs: 'none', md: 'block' } }}>
         {formattedDate}加班人員管理
       </Typography>
       
       <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap', alignItems: 'center' }}>
-        <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={zhTW}>
-          <DatePicker
-            views={['year', 'month']}
-            label="選擇年月"
-            minDate={new Date('2020-01-01')}
-            maxDate={new Date('2030-12-31')}
-            value={selectedDate}
-            onChange={handleDateChange}
-            onAccept={handleDateAccept}
-            sx={{ width: 200 }}
-            openTo="month"
-            closeOnSelect={false}
-            slotProps={{
-              actionBar: {
-                actions: ['cancel', 'accept'],
-              },
-              toolbar: {
-                hidden: false,
-              },
-            }}
-          />
-        </LocalizationProvider>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={zhTW}>
+            <DatePicker
+              views={['year', 'month']}
+              label="選擇年月"
+              minDate={new Date('2020-01-01')}
+              maxDate={new Date('2030-12-31')}
+              value={selectedDate}
+              onChange={handleDateChange}
+              onAccept={handleDateAccept}
+              sx={{ width: 200 }}
+              openTo="month"
+              closeOnSelect={false}
+              slotProps={{
+                actionBar: {
+                  actions: ['cancel', 'accept'],
+                },
+                toolbar: {
+                  hidden: false,
+                },
+                textField: {
+                  size: 'small',
+                  sx: { '& .MuiInputBase-root': { height: 40 } }
+                }
+              }}
+            />
+          </LocalizationProvider>
+          
+          {!canEdit && hasSchedule && (
+            <Tooltip title="您可以查看加班記錄，但只有護理長和管理員可以修改" placement="top">
+              <IconButton size="small" color="info">
+                <InfoIcon />
+              </IconButton>
+            </Tooltip>
+          )}
+        </Box>
         
         {canEdit && hasSchedule && (
           <>
@@ -2005,12 +2026,6 @@ const OvertimeStaff = () => {
         </Alert>
       )}
       
-      {!canEdit && hasSchedule && (
-        <Alert severity="info" sx={{ mb: 2 }}>
-          您可以查看加班記錄，但只有護理長和管理員可以修改
-        </Alert>
-      )}
-      
       {storeError && (
         <Alert severity="error" sx={{ mb: 2 }}>
           {formatErrorMessage(storeError)}
@@ -2035,8 +2050,24 @@ const OvertimeStaff = () => {
           <Table stickyHeader aria-label="加班人員列表">
             <TableHead>
               <TableRow>
-                <TableCell width="150px" sx={tableHeaderSx}>日期</TableCell>
-                <TableCell width="80px" sx={tableHeaderSx}>人數</TableCell>
+                <TableCell 
+                  sx={{
+                    ...tableHeaderSx,
+                    width: { xs: 'auto', md: '150px' },
+                    minWidth: { xs: '80px', md: '150px' }
+                  }}
+                >
+                  日期
+                </TableCell>
+                <TableCell 
+                  sx={{
+                    ...tableHeaderSx,
+                    width: '80px',
+                    display: { xs: 'none', md: 'table-cell' }
+                  }}
+                >
+                  人數
+                </TableCell>
                 <TableCell sx={tableHeaderSx}>加班人員</TableCell>
               </TableRow>
             </TableHead>

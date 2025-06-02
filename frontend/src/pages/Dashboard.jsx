@@ -167,7 +167,7 @@ const calendarCellStyle = {
   }
 };
 
-// 渲染日曆單元格內容的組件
+// 渲染日曆單元格內容的組件 - 已優化版本
 const RenderCalendarCell = ({ day }) => {
   if (!day.date) return null;
   
@@ -241,7 +241,7 @@ const RenderCalendarCell = ({ day }) => {
           </Box>
         )}
         
-        {/* 加班信息 */}
+        {/* 加班信息 - 已優化，移除"加班"文字和班別外框 */}
         {day.overtime && (
           <Box sx={{ 
             ...commonTagStyle,
@@ -249,21 +249,14 @@ const RenderCalendarCell = ({ day }) => {
             color: 'white',
           }}>
             <WorkIcon sx={{ fontSize: '10px', mr: 0.3 }} />
-            <span>加班</span>
             {day.overtimeShift && (
-              <Box component="span" sx={{
-                ml: 0.3,
-                backgroundColor: SHIFT_COLORS[day.overtimeShift] || '#9e9e9e',
-                color: day.overtimeShift === 'O' ? 'black' : 'white',
+              <span style={{
+                color: 'white',
                 fontSize: '9px',
                 fontWeight: 'bold',
-                padding: '0 2px',
-                borderRadius: '2px',
-                display: 'inline-block',
-                lineHeight: 1.2,
               }}>
                 {day.overtimeShift}
-              </Box>
+              </span>
             )}
           </Box>
         )}
@@ -821,7 +814,7 @@ function Dashboard() {
   }
 
   return (
-    <Box className="page-container">
+    <Box sx={{ p: { xs: 0.25, sm: 2, md: 3 } }}>
       <Typography variant="h4" gutterBottom>
         哈囉！{user?.full_name || user?.username}
       </Typography>

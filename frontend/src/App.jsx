@@ -63,9 +63,9 @@ const theme = createTheme({
 
 // 需要驗證的路由
 const ProtectedRoute = ({ children }) => {
-  const { isAuthenticated } = useAuthStore();
+  const { checkAuthStatus } = useAuthStore();
   
-  if (!isAuthenticated) {
+  if (!checkAuthStatus()) {
     return <Navigate to="/login" replace />;
   }
   
@@ -74,9 +74,9 @@ const ProtectedRoute = ({ children }) => {
 
 // 護理長專用路由
 const HeadNurseRoute = ({ children }) => {
-  const { isAuthenticated, user } = useAuthStore();
+  const { checkAuthStatus, user } = useAuthStore();
   
-  if (!isAuthenticated) {
+  if (!checkAuthStatus()) {
     return <Navigate to="/login" replace />;
   }
   
@@ -90,28 +90,49 @@ const HeadNurseRoute = ({ children }) => {
 };
 
 function App() {
-  const { initializeAuth, token, user, setAuth } = useAuthStore();
+  const { initializeAuth, checkAuthStatus, token, user, setAuth, logout } = useAuthStore();
   
   // 在應用啟動時檢查token是否過期，並自動同步user資料
   useEffect(() => {
     // 清理過期的緩存
     cleanExpiredScheduleCache();
     
+    // 執行初始化認證檢查
     initializeAuth();
-    // 只要有token就一定fetch /users/me
-    if (token) {
+    
+    // 如果通過初始化檢查且有token，則嘗試獲取最新用戶資料
+    if (checkAuthStatus() && token) {
       api.get('/users/me')
         .then(res => {
+          // 確保用戶資料是最新的
           setAuth(token, res.data);
         })
         .catch(err => {
-          // 若token無效自動登出
+          console.error('獲取用戶資料失敗:', err);
+          // 若token無效自動登出並跳轉
           if (err.response && err.response.status === 401) {
-            setAuth(null, null);
+            logout();
+            if (window.location.pathname !== '/login') {
+              window.location.href = '/login';
+            }
           }
         });
     }
-  }, [initializeAuth, token, setAuth]);
+  }, [initializeAuth, checkAuthStatus, token, setAuth, logout]);
+  
+  // 定期檢查認證狀態（每5分鐘）
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (!checkAuthStatus()) {
+        console.log('定期檢查：認證狀態無效，跳轉到登入頁面');
+        if (window.location.pathname !== '/login') {
+          window.location.href = '/login';
+        }
+      }
+    }, 5 * 60 * 1000); // 5分鐘檢查一次
+
+    return () => clearInterval(interval);
+  }, [checkAuthStatus]);
   
   return (
     <ThemeProvider theme={theme}>

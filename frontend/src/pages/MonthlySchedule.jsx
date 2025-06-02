@@ -569,7 +569,7 @@ const MonthlySchedule = () => {
   }, [scheduleData, daysInMonth, nurseUsers, activeTab]);
 
   // 切換班次
-  const toggleShift = (nurseIndex, dayIndex, specificShift = null) => {
+  const toggleShift = (nurseIndex, dayIndex, specificShift = null, ignoreIdentityRestriction = false) => {
     // 檢查編輯權限和編輯模式
     if (!hasEditPermission || !isEditMode || isLoading) return; 
     
@@ -582,22 +582,27 @@ const MonthlySchedule = () => {
     // 確保日期正確性
     const currentDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), dayIndex + 1);
 
-    // 根據護理師身份確定可用的班次類型
+    // 根據護理師身份確定可用的班次類型（只在滑鼠點擊時限制）
     const identity = nurse.identity;
     let shiftTypes = [];
     
-    // 根據身份設定可用班次
-    if (identity === '麻醉專科護理師') {
-      shiftTypes = ['D', 'A', 'N', 'O', 'V', 'R']; // 白班、小夜班、大夜班、休假
-    } else if (identity === '恢復室護理師') {
-      shiftTypes = ['A', 'K', 'C', 'F', 'O', 'V', 'R']; // 小夜班、早班、中班、晚班、休假
-    } else if (identity === '麻醉科Leader') {
-      shiftTypes = ['A', 'E', 'O', 'V', 'R']; // 小夜班、半班、休假
-    } else if (identity === '麻醉科書記') {
-      shiftTypes = ['B', 'E', 'O', 'V', 'R']; // 日班、半班、休假
-    } else {
-      // 默認班次類型（所有可能的班次）
+    if (ignoreIdentityRestriction) {
+      // 鍵盤輸入時允許所有班次類型
       shiftTypes = ['D', 'A', 'N', 'O', 'K', 'C', 'F', 'E', 'B', 'V', 'R'];
+    } else {
+      // 滑鼠點擊時根據身份設定可用班次
+      if (identity === '麻醉專科護理師') {
+        shiftTypes = ['D', 'A', 'N', 'O', 'V', 'R']; // 白班、小夜班、大夜班、休假
+      } else if (identity === '恢復室護理師') {
+        shiftTypes = ['A', 'K', 'C', 'F', 'O', 'V', 'R']; // 小夜班、早班、中班、晚班、休假
+      } else if (identity === '麻醉科Leader') {
+        shiftTypes = ['A', 'E', 'O', 'V', 'R']; // 小夜班、半班、休假
+      } else if (identity === '麻醉科書記') {
+        shiftTypes = ['B', 'E', 'O', 'V', 'R']; // 日班、半班、休假
+      } else {
+        // 默認班次類型（所有可能的班次）
+        shiftTypes = ['D', 'A', 'N', 'O', 'K', 'C', 'F', 'E', 'B', 'V', 'R'];
+      }
     }
     
     // 獲取當前班次
@@ -1143,7 +1148,7 @@ const MonthlySchedule = () => {
         e.preventDefault();
         
         // 更新班表數據
-        toggleShift(quickEdit.nurseIndex, quickEdit.dayIndex, key);
+        toggleShift(quickEdit.nurseIndex, quickEdit.dayIndex, key, true);
         
         // 游標自動跳到下一格
         if (quickEdit.dayIndex < daysInSelectedMonth - 1) {
@@ -1179,7 +1184,7 @@ const MonthlySchedule = () => {
     if (allowedShifts.includes(key)) {
       e.preventDefault();
       // 使用指定的班別更新
-      toggleShift(focusedCell.nurseIndex, focusedCell.dayIndex, key);
+      toggleShift(focusedCell.nurseIndex, focusedCell.dayIndex, key, true);
     }
   };
 
@@ -1365,7 +1370,7 @@ const MonthlySchedule = () => {
 
   return (
     <Box sx={{ padding: 1 }} id="monthly-schedule">
-      <Typography variant="h4" gutterBottom sx={{ mb: 1 }}>
+      <Typography variant="h4" gutterBottom sx={{ mb: 1, display: { xs: 'none', md: 'block' } }}>
         {formattedDate}工作表
       </Typography>
       
@@ -1374,10 +1379,16 @@ const MonthlySchedule = () => {
         <Tabs
           value={activeTab}
           onChange={handleTabChange}
-          variant="fullWidth"
+          variant="scrollable"
+          scrollButtons="auto"
           textColor="primary"
           indicatorColor="primary"
           aria-label="月班表類型標籤"
+          sx={{
+            '& .MuiTabs-scrollButtons': {
+              '&.Mui-disabled': { opacity: 0.3 },
+            },
+          }}
         >
           <StyledTab label="全部" />
           <StyledTab label="常規月班表" />
@@ -1407,6 +1418,10 @@ const MonthlySchedule = () => {
               toolbar: {
                 hidden: false,
               },
+              textField: {
+                size: 'small',
+                sx: { '& .MuiInputBase-root': { height: 40 } }
+              }
             }}
           />
         </LocalizationProvider>
@@ -1422,6 +1437,7 @@ const MonthlySchedule = () => {
                   onClick={handleUpdateNurseCategories}
                   disabled={isLoading}
                   title="從公式班表更新護理師分類"
+                  sx={{ height: 40 }}
                 >
                   更新包班人員
                 </Button>
@@ -1430,6 +1446,7 @@ const MonthlySchedule = () => {
                   color="primary"
                   onClick={handleOpenGenerateDialog}
                   disabled={isLoading}
+                  sx={{ height: 40 }}
                 >
                   帶入排班公式
                 </Button>
@@ -1439,6 +1456,7 @@ const MonthlySchedule = () => {
                   onClick={handleOpenResetDialog}
                   disabled={isLoading}
                   title="重置為全部休假的空白班表"
+                  sx={{ height: 40 }}
                 >
                   重置月班表
                 </Button>
@@ -1451,6 +1469,7 @@ const MonthlySchedule = () => {
               color="warning"
               onClick={generatePDF}
               disabled={!scheduleData.length}
+              sx={{ display: { xs: 'none', md: 'block' }, height: 40 }}
             >
               生成 PDF
             </Button>
@@ -1462,6 +1481,7 @@ const MonthlySchedule = () => {
               onClick={toggleEditMode}
               disabled={isLoading || !scheduleData.length}
               startIcon={isEditMode ? <SaveIcon /> : <EditIcon />}
+              sx={{ height: 40 }}
             >
               {isEditMode ? '儲存班表' : '編輯'}
             </Button>
@@ -1804,7 +1824,7 @@ const MonthlySchedule = () => {
         </Paper>
       )}
       
-      <Box className="hide-for-pdf" sx={{ mt: 3 }}>
+      <Box className="hide-for-pdf" sx={{ mt: 3, display: { xs: 'none', md: 'block' } }}>
         <Paper sx={{ padding: 2 }}>
           <Typography variant="h6" gutterBottom>
             班次說明

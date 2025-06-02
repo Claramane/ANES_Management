@@ -368,7 +368,7 @@ const Announcement = () => {
   }, [user, selectedAnnouncement]);
 
   return (
-    <Box sx={{ padding: 3 }}>
+    <Box sx={{ padding: 1 }}>
       {/* Filter Bar Section */}
       <Paper sx={{ p: 1.5, mb: 3, display: 'flex', gap: 1.5, alignItems: 'center', flexWrap: 'wrap' }}>
          <TextField

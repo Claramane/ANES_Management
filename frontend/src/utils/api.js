@@ -40,6 +40,17 @@ api.interceptors.response.use(
       // 清除本地存儲的認證資訊
       localStorage.removeItem('auth-storage');
       
+      // 清除其他可能的緩存
+      try {
+        // 動態導入並調用清除緩存函數
+        Promise.all([
+          import('../utils/cacheUtils').then(module => module.clearAllCache && module.clearAllCache()),
+          import('../utils/scheduleCache').then(module => module.clearAllScheduleCache && module.clearAllScheduleCache())
+        ]).catch(err => console.warn('清除緩存時發生錯誤:', err));
+      } catch (err) {
+        console.warn('動態導入緩存清除模組失敗:', err);
+      }
+      
       // 只有在不是登入頁面時才跳轉，避免無限循環
       if (window.location.pathname !== '/login') {
         // 使用 window.location.href 確保完全重新載入頁面

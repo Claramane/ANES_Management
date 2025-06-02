@@ -19,7 +19,11 @@ import {
   Switch,
   FormControlLabel,
   Chip,
-  Badge
+  Badge,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem
 } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
@@ -110,7 +114,6 @@ const WeeklySchedule = () => {
   const [editMode, setEditMode] = useState(false);
   const [missionValues, setMissionValues] = useState({});
   const [isSaving, setIsSaving] = useState(false);
-  const [showNurseNames, setShowNurseNames] = useState(false);
   
   // 添加臨時日期狀態
   const [tempDate, setTempDate] = useState(null);
@@ -799,8 +802,8 @@ const WeeklySchedule = () => {
       return colors[type] || colors['OR'];
     };
     
-    // 麻醉專科護理師和麻醉科Leader的选项
-    if (identity === '麻醉專科護理師' || identity === '麻醉科Leader') {
+    // 麻醉專科護理師、麻醉科Leader和護理長的选项
+    if (identity === '麻醉專科護理師' || identity === '麻醉科Leader' || identity === '護理長') {
       // 如果是週五，OR選項要包含「1」
       const orNumbers = (isFriday || dayOfWeek === 3) 
         ? ['1', '2', '3', '5', '6', '7', '8', '9', '11', '13'] 
@@ -924,7 +927,7 @@ const WeeklySchedule = () => {
       }
       
       // 檢查3F選項 (3F1和3F2)
-      if (identity === '麻醉專科護理師' || identity === '麻醉科Leader') {
+      if (identity === '麻醉專科護理師' || identity === '麻醉科Leader' || identity === '護理長') {
         // 檢查3F1和3F2是否已經滿了，如果兩個都滿了且都不是當前護理師，則不顯示3F按鈕
         const is3FFull = assignments['3F1'] !== null && assignments['3F2'] !== null && 
                           assignments['3F1'] !== nurseId && assignments['3F2'] !== nurseId;
@@ -1031,7 +1034,7 @@ const WeeklySchedule = () => {
       }
       
       // 檢查F選項 (F1和F2)
-      if (identity === '麻醉專科護理師' || identity === '麻醉科Leader') {
+      if (identity === '麻醉專科護理師' || identity === '麻醉科Leader' || identity === '護理長') {
         // 檢查F1和F2是否都已被分配且都不是當前護理師
         const isFfull = assignments['F1'] !== null && assignments['F2'] !== null && 
                         assignments['F1'] !== nurseId && assignments['F2'] !== nurseId;
@@ -1062,8 +1065,8 @@ const WeeklySchedule = () => {
         }
       }
       
-      // 檢查HC選項 (僅適用於麻醉專科護理師)
-      if (identity === '麻醉專科護理師' && isWeekday) {
+      // 檢查HC選項 (適用於麻醉專科護理師和護理長)
+      if ((identity === '麻醉專科護理師' || identity === '護理長') && isWeekday) {
         // 檢查HC1、HC2和HC3是否都已被分配且都不是當前護理師
         const isHCFull = assignments['HC1'] !== null && assignments['HC2'] !== null && assignments['HC3'] !== null && 
                           assignments['HC1'] !== nurseId && assignments['HC2'] !== nurseId && assignments['HC3'] !== nurseId;
@@ -1303,9 +1306,9 @@ const WeeklySchedule = () => {
       return;
     }
     
-    // 確保HC只能被麻醉專科護理師分配
-    if (value === 'HC' && nurseData.identity !== '麻醉專科護理師') {
-      console.log(`HC只能分配給麻醉專科護理師，當前護理師身份為 ${nurseData.identity}`);
+    // 確保HC只能被麻醉專科護理師和護理長分配
+    if (value === 'HC' && nurseData.identity !== '麻醉專科護理師' && nurseData.identity !== '護理長') {
+      console.log(`HC只能分配給麻醉專科護理師或護理長，當前護理師身份為 ${nurseData.identity}`);
       return;
     }
     
@@ -1431,8 +1434,8 @@ const WeeklySchedule = () => {
     }
     // 如果選擇的是 HC，判斷是新增還是循環
     else if (value === 'HC') {
-      // 確保是麻醉專科護理師
-      if (nurseData.identity !== '麻醉專科護理師') {
+      // 確保是麻醉專科護理師或護理長
+      if (nurseData.identity !== '麻醉專科護理師' && nurseData.identity !== '護理長') {
         return;
       }
       
@@ -1663,7 +1666,7 @@ const WeeklySchedule = () => {
           // 這是取消操作
           await updateDatabaseAreaCode(nurseId, dayIndex, null);
           // 跳到下一個任務種類
-          if (nurseData.identity === '麻醉專科護理師') {
+          if (nurseData.identity === '麻醉專科護理師' || nurseData.identity === '護理長') {
             handleMissionChange(nurseId, dayIndex, 'HC');
           } else {
             // 麻醉科Leader不分配HC，直接清除
@@ -1698,7 +1701,7 @@ const WeeklySchedule = () => {
               }
               await updateDatabaseAreaCode(nurseId, dayIndex, null);
               // 跳到下一個任務種類
-              if (nurseData.identity === '麻醉專科護理師') {
+              if (nurseData.identity === '麻醉專科護理師' || nurseData.identity === '護理長') {
                 handleMissionChange(nurseId, dayIndex, 'HC');
               } else {
                 // 麻醉科Leader不分配HC，直接清除
@@ -1730,7 +1733,7 @@ const WeeklySchedule = () => {
         if (!foundAvailableF) {
           console.log('所有F位置已被分配，無法分配新的F');
           // 跳到下一個任務種類
-          if (nurseData.identity === '麻醉專科護理師') {
+          if (nurseData.identity === '麻醉專科護理師' || nurseData.identity === '護理長') {
             handleMissionChange(nurseId, dayIndex, 'HC');
           } else {
             // 麻醉科Leader不分配HC，直接清除
@@ -1986,10 +1989,10 @@ const WeeklySchedule = () => {
       return dayStats;
     });
     
-    // 遍歷當前週的每個護理師，排除護理長
+    // 遍歷當前週的每個護理師，移除排除護理長的條件
     currentWeekSchedule.forEach(nurse => {
-      // 排除護理長
-      if (nurse.role === 'head_nurse') return;
+      // 移除原本的護理長排除條件
+      // if (nurse.role === 'head_nurse') return;
       
       // 遍歷每天
       nurse.shifts.forEach((shift, dayIndex) => {
@@ -2039,10 +2042,10 @@ const WeeklySchedule = () => {
     const dayOfMonth = parseInt(getDateOfWeek(currentWeek - 1, dayIndex + 1));
     if (!dayOfMonth) return [];
     
-    // 收集所有在該日期執行該任務的護理師，排除護理長
+    // 收集所有在該日期執行該任務的護理師，移除排除護理長的條件
     const nurses = currentWeekSchedule.filter(nurse => {
-      // 排除護理長
-      if (nurse.role === 'head_nurse') return false;
+      // 移除原本的護理長排除條件
+      // if (nurse.role === 'head_nurse') return false;
       
       const missionKey = `${nurse.id}-${currentWeek}-${dayIndex}`;
       const mission = missionValues[missionKey] || nurse.area_codes?.[dayIndex];
@@ -2228,24 +2231,19 @@ const WeeklySchedule = () => {
         );
       }
       
-      // 優先顯示 mission 值 (非編輯模式下使用粗體顯示)
+      // A班並有工作分配，顯示工作分配
       if (mission) {
-        // A班且有工作分配，使用深一點的背景色
         return (
           <Box component="span" sx={{ 
-            fontWeight: 'bold', // 非編輯模式下顯示area_code時使用粗體
             whiteSpace: 'nowrap', 
             overflow: 'hidden', 
             textOverflow: 'ellipsis',
             width: '100%',
             display: 'block',
             fontSize: '0.85rem',
+            fontWeight: 'bold',
             height: '22px',
             lineHeight: '22px',
-            backgroundColor: '#B3CFC1', // 使用條件背景色
-            border: '2px solid #96BB9C', // 添加明顯但淺色的邊框
-            borderRadius: '3px', // 輕微圓角
-            margin: '-1px', // 調整邊距以適應邊框增加的尺寸
           }}>
             {mission}
           </Box>
@@ -2440,8 +2438,8 @@ const WeeklySchedule = () => {
     }
     
     // 根據護理師身份處理不同的循環順序
-    if (nurse.identity === '麻醉專科護理師' || nurse.identity === '麻醉科Leader') {
-      // 麻醉專科護理師和麻醉科Leader的循環: OR系列 → DR → 3F → CC → C → F → HC → 清除
+    if (nurse.identity === '麻醉專科護理師' || nurse.identity === '麻醉科Leader' || nurse.identity === '護理長') {
+      // 麻醉專科護理師、麻醉科Leader和護理長的循環: OR系列 → DR → 3F → CC → C → F → HC → 清除
       
       // 根據當前任務決定下一個任務
       if (!mission) {
@@ -2550,7 +2548,7 @@ const WeeklySchedule = () => {
             handleNextMission('3F');
             break;
           case '3F':
-            if (nurse.identity === '麻醉專科護理師' || nurse.identity === '麻醉科Leader') {
+            if (nurse.identity === '麻醉專科護理師' || nurse.identity === '麻醉科Leader' || nurse.identity === '護理長') {
               handleNextMission('CC');
             } else if (nurse.identity === '恢復室護理師') {
               handleNextMission('PAR');
@@ -2563,7 +2561,7 @@ const WeeklySchedule = () => {
             handleNextMission('C');
             break;
           case 'C':
-            if (nurse.identity === '麻醉專科護理師' || nurse.identity === '麻醉科Leader') {
+            if (nurse.identity === '麻醉專科護理師' || nurse.identity === '麻醉科Leader' || nurse.identity === '護理長') {
               handleNextMission('F');
             } else {
               // 恢復室護理師在C之後直接清除
@@ -2571,7 +2569,7 @@ const WeeklySchedule = () => {
             }
             break;
           case 'F':
-            if (nurse.identity === '麻醉專科護理師') {
+            if (nurse.identity === '麻醉專科護理師' || nurse.identity === '護理長') {
               handleNextMission('HC');
             } else {
               // 麻醉科Leader不分配HC，直接清除
@@ -2589,8 +2587,8 @@ const WeeklySchedule = () => {
   };
 
   return (
-    <Box sx={{ padding: 3 }} id="weekly-schedule">
-      <Typography variant="h4" gutterBottom>
+    <Box sx={{ padding: 1 }} id="weekly-schedule">
+      <Typography variant="h4" gutterBottom sx={{ display: { xs: 'none', md: 'block' } }}>
         {formattedDate}週班表
       </Typography>
       
@@ -2614,21 +2612,46 @@ const WeeklySchedule = () => {
               toolbar: {
                 hidden: false,
               },
+              textField: {
+                size: 'small',
+                sx: { '& .MuiInputBase-root': { height: 40 } }
+              }
             }}
           />
         </LocalizationProvider>
         
-        <ButtonGroup variant="contained" sx={{ ml: 2 }}>
+        {/* 週別切換區域 - 桌面版使用按鈕組，手機版使用下拉選單 */}
+        <Box sx={{ display: { xs: 'none', md: 'flex' }, gap: 1, ml: 2 }}>
           {Array.from({ length: weeksInMonth }, (_, i) => i + 1).map(week => (
             <Button 
               key={week}
-              color={currentWeek === week ? "success" : "primary"}
+              variant={currentWeek === week ? "contained" : "outlined"}
+              color={currentWeek === week ? "primary" : "inherit"}
               onClick={() => selectWeek(week)}
+              sx={{ minWidth: '60px', height: 40 }}
             >
               第{week}週
             </Button>
           ))}
-        </ButtonGroup>
+        </Box>
+        
+        {/* 手機版下拉選單 */}
+        <FormControl sx={{ display: { xs: 'block', md: 'none' }, minWidth: 120, ml: 2 }}>
+          <InputLabel>週別</InputLabel>
+          <Select
+            value={currentWeek}
+            onChange={(e) => selectWeek(e.target.value)}
+            label="週別"
+            size="small"
+            sx={{ height: 40 }}
+          >
+            {Array.from({ length: weeksInMonth }, (_, i) => i + 1).map(week => (
+              <MenuItem key={week} value={week}>
+                第{week}週
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
         
         {hasEditPermission && ( // 僅在有編輯權限時顯示
           <Button 
@@ -2636,7 +2659,7 @@ const WeeklySchedule = () => {
             color="warning"
             onClick={generatePDF}
             disabled={!monthlySchedule.length}
-            sx={{ ml: 2 }}
+            sx={{ ml: 2, display: { xs: 'none', md: 'block' }, height: 40 }}
           >
             生成 PDF
           </Button>
@@ -2647,7 +2670,7 @@ const WeeklySchedule = () => {
           color="secondary"
           onClick={toggleShiftDisplay}
           disabled={!monthlySchedule.length || editMode}
-          sx={{ ml: 2 }}
+          sx={{ ml: 2, display: { xs: 'none', md: 'block' }, height: 40 }}
         >
           {showShiftTime ? '顯示班次代碼' : '顯示班次時間'}
         </Button>
@@ -2659,7 +2682,7 @@ const WeeklySchedule = () => {
               color={editMode ? "success" : "info"}
               onClick={toggleEditMode}
               disabled={!monthlySchedule.length || isSaving}
-              sx={{ ml: 2 }}
+              sx={{ ml: 2, height: 40 }}
             >
               {isSaving ? '儲存中...' : (editMode ? '儲存工作分配' : '編輯工作分配')}
             </Button>
@@ -2668,7 +2691,7 @@ const WeeklySchedule = () => {
               color="warning"
               onClick={resetWorkAssignments}
               disabled={!monthlySchedule.length || isSaving || editMode}
-              sx={{ ml: 2 }}
+              sx={{ ml: 2, height: 40 }}
             >
               重置工作分配
             </Button>
@@ -2701,7 +2724,20 @@ const WeeklySchedule = () => {
             <Table sx={{ minWidth: 650, '& .MuiTableCell-root': { padding: '2px 2px' }, tableLayout: 'fixed' }} size="small">
               <TableHead>
                 <TableRow sx={{ height: '28px' }}>
-                  <TableCell align="center" width="60px" sx={{ padding: '1px 1px', fontSize: '0.8rem' }}>姓名</TableCell>
+                  <TableCell 
+                    align="center" 
+                    width="60px" 
+                    sx={{ 
+                      padding: '1px 1px', 
+                      fontSize: '0.8rem',
+                      position: 'sticky',
+                      left: 0,
+                      backgroundColor: '#f5f5f5',
+                      zIndex: 1
+                    }}
+                  >
+                    姓名
+                  </TableCell>
                   {Array.from({ length: 7 }).map((_, i) => (
                     <TableCell key={i} align="center" padding="none" sx={{ padding: '1px 1px', fontSize: '0.8rem' }}>
                       <Box sx={{ lineHeight: 1 }}>
@@ -2716,7 +2752,21 @@ const WeeklySchedule = () => {
               <TableBody>
                 {currentWeekSchedule.map((nurse) => (
                   <TableRow key={nurse.id} sx={{ height: '22px', maxHeight: '22px' }}>
-                    <TableCell align="center" component="th" scope="row" sx={{ padding: '0px 2px', height: '22px', maxHeight: '22px', fontSize: '0.8rem' }}>
+                    <TableCell 
+                      align="center" 
+                      component="th" 
+                      scope="row" 
+                      sx={{ 
+                        padding: '0px 2px', 
+                        height: '22px', 
+                        maxHeight: '22px', 
+                        fontSize: '0.8rem',
+                        position: 'sticky',
+                        left: 0,
+                        backgroundColor: 'white',
+                        zIndex: 1
+                      }}
+                    >
                       {nurse.name}
                     </TableCell>
                     {nurse.shifts.map((shift, index) => (
@@ -2730,9 +2780,9 @@ const WeeklySchedule = () => {
             </Table>
           </TableContainer>
           
-          {/* 工作快速分配區 - 只有當班表存在時才顯示 */}
+          {/* 工作快速分配區 - 只有當班表存在時才顯示，手機版隱藏 */}
           {currentWeekSchedule.length > 0 && !isLoading && (
-            <>
+            <Box sx={{ display: { xs: 'none', md: 'block' } }}>
               <Box sx={{ mt: 3, mb: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <Typography variant="h6" sx={{ fontSize: '1rem', fontWeight: 'bold' }}>
                   工作快速分配區
@@ -2797,9 +2847,9 @@ const WeeklySchedule = () => {
                       const dayOfMonth = getDateOfWeek(currentWeek - 1, dayIndex + 1);
                       if (!dayOfMonth) return null; // 跳過無效日期
                       
-                      // 從當前週排班中過濾出當天值白班的護理師，排除護理長
+                      // 從當前週排班中過濾出當天值白班的護理師，移除排除護理長的條件
                       const aShiftNurses = currentWeekSchedule.filter(nurse => 
-                        nurse.shifts[dayIndex] === 'A' && nurse.role !== 'head_nurse'
+                        nurse.shifts[dayIndex] === 'A'
                       );
                       
                       // 計算未分配人數
@@ -2921,7 +2971,7 @@ const WeeklySchedule = () => {
                   </TableBody>
                 </Table>
               </TableContainer>
-            </>
+            </Box>
           )}
           
           {/* 單獨的工作分配統計表 - 只有當班表存在時才顯示 */}
@@ -2931,17 +2981,6 @@ const WeeklySchedule = () => {
             <Typography variant="h6" sx={{ fontSize: '1rem', fontWeight: 'bold' }}>
               本週工作分配統計
             </Typography>
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={showNurseNames}
-                  onChange={(e) => setShowNurseNames(e.target.checked)}
-                  color="primary"
-                />
-              }
-              label={showNurseNames ? "顯示護理師名單" : "顯示統計數字"}
-              sx={{ ml: 2 }}
-            />
           </Box>
           <TableContainer component={Paper} sx={{ mt: 1, mb: 3 }}>
             <Table size="small" sx={{ tableLayout: 'fixed' }}>
@@ -2959,6 +2998,19 @@ const WeeklySchedule = () => {
                 </TableRow>
               </TableHead>
               <TableBody>
+                {/* 麻醉專科護理師工作類型區域 */}
+                <TableRow sx={{ borderTop: '2px solid #1976d2' }}>
+                  <TableCell colSpan={8} sx={{ 
+                    fontWeight: 'bold', 
+                    fontSize: '0.9rem', 
+                    backgroundColor: '#e3f2fd',
+                    color: '#1976d2',
+                    textAlign: 'center'
+                  }}>
+                    麻醉專科護理師工作分配
+                  </TableCell>
+                </TableRow>
+                
                 {/* OR開頭的工作類型 */}
                 {allMissionTypes
                   .filter(type => type.startsWith('OR'))
@@ -2971,7 +3023,8 @@ const WeeklySchedule = () => {
                     <TableRow key={missionType}>
                       <TableCell sx={{ 
                         fontSize: '0.8rem',
-                        backgroundColor: '#e8f5e9'
+                        backgroundColor: '#e8f5e9',
+                        paddingLeft: '16px'
                       }}>
                         {missionType}
                       </TableCell>
@@ -2988,23 +3041,19 @@ const WeeklySchedule = () => {
                               fontSize: '0.8rem',
                               fontWeight: hasValue ? 'bold' : 'normal',
                               color: hasValue ? '#2e7d32' : '#9e9e9e',
-                              backgroundColor: hasValue ? 'rgba(76, 175, 80, 0.1)' : 'transparent',
+                              backgroundColor: hasValue ? 'rgba(33, 150, 243, 0.08)' : 'transparent',
                               maxWidth: '120px',
                               overflow: 'hidden',
                               textOverflow: 'ellipsis',
-                              whiteSpace: showNurseNames && nurseNames.length > 2 ? 'normal' : 'nowrap'
+                              whiteSpace: nurseNames.length > 2 ? 'normal' : 'nowrap'
                             }}
                           >
                             {hasValue ? (
-                              showNurseNames ? (
-                                <Tooltip title={nurseNames.join(', ')} arrow placement="top">
-                                  <span>{nurseNames.join(', ')}</span>
-                                </Tooltip>
-                              ) : (
-                                count
-                              )
+                              <Tooltip title={nurseNames.join(', ')} arrow placement="top">
+                                <span>{nurseNames.join(', ')}</span>
+                              </Tooltip>
                             ) : (
-                              showNurseNames ? '-' : '0'
+                              '-'
                             )}
                           </TableCell>
                         );
@@ -3012,119 +3061,190 @@ const WeeklySchedule = () => {
                     </TableRow>
                   ))
                 }
+                
+                {/* 麻醉專科護理師的其他工作類型 */}
+                {['DR', '3F', 'CC', 'C', 'F', 'HC'].map((missionType) => (
+                  <TableRow key={missionType}>
+                    <TableCell sx={{ 
+                      fontSize: '0.8rem',
+                      backgroundColor: '#e3f2fd',
+                      paddingLeft: '16px'
+                    }}>
+                      {missionType}
+                    </TableCell>
+                    {calculateMissionStats.map((dayStat, dayIndex) => {
+                      const count = dayStat[missionType] || 0;
+                      const hasValue = count > 0;
+                      const nurseNames = getNurseNamesByMission(dayIndex, missionType);
+                      
+                      return (
+                        <TableCell 
+                          key={dayIndex} 
+                          align="center" 
+                          sx={{ 
+                            fontSize: '0.8rem',
+                            fontWeight: hasValue ? 'bold' : 'normal',
+                            color: hasValue ? '#1976d2' : '#9e9e9e',
+                            backgroundColor: hasValue ? 'rgba(33, 150, 243, 0.08)' : 'transparent',
+                            maxWidth: '120px',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: nurseNames.length > 2 ? 'normal' : 'nowrap'
+                          }}
+                        >
+                          {hasValue ? (
+                            <Tooltip title={nurseNames.join(', ')} arrow placement="top">
+                              <span>{nurseNames.join(', ')}</span>
+                            </Tooltip>
+                          ) : (
+                            '-'
+                          )}
+                        </TableCell>
+                      );
+                    })}
+                  </TableRow>
+                ))}
 
-                {/* 其他常規工作類型 */}
-                {allMissionTypes
-                  .filter(type => !type.startsWith('OR'))
-                  .map((missionType) => (
-                    <TableRow key={missionType}>
-                      <TableCell sx={{ 
-                        fontSize: '0.8rem',
-                        backgroundColor: '#f5f5f5'
-                      }}>
-                        {missionType}
-                      </TableCell>
-                      {calculateMissionStats.map((dayStat, dayIndex) => {
-                        const count = dayStat[missionType] || 0;
-                        const hasValue = count > 0;
-                        const nurseNames = getNurseNamesByMission(dayIndex, missionType);
-                        
-                        return (
-                          <TableCell 
-                            key={dayIndex} 
-                            align="center" 
-                            sx={{ 
-                              fontSize: '0.8rem',
-                              fontWeight: hasValue ? 'bold' : 'normal',
-                              color: hasValue ? '#2e7d32' : '#9e9e9e',
-                              backgroundColor: hasValue ? 'rgba(76, 175, 80, 0.1)' : 'transparent',
-                              maxWidth: '120px',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: showNurseNames && nurseNames.length > 2 ? 'normal' : 'nowrap'
-                            }}
-                          >
-                            {hasValue ? (
-                              showNurseNames ? (
-                                <Tooltip title={nurseNames.join(', ')} arrow placement="top">
-                                  <span>{nurseNames.join(', ')}</span>
-                                </Tooltip>
-                              ) : (
-                                count
-                              )
-                            ) : (
-                              showNurseNames ? '-' : '0'
-                            )}
-                          </TableCell>
-                        );
-                      })}
-                    </TableRow>
-                  ))
-                }
+                {/* 恢復室護理師工作類型區域 */}
+                <TableRow sx={{ borderTop: '2px solid #ff9800' }}>
+                  <TableCell colSpan={8} sx={{ 
+                    fontWeight: 'bold', 
+                    fontSize: '0.9rem', 
+                    backgroundColor: '#fff8e1',
+                    color: '#ff9800',
+                    textAlign: 'center'
+                  }}>
+                    恢復室護理師工作分配
+                  </TableCell>
+                </TableRow>
+                
+                {/* 恢復室護理師的工作類型 */}
+                {['P', 'PAR'].map((missionType) => (
+                  <TableRow key={missionType}>
+                    <TableCell sx={{ 
+                      fontSize: '0.8rem',
+                      backgroundColor: '#fff8e1',
+                      paddingLeft: '16px'
+                    }}>
+                      {missionType}
+                    </TableCell>
+                    {calculateMissionStats.map((dayStat, dayIndex) => {
+                      const count = dayStat[missionType] || 0;
+                      const hasValue = count > 0;
+                      const nurseNames = getNurseNamesByMission(dayIndex, missionType);
+                      
+                      return (
+                        <TableCell 
+                          key={dayIndex} 
+                          align="center" 
+                          sx={{ 
+                            fontSize: '0.8rem',
+                            fontWeight: hasValue ? 'bold' : 'normal',
+                            color: hasValue ? '#ff9800' : '#9e9e9e',
+                            backgroundColor: hasValue ? 'rgba(33, 150, 243, 0.08)' : 'transparent',
+                            maxWidth: '120px',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: nurseNames.length > 2 ? 'normal' : 'nowrap'
+                          }}
+                        >
+                          {hasValue ? (
+                            <Tooltip title={nurseNames.join(', ')} arrow placement="top">
+                              <span>{nurseNames.join(', ')}</span>
+                            </Tooltip>
+                          ) : (
+                            '-'
+                          )}
+                        </TableCell>
+                      );
+                    })}
+                  </TableRow>
+                ))}
                 
                 {/* 統計未預定義的工作類型 */}
                 {calculateMissionStats.some(dayStat => 
                   Object.keys(dayStat).some(type => !allMissionTypes.includes(type))
                 ) && (
-                  <TableRow sx={{ borderTop: '2px solid #bbb' }}>
-                    <TableCell colSpan={8} sx={{ fontWeight: 'bold', fontSize: '0.8rem', backgroundColor: '#fff8e1' }}>
-                      其他工作類型
-                    </TableCell>
-                  </TableRow>
+                  <>
+                    <TableRow sx={{ borderTop: '2px solid #9c27b0' }}>
+                      <TableCell colSpan={8} sx={{ 
+                        fontWeight: 'bold', 
+                        fontSize: '0.9rem', 
+                        backgroundColor: '#f3e5f5',
+                        color: '#9c27b0',
+                        textAlign: 'center'
+                      }}>
+                        其他工作分配
+                      </TableCell>
+                    </TableRow>
+                    
+                    {calculateMissionStats[0] && Object.keys(calculateMissionStats[0])
+                      .filter(type => !allMissionTypes.includes(type) && type !== 'undefined')
+                      .map(missionType => (
+                        <TableRow key={missionType}>
+                          <TableCell sx={{ 
+                            fontSize: '0.8rem', 
+                            backgroundColor: '#f3e5f5',
+                            paddingLeft: '16px'
+                          }}>
+                            {missionType}
+                          </TableCell>
+                          {calculateMissionStats.map((dayStat, dayIndex) => {
+                            const count = dayStat[missionType] || 0;
+                            const hasValue = count > 0;
+                            const nurseNames = getNurseNamesByMission(dayIndex, missionType);
+                            
+                            return (
+                              <TableCell 
+                                key={dayIndex} 
+                                align="center" 
+                                sx={{ 
+                                  fontSize: '0.8rem',
+                                  fontWeight: hasValue ? 'bold' : 'normal',
+                                  color: hasValue ? '#9c27b0' : '#9e9e9e',
+                                  backgroundColor: hasValue ? 'rgba(33, 150, 243, 0.08)' : 'transparent',
+                                  maxWidth: '120px',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: nurseNames.length > 2 ? 'normal' : 'nowrap'
+                                }}
+                              >
+                                {hasValue ? (
+                                  <Tooltip title={nurseNames.join(', ')} arrow placement="top">
+                                    <span>{nurseNames.join(', ')}</span>
+                                  </Tooltip>
+                                ) : (
+                                  '-'
+                                )}
+                              </TableCell>
+                            );
+                          })}
+                        </TableRow>
+                      ))
+                    }
+                  </>
                 )}
                 
-                {calculateMissionStats[0] && Object.keys(calculateMissionStats[0])
-                  .filter(type => !allMissionTypes.includes(type) && type !== 'undefined')
-                  .map(missionType => (
-                    <TableRow key={missionType}>
-                      <TableCell sx={{ fontSize: '0.8rem', backgroundColor: '#fff8e1' }}>
-                        {missionType}
-                      </TableCell>
-                      {calculateMissionStats.map((dayStat, dayIndex) => {
-                        const count = dayStat[missionType] || 0;
-                        const hasValue = count > 0;
-                        const nurseNames = getNurseNamesByMission(dayIndex, missionType);
-                        
-                        return (
-                          <TableCell 
-                            key={dayIndex} 
-                            align="center" 
-                            sx={{ 
-                              fontSize: '0.8rem',
-                              fontWeight: hasValue ? 'bold' : 'normal',
-                              color: hasValue ? '#ff6d00' : '#bdbdbd',
-                              backgroundColor: hasValue ? 'rgba(255, 167, 38, 0.1)' : 'transparent',
-                              maxWidth: '120px',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: showNurseNames && nurseNames.length > 2 ? 'normal' : 'nowrap'
-                            }}
-                          >
-                            {hasValue ? (
-                              showNurseNames ? (
-                                <Tooltip title={nurseNames.join(', ')} arrow placement="top">
-                                  <span>{nurseNames.join(', ')}</span>
-                                </Tooltip>
-                              ) : (
-                                count
-                              )
-                            ) : (
-                              showNurseNames ? '-' : '0'
-                            )}
-                          </TableCell>
-                        );
-                      })}
-                    </TableRow>
-                  ))
-                }
-                
                 {/* 未安排白班人員統計 */}
-                <TableRow sx={{ borderTop: '2px solid #bbb' }}>
+                <TableRow sx={{ borderTop: '2px solid #e91e63' }}>
+                  <TableCell colSpan={8} sx={{ 
+                    fontWeight: 'bold', 
+                    fontSize: '0.9rem', 
+                    backgroundColor: '#fce4ec',
+                    color: '#e91e63',
+                    textAlign: 'center'
+                  }}>
+                    未安排白班人員統計
+                  </TableCell>
+                </TableRow>
+                
+                <TableRow>
                   <TableCell sx={{ 
                     fontSize: '0.8rem', 
                     backgroundColor: '#fce4ec', 
                     color: '#c2185b',
-                    fontWeight: 'bold'
+                    fontWeight: 'bold',
+                    paddingLeft: '16px'
                   }}>
                     未安排白班人員
                   </TableCell>
@@ -3140,24 +3260,20 @@ const WeeklySchedule = () => {
                         sx={{ 
                           fontSize: '0.8rem',
                           fontWeight: hasValue ? 'bold' : 'normal',
-                          color: hasValue ? '#c2185b' : '#9e9e9e',
-                          backgroundColor: hasValue ? 'rgba(194, 24, 91, 0.1)' : 'transparent',
+                          color: hasValue ? '#e91e63' : '#9e9e9e',
+                          backgroundColor: hasValue ? 'rgba(33, 150, 243, 0.08)' : 'transparent',
                           maxWidth: '120px',
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
-                          whiteSpace: showNurseNames && unassignedNurses.length > 2 ? 'normal' : 'nowrap'
+                          whiteSpace: unassignedNurses.length > 2 ? 'normal' : 'nowrap'
                         }}
                       >
                         {hasValue ? (
-                          showNurseNames ? (
-                            <Tooltip title={unassignedNurses.join(', ')} arrow placement="top">
-                              <span>{unassignedNurses.join(', ')}</span>
-                            </Tooltip>
-                          ) : (
-                            count
-                          )
+                          <Tooltip title={unassignedNurses.join(', ')} arrow placement="top">
+                            <span>{unassignedNurses.join(', ')}</span>
+                          </Tooltip>
                         ) : (
-                          showNurseNames ? '-' : '0'
+                          '-'
                         )}
                       </TableCell>
                     );

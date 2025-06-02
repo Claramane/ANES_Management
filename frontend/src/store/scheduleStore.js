@@ -612,7 +612,7 @@ export const useScheduleStore = create(
       },
       
       // 獲取月班表
-      fetchMonthlySchedule: async () => {
+      fetchMonthlySchedule: async (forceRefresh = false) => {
         set({ isLoading: true, error: null });
         try {
           const { selectedDate } = get();
@@ -622,7 +622,7 @@ export const useScheduleStore = create(
           const month = validDate.getMonth() + 1;
           
           // 使用API獲取月班表
-          console.log('正在通過API獲取月班表...');
+          console.log(`正在通過API獲取月班表... ${forceRefresh ? '(強制刷新)' : ''}`);
           
           try {
             const response = await apiService.schedule.getMonthlySchedule(year, month);
