@@ -113,6 +113,7 @@ const WeeklySchedule = () => {
   const [showShiftTime, setShowShiftTime] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [missionValues, setMissionValues] = useState({});
+  const [pmValues, setPmValues] = useState({}); // 新增PM值的狀態
   const [isSaving, setIsSaving] = useState(false);
   
   // 添加臨時日期狀態
@@ -399,11 +400,10 @@ const WeeklySchedule = () => {
   const toggleEditMode = () => {
     if (editMode) {
       // 編輯模式關閉時保存更改
-      // 先清除選取狀態和暫存的任務值，確保藍色選取框消失
-      const valuesToSave = { ...missionValues };
-      setMissionValues({});
-      // 然後再保存更改
       saveWorkAssignments();
+    } else {
+      // 進入編輯模式時，從currentWeekSchedule同步數據到missionValues
+      syncApiDataToMissionValue(currentWeekSchedule);
     }
     setEditMode(!editMode);
   };
@@ -416,7 +416,7 @@ const WeeklySchedule = () => {
     
     try {
       setIsSaving(true);
-
+      
       // 取得當前年月
       const year = selectedDate.getFullYear();
       const month = selectedDate.getMonth() + 1;
@@ -428,8 +428,9 @@ const WeeklySchedule = () => {
         throw new Error(response.data.message || "重置工作分配失敗");
       }
       
-      // 重置本地狀態
+      // 重置本地狀態 - 清空所有missionValues和pmValues
       setMissionValues({});
+      setPmValues({});
       
       // 在本地立即更新area_codes，將所有護理師的area_codes設為null
       const updatedSchedule = [...monthlySchedule];
@@ -443,12 +444,9 @@ const WeeklySchedule = () => {
       useScheduleStore.setState({ monthlySchedule: updatedSchedule });
       
       setIsSaving(false);
-      setSuccess(`成功重置 ${response.data.reset_count} 個工作分配`);
+      // setSuccess(`成功重置 ${response.data.reset_count} 個工作分配`);
       
-      // 不需要重新獲取數據，因為我們已經在上面更新了本地數據
-      // await fetchMonthlySchedule();
-      
-      setTimeout(() => setSuccess(null), 3000);
+      // setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
       setIsSaving(false);
       console.error('重置工作分配失敗:', err);
@@ -469,6 +467,43 @@ const WeeklySchedule = () => {
     }
   };
 
+  // 從API數據同步到missionValue
+  const syncApiDataToMissionValue = (scheduleData) => {
+    const newMissionValues = {};
+    const newPmValues = {}; // 新增PM值的狀態
+    
+    scheduleData.forEach(nurse => {
+      if (nurse.area_codes) {
+        nurse.area_codes.forEach((areaCode, dayIndex) => {
+          if (areaCode) {
+            // 計算這個日期屬於哪一週
+            const dayOfMonth = dayIndex + 1;
+            const weekIndex = Math.floor((dayOfMonth - 1) / 7);
+            const dayInWeek = (dayOfMonth - 1) % 7;
+            
+            // 構建key: ${nurseId}-${weekNum}-${dayInWeek}
+            const key = `${nurse.id}-${weekIndex + 1}-${dayInWeek}`;
+            
+            // 檢查是否包含斜線（複選格式）
+            if (areaCode.includes('/')) {
+              const parts = areaCode.split('/');
+              newMissionValues[key] = parts[0]; // 主要工作分配
+              newPmValues[key] = parts[1]; // PM工作分配
+            } else {
+              newMissionValues[key] = areaCode;
+              // PM值不設定，表示沒有選擇
+            }
+          }
+        });
+      }
+    });
+    
+    setMissionValues(newMissionValues);
+    setPmValues(newPmValues); // 設定PM值
+    console.log('已同步API數據到missionValue:', Object.keys(newMissionValues).length, '個工作分配');
+    console.log('已同步API數據到pmValue:', Object.keys(newPmValues).length, '個PM工作分配');
+  };
+
   // 保存工作分配更改
   const saveWorkAssignments = async () => {
     try {
@@ -478,33 +513,14 @@ const WeeklySchedule = () => {
       const year = selectedDate.getFullYear();
       const month = selectedDate.getMonth() + 1;
       
-      // 獲取排班詳細數據（使用緩存）
-      const result = await cachedScheduleDetailsRequest(apiService, 'weekly-schedule', year, month);
-      if (!result.data?.success) {
-        throw new Error("無法獲取排班詳細數據");
-      }
-      
-      if (result.fromCache) {
-        console.log('saveWorkAssignments: 使用緩存數據');
-      }
-      
-      // 排班資料 ID 映射表
-      const scheduleMapping = {};
-      
-      // 建立映射: { "用戶ID-日期": scheduleId }
-      const details = result.data.data || [];
-      details.forEach(item => {
-        const dateObj = new Date(item.date);
-        const day = dateObj.getDate();
-        const key = `${item.user_id}-${day}`;
-        scheduleMapping[key] = item.id;
-      });
-      
-      // 準備批量更新數據
+      // 準備批量更新數據 - 結合missionValues和pmValues
       const bulkUpdates = [];
       
+      // 收集所有需要處理的key
+      const allKeys = new Set([...Object.keys(missionValues), ...Object.keys(pmValues)]);
+      
       // 找出所有需要更新的工作分配
-      for (const [key, mission] of Object.entries(missionValues)) {
+      for (const key of allKeys) {
         // 解析鍵值 `${nurseId}-${currentWeek}-${dayIndex}`
         const [nurseId, weekNum, dayIndex] = key.split('-');
         if (!nurseId || !weekNum || dayIndex === undefined) continue;
@@ -516,13 +532,29 @@ const WeeklySchedule = () => {
         // 格式化日期字符串
         const dateString = `${year}-${month < 10 ? '0' + month : month}-${dayOfMonth < 10 ? '0' + dayOfMonth : dayOfMonth}`;
         
+        // 構建area_code值
+        const missionValue = missionValues[key];
+        const pmValue = pmValues[key];
+        
+        let areaCode = null;
+        if (missionValue && pmValue) {
+          // 兩者都有，使用斜線組合
+          areaCode = `${missionValue}/${pmValue}`;
+        } else if (missionValue) {
+          // 只有主要工作分配
+          areaCode = missionValue;
+        } else if (pmValue) {
+          // 只有PM工作分配（雖然理論上不應該發生，但為了完整性處理）
+          areaCode = pmValue;
+        }
+        
         // 添加到批量更新列表
         bulkUpdates.push({
           user_id: parseInt(nurseId),
           date: dateString,
-          area_code: mission === null ? null : mission.toString(),
-          year: year,  // 添加年份參數
-          month: month  // 添加月份參數
+          area_code: areaCode,
+          year: year,
+          month: month
         });
       }
       
@@ -533,7 +565,7 @@ const WeeklySchedule = () => {
           throw new Error(response.data.message || "批量更新工作分配失敗");
         }
         
-        // 在本地立即更新area_codes，無需等待重新獲取數據
+        // 更新本地area_codes數據
         const updatedSchedule = [...monthlySchedule];
         
         // 更新本地數據
@@ -557,38 +589,26 @@ const WeeklySchedule = () => {
         // 更新store中的數據
         useScheduleStore.setState({ monthlySchedule: updatedSchedule });
         
-        // 保存成功後，清除所有相關頁面的快取，確保其他使用者能看到最新資料
+        // 保存成功後清除相關頁面快取
         console.log('保存成功，清除相關頁面快取');
         const { clearScheduleCache } = await import('../utils/scheduleCache');
         clearScheduleCache('dashboard', year, month);
         clearScheduleCache('weekly-schedule', year, month);
         clearScheduleCache('shift-swap', year, month);
         
-        setSuccess(`成功儲存 ${response.data.updated_count} 個工作分配`);
-        if (response.data.failed_count > 0) {
-          setSuccess(`成功儲存 ${response.data.updated_count} 個工作分配，但有 ${response.data.failed_count} 個失敗`);
-        }
+        setIsSaving(false);
+        // setSuccess(`成功儲存 ${bulkUpdates.length} 個工作分配`);
+        // setTimeout(() => setSuccess(null), 3000);
       } else {
-        setSuccess("沒有需要更新的工作分配");
+        setIsSaving(false);
+        // setSuccess('沒有需要儲存的工作分配變更');
+        // setTimeout(() => setSuccess(null), 3000);
       }
-      
-      setIsSaving(false);
-      setEditMode(false);
-      
-      // 清空暫存的編輯值和編輯狀態
-      setMissionValues({});
-      
-      // 不需要重新獲取數據，因為我們已經在上面更新了本地數據
-      // await fetchMonthlySchedule();
-      
-      setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
       setIsSaving(false);
       console.error('保存工作分配失敗:', err);
       
-      // 避免直接渲染錯誤對象，而是顯示錯誤信息字串
       let errorMessage = '保存工作分配失敗，請稍後重試';
-      
       if (typeof err === 'string') {
         errorMessage = err;
       } else if (err && typeof err.message === 'string') {
@@ -609,11 +629,15 @@ const WeeklySchedule = () => {
       OR1: null, OR2: null, OR3: null, OR5: null, OR6: null, 
       OR7: null, OR8: null, OR9: null, OR11: null, OR13: null,
       DR: null, 
-      '3F1': null, '3F2': null, '3F_Recovery': null,
+      '3F1': null, '3F2': null, '3F3': null,
       CC: null, 
       F1: null, F2: null, 
       P: null, PAR1: null, PAR2: null, C: null,
-      HC1: null, HC2: null, HC3: null
+      HC1: null, HC2: null, HC3: null,
+      TAE: null, PCA: null, SEC: null, PAR: null,
+      // PM相關的工作分配
+      PMTAE: null, PMC: null, PMF2: null,
+      PM: null
     };
     
     // 遍歷所有護理師的當天工作分配
@@ -624,24 +648,25 @@ const WeeklySchedule = () => {
       // 獲取任務值的key
       const missionKey = `${nurse.id}-${currentWeek}-${dayIndex}`;
       
-      // 獲取任務值，優先使用暫存區的值
-      let mission;
+      // 獲取主要工作分配和PM工作分配
+      const mission = missionValues[missionKey];
+      const pmMission = pmValues[missionKey];
       
-      // 獲取任務值，優先使用暫存區的值
-      if (missionKey in missionValues) {
-        mission = missionValues[missionKey];
-      } else {
-        mission = nurse.area_codes?.[dayIndex];
-      }
-      
-      // 如果有分配任務，則記錄
+      // 處理主要工作分配
       if (mission) {
-        // 特殊處理恢復室護理師的3F
         if (mission === '3F' && nurse.identity === '恢復室護理師') {
-          assignments['3F_Recovery'] = nurse.id;
+          assignments['3F2'] = nurse.id;
+        } else if (mission === '3F_Recovery') {
+          // 兼容舊的3F_Recovery格式
+          assignments['3F2'] = nurse.id;
         } else {
           assignments[mission] = nurse.id;
         }
+      }
+      
+      // 處理PM工作分配
+      if (pmMission) {
+        assignments[pmMission] = nurse.id;
       }
     });
     
@@ -654,7 +679,7 @@ const WeeklySchedule = () => {
     
     // 對於基本任務類型，檢查是否已經分配
     if (missionType === 'DR' || missionType === 'CC' || missionType === 'P' || 
-        missionType === 'C') {
+        missionType === 'C' || missionType === 'TAE') {
       return assignments[missionType] !== null;
     }
     
@@ -673,11 +698,11 @@ const WeeklySchedule = () => {
     // 對於3F類型，分別檢查麻醉專科護理師和恢復室護理師
     if (missionType === '3F') {
       if (identity === '恢復室護理師') {
-        // 恢復室護理師只檢查3F_Recovery
-        return assignments['3F_Recovery'] !== null;
+        // 恢復室護理師只能排3F2
+        return assignments['3F2'] !== null;
       } else {
-        // 麻醉專科護理師檢查3F1和3F2
-        return assignments['3F1'] !== null && assignments['3F2'] !== null;
+        // 麻醉專科護理師檢查3F1、3F2和3F3
+        return assignments['3F1'] !== null && assignments['3F2'] !== null && assignments['3F3'] !== null;
       }
     }
     
@@ -707,24 +732,113 @@ const WeeklySchedule = () => {
     
     const shift = nurseData.shifts[dayIndex];
     
-    // 確保只有A班才顯示工作分區按鈕
-    if (shift !== 'A') {
-      return null;
-    }
+    // 任務值的key
+    const key = `${nurseId}-${currentWeek}-${dayIndex}`;
+    const currentMission = missionValues[key];
     
-    // 計算當前是星期幾 (0-6)
+    // 計算當前是星期幾
     const currentDate = parseInt(getDateOfWeek(currentWeek - 1, dayIndex + 1));
-    if (!currentDate) return null; // 如果日期無效，不顯示按鈕
+    if (!currentDate) return null;
     
     const date = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), currentDate);
-    const dayOfWeek = date.getDay(); // 0是週日，1-5是週一到週五，6是週六
-    
-    // 檢查是否為工作日（週一到週五）
-    const isWeekday = dayOfWeek >= 1 && dayOfWeek <= 5;
-    // 檢查是否為週五
-    const isFriday = dayOfWeek === 5;
-    
-    // 通用按鈕樣式
+    const dayOfWeek = date.getDay();
+
+    // 獲取當天所有已分配的工作
+    const getAssignedMissions = () => {
+      const assigned = new Set();
+      currentWeekSchedule.forEach(nurse => {
+        const missionKey = `${nurse.id}-${currentWeek}-${dayIndex}`;
+        const mission = missionValues[missionKey];
+        const pmMission = pmValues[missionKey];
+        
+        if (mission) {
+          assigned.add(mission);
+        }
+        if (pmMission) {
+          assigned.add(pmMission);
+        }
+      });
+      return assigned;
+    };
+
+    // 獲取其他護理師已分配的工作（排除當前護理師）
+    const getOtherAssignedMissions = () => {
+      const assigned = new Set();
+      currentWeekSchedule.forEach(nurse => {
+        if (nurse.id === nurseId) return; // 排除當前護理師
+        
+        const missionKey = `${nurse.id}-${currentWeek}-${dayIndex}`;
+        const mission = missionValues[missionKey];
+        const pmMission = pmValues[missionKey];
+        
+        if (mission) {
+          assigned.add(mission);
+        }
+        if (pmMission) {
+          assigned.add(pmMission);
+        }
+      });
+      return assigned;
+    };
+
+    // 檢查按鈕是否應該被隱藏
+    const shouldHideButton = (buttonType) => {
+      const assignedMissions = getOtherAssignedMissions(); // 使用排除當前護理師的函數
+      
+      if (buttonType === 'OR') {
+        const baseOptions = ['OR2', 'OR3', 'OR5', 'OR6', 'OR7', 'OR8', 'OR9', 'OR11', 'OR13'];
+        let options = baseOptions;
+        
+        if (dayOfWeek === 1 || dayOfWeek === 3 || dayOfWeek === 5) { // 週一、週三、週五
+          options = ['OR1', ...baseOptions];
+        }
+        
+        return options.every(option => assignedMissions.has(option));
+        
+      } else if (buttonType === 'DR') {
+        // DR現在只有DR一個選項
+        return assignedMissions.has('DR');
+        
+      } else if (buttonType === '3F') {
+        const options = ['3F1', '3F2', '3F3'];
+        return options.every(option => assignedMissions.has(option));
+        
+      } else if (buttonType === 'HC') {
+        const options = ['HC1', 'HC2', 'HC3'];
+        return options.every(option => assignedMissions.has(option));
+        
+      } else if (buttonType === 'F') {
+        let options = ['F1', 'F2', 'PCA', 'SEC'];
+        
+        if (dayOfWeek === 3 || dayOfWeek === 4) { // 週三、週四加入TAE
+          options = ['F1', 'F2', 'TAE', 'PCA', 'SEC'];
+        }
+        
+        return options.every(option => assignedMissions.has(option));
+        
+      } else if (buttonType === 'C') {
+        return assignedMissions.has('C');
+        
+      } else if (buttonType === 'CC') {
+        return assignedMissions.has('CC');
+        
+      } else if (buttonType === 'PAR') {
+        return assignedMissions.has('PAR');
+        
+      } else if (buttonType === 'PCA') {
+        return assignedMissions.has('PCA');
+        
+      } else if (buttonType === '3F2') {
+        return assignedMissions.has('3F2');
+        
+      } else if (buttonType === 'HC3') {
+        return assignedMissions.has('HC3');
+      }
+      
+      return false;
+    };
+
+    // 按鈕樣式
     const btnStyle = { 
       minWidth: '22px', 
       padding: '0px 2px', 
@@ -736,29 +850,11 @@ const WeeklySchedule = () => {
       fontWeight: 'bold',
       border: '1px solid',
       boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
-      whiteSpace: 'nowrap', // 防止按鈕文字換行
-      overflow: 'hidden', // 溢出隱藏
+      whiteSpace: 'nowrap',
+      overflow: 'hidden',
     };
-    
-    // 獲取目前儲存在資料庫的工作分配值
-    const missionKey = `${nurseId}-${currentWeek}-${dayIndex}`;
-    const savedMission = currentWeekSchedule.find(n => n.id === nurseId)?.area_codes?.[dayIndex];
-    
-    // 改進處理missionValues中的null值的邏輯：
-    // - 如果missionValues[missionKey]存在且為null，表示用戶已取消此值
-    // - 如果missionValues[missionKey]有其他值，使用該值
-    // - 如果missionValues[missionKey]不存在，使用savedMission
-    let currentMission;
-    
-    if (missionKey in missionValues) {
-      // 如果在暫存狀態中有此鍵值（包括值為null的情況）
-      currentMission = missionValues[missionKey];
-    } else {
-      // 如果在暫存狀態中沒有此鍵值，使用資料庫值
-      currentMission = savedMission;
-    }
-    
-    // 獲取按鈕活動/非活動狀態的顏色
+
+    // 按鈕顏色配置
     const getButtonColor = (type, isActive) => {
       const colors = {
         'OR': { 
@@ -785,16 +881,20 @@ const WeeklySchedule = () => {
           active: { bg: '#bf360c', text: 'white', border: '#bf360c' },
           inactive: { bg: '#f0f0f0', text: '#757575', border: '#bdbdbd' }
         },
-        'P': { 
-          active: { bg: '#1a237e', text: 'white', border: '#1a237e' },
+        'HC': { 
+          active: { bg: '#6a1b9a', text: 'white', border: '#6a1b9a' },
           inactive: { bg: '#f0f0f0', text: '#757575', border: '#bdbdbd' }
         },
         'PAR': { 
           active: { bg: '#b71c1c', text: 'white', border: '#b71c1c' },
           inactive: { bg: '#f0f0f0', text: '#757575', border: '#bdbdbd' }
         },
-        'HC': { 
-          active: { bg: '#6a1b9a', text: 'white', border: '#6a1b9a' },
+        'PCA': { 
+          active: { bg: '#1a237e', text: 'white', border: '#1a237e' },
+          inactive: { bg: '#f0f0f0', text: '#757575', border: '#bdbdbd' }
+        },
+        'PM': { 
+          active: { bg: '#e91e63', text: 'white', border: '#e91e63' },
           inactive: { bg: '#f0f0f0', text: '#757575', border: '#bdbdbd' }
         }
       };
@@ -802,317 +902,123 @@ const WeeklySchedule = () => {
       return colors[type] || colors['OR'];
     };
     
-    // 麻醉專科護理師、麻醉科Leader和護理長的选项
-    if (identity === '麻醉專科護理師' || identity === '麻醉科Leader' || identity === '護理長') {
-      // 如果是週五，OR選項要包含「1」
-      const orNumbers = (isFriday || dayOfWeek === 3) 
-        ? ['1', '2', '3', '5', '6', '7', '8', '9', '11', '13'] 
-        : ['2', '3', '5', '6', '7', '8', '9', '11', '13'];
-      
-      // 判斷是否為週末（週六或週日）
-      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6; // 0是週日，6是週六
-        
-      // 獲取當前日期的工作分配情況
-      const assignments = getCurrentDayAssignments(dayIndex);
-      
-      // 週末只顯示CC選項
-      if (isWeekend) {
-        // 如果CC已分配且不是給當前護理師，則不顯示CC按鈕
-        if (assignments['CC'] !== null && assignments['CC'] !== nurseId) {
-          return (
-            <Box sx={{ 
-              display: 'flex', 
-              justifyContent: 'center', 
-              alignItems: 'center',
-              width: '100%', 
-              height: '100%',
-              color: '#9e9e9e',
-              fontSize: '0.6rem'
-            }}>
-              工作已滿
-            </Box>
-          );
-        }
-        
-      return (
-        <Box sx={{ 
-          display: 'flex', 
-          flexDirection: 'row', 
-          flexWrap: 'wrap', 
-          gap: 0.2, 
-          justifyContent: 'center', 
-          m: 0, 
-          p: 0.2, 
-          width: '100%', 
-          height: '100%',
-          overflow: 'hidden' // 確保超出部分不會影響佈局
-        }}>
-          <Button 
-              size="small"
-              variant="contained"
-              onClick={() => handleMissionChange(nurseId, dayIndex, 'CC')}
-              sx={{
-                ...btnStyle,
-                backgroundColor: currentMission === 'CC' 
-                  ? getButtonColor('CC', true).active.bg 
-                  : getButtonColor('CC', false).inactive.bg,
-                color: currentMission === 'CC' 
-                  ? getButtonColor('CC', true).active.text 
-                  : getButtonColor('CC', false).inactive.text,
-                borderColor: currentMission === 'CC' 
-                  ? getButtonColor('CC', true).active.border 
-                  : getButtonColor('CC', false).inactive.border,
-              }}
-            >
-              CC
-            </Button>
-          </Box>
-        );
+    // 檢查按鈕是否應該被高亮（選中狀態）
+    const isButtonHighlighted = (buttonType) => {
+      if (buttonType === 'PM') {
+        return pmValues[key] !== undefined && pmValues[key] !== null && pmValues[key] !== '';
       }
       
-      // 準備要顯示的按鈕
+      if (!currentMission) return false;
+      
+      if (buttonType === 'OR') {
+        return currentMission && currentMission.startsWith('OR');
+      } else if (buttonType === 'DR') {
+        return currentMission === 'DR';
+      } else if (buttonType === '3F') {
+        return currentMission && currentMission.startsWith('3F');
+      } else if (buttonType === 'F') {
+        return currentMission && (currentMission.startsWith('F') || currentMission === 'PCA' || currentMission === 'SEC' || currentMission === 'TAE');
+      } else if (buttonType === 'HC') {
+        return currentMission && currentMission.startsWith('HC');
+      }
+      
+      return currentMission === buttonType;
+    };
+
+    // 獲取按鈕顯示文字
+    const getButtonDisplayText = (buttonType) => {
+      if (buttonType === 'PM') {
+        const pmValue = pmValues[key];
+        return pmValue || 'PM';
+      }
+      
+      if (!isButtonHighlighted(buttonType)) {
+        return buttonType;
+      }
+      
+      // 如果被選中，顯示具體的工作分配
+      if (buttonType === 'OR' && currentMission?.startsWith('OR')) {
+        return currentMission;
+      } else if (buttonType === 'DR' && currentMission === 'DR') {
+        return currentMission;
+      } else if (buttonType === '3F' && currentMission?.startsWith('3F')) {
+        return currentMission;
+      } else if (buttonType === 'F' && (currentMission?.startsWith('F') || currentMission === 'PCA' || currentMission === 'SEC' || currentMission === 'TAE')) {
+        return currentMission;
+      } else if (buttonType === 'HC' && currentMission?.startsWith('HC')) {
+        return currentMission;
+      }
+      
+      return currentMission || buttonType;
+    };
+
+    // 創建按鈕的共用函式
+    const createButton = (buttonType, onClick) => (
+          <Button 
+        key={buttonType}
+            size="small"
+            variant="contained"
+        onClick={onClick}
+            sx={{
+              ...btnStyle,
+          backgroundColor: isButtonHighlighted(buttonType)
+            ? getButtonColor(buttonType, true).active.bg 
+            : getButtonColor(buttonType, false).inactive.bg,
+          color: isButtonHighlighted(buttonType)
+            ? getButtonColor(buttonType, true).active.text 
+            : getButtonColor(buttonType, false).inactive.text,
+          borderColor: isButtonHighlighted(buttonType)
+            ? getButtonColor(buttonType, true).active.border 
+            : getButtonColor(buttonType, false).inactive.border,
+        }}
+      >
+        {getButtonDisplayText(buttonType)}
+          </Button>
+        );
+
+    // 麻醉專科護理師/麻醉科Leader/護理長的按鈕邏輯
+      if (identity === '麻醉專科護理師' || identity === '麻醉科Leader' || identity === '護理長') {
       const buttons = [];
       
-      // 檢查OR選項
-      const availableORs = orNumbers.filter(num => assignments[`OR${num}`] === null || assignments[`OR${num}`] === nurseId);
-      if (availableORs.length > 0 || currentMission?.startsWith('OR')) {
-        buttons.push(
-          <Button 
-            key="OR"
-            size="small"
-            variant="contained"
-            onClick={() => handleMissionChange(nurseId, dayIndex, 'OR')}
-            sx={{
-              ...btnStyle,
-              backgroundColor: (currentMission?.startsWith('OR')) 
-                ? getButtonColor('OR', true).active.bg 
-                : getButtonColor('OR', false).inactive.bg,
-              color: (currentMission?.startsWith('OR')) 
-                ? getButtonColor('OR', true).active.text 
-                : getButtonColor('OR', false).inactive.text,
-              borderColor: (currentMission?.startsWith('OR')) 
-                ? getButtonColor('OR', true).active.border 
-                : getButtonColor('OR', false).inactive.border,
-            }}
-          >
-            {currentMission?.startsWith('OR') ? currentMission : 'OR'}
-          </Button>
-        );
+      // OR 按鈕 - 檢查是否應該隱藏
+      if (!shouldHideButton('OR')) {
+        buttons.push(createButton('OR', () => handleMissionCycle(nurseId, dayIndex, 'OR')));
       }
       
-      // 檢查DR選項
-      if (assignments['DR'] === null || assignments['DR'] === nurseId) {
-        buttons.push(
-          <Button 
-            key="DR"
-            size="small"
-            variant="contained"
-            onClick={() => handleMissionChange(nurseId, dayIndex, 'DR')}
-            sx={{
-              ...btnStyle,
-              backgroundColor: currentMission === 'DR' 
-                ? getButtonColor('DR', true).active.bg 
-                : getButtonColor('DR', false).inactive.bg,
-              color: currentMission === 'DR' 
-                ? getButtonColor('DR', true).active.text 
-                : getButtonColor('DR', false).inactive.text,
-              borderColor: currentMission === 'DR' 
-                ? getButtonColor('DR', true).active.border 
-                : getButtonColor('DR', false).inactive.border,
-            }}
-          >
-            DR
-          </Button>
-        );
+      // DR 按鈕 - 檢查是否應該隱藏
+      if (!shouldHideButton('DR')) {
+        buttons.push(createButton('DR', () => handleMissionCycle(nurseId, dayIndex, 'DR')));
       }
       
-      // 檢查3F選項 (3F1和3F2)
-      if (identity === '麻醉專科護理師' || identity === '麻醉科Leader' || identity === '護理長') {
-        // 檢查3F1和3F2是否已經滿了，如果兩個都滿了且都不是當前護理師，則不顯示3F按鈕
-        const is3FFull = assignments['3F1'] !== null && assignments['3F2'] !== null && 
-                          assignments['3F1'] !== nurseId && assignments['3F2'] !== nurseId;
-        
-        if (!is3FFull) {
-          buttons.push(
-            <Button 
-              key="3F"
-              size="small"
-              variant="contained"
-              onClick={() => handleMissionChange(nurseId, dayIndex, '3F')}
-              sx={{
-                ...btnStyle,
-                backgroundColor: currentMission?.startsWith('3F') 
-                  ? getButtonColor('3F', true).active.bg 
-                  : getButtonColor('3F', false).inactive.bg,
-                color: currentMission?.startsWith('3F') 
-                  ? getButtonColor('3F', true).active.text 
-                  : getButtonColor('3F', false).inactive.text,
-                borderColor: currentMission?.startsWith('3F') 
-                  ? getButtonColor('3F', true).active.border 
-                  : getButtonColor('3F', false).inactive.border,
-              }}
-            >
-              {currentMission?.startsWith('3F') ? currentMission : '3F'}
-            </Button>
-          );
-        }
-      } else if (assignments['3F_Recovery'] === null || assignments['3F_Recovery'] === nurseId) {
-        buttons.push(
-          <Button 
-            key="3F"
-            size="small"
-            variant="contained"
-            onClick={() => handleMissionChange(nurseId, dayIndex, '3F')}
-            sx={{
-              ...btnStyle,
-              backgroundColor: currentMission === '3F' 
-                ? getButtonColor('3F', true).active.bg 
-                : getButtonColor('3F', false).inactive.bg,
-              color: currentMission === '3F' 
-                ? getButtonColor('3F', true).active.text 
-                : getButtonColor('3F', false).inactive.text,
-              borderColor: currentMission === '3F' 
-                ? getButtonColor('3F', true).active.border 
-                : getButtonColor('3F', false).inactive.border,
-            }}
-          >
-            3F
-          </Button>
-        );
+      // C 按鈕 - 檢查是否應該隱藏
+      if (!shouldHideButton('C')) {
+        buttons.push(createButton('C', () => handleMissionCycle(nurseId, dayIndex, 'C')));
       }
       
-      // 檢查CC選項
-      if (assignments['CC'] === null || assignments['CC'] === nurseId) {
-        buttons.push(
-          <Button 
-            key="CC"
-            size="small"
-            variant="contained"
-            onClick={() => handleMissionChange(nurseId, dayIndex, 'CC')}
-            sx={{
-              ...btnStyle,
-              backgroundColor: currentMission === 'CC' 
-                ? getButtonColor('CC', true).active.bg 
-                : getButtonColor('CC', false).inactive.bg,
-              color: currentMission === 'CC' 
-                ? getButtonColor('CC', true).active.text 
-                : getButtonColor('CC', false).inactive.text,
-              borderColor: currentMission === 'CC' 
-                ? getButtonColor('CC', true).active.border 
-                : getButtonColor('CC', false).inactive.border,
-            }}
-          >
-            CC
-          </Button>
-        );
+      // CC 按鈕 - 檢查是否應該隱藏
+      if (!shouldHideButton('CC')) {
+        buttons.push(createButton('CC', () => handleMissionCycle(nurseId, dayIndex, 'CC')));
       }
       
-      // 檢查C選項
-      if (assignments['C'] === null || assignments['C'] === nurseId) {
-        buttons.push(
-          <Button 
-            key="C"
-            size="small"
-            variant="contained"
-            onClick={() => handleMissionChange(nurseId, dayIndex, 'C')}
-            sx={{
-              ...btnStyle,
-              backgroundColor: currentMission === 'C' 
-                ? getButtonColor('C', true).active.bg 
-                : getButtonColor('C', false).inactive.bg,
-              color: currentMission === 'C' 
-                ? getButtonColor('C', true).active.text 
-                : getButtonColor('C', false).inactive.text,
-              borderColor: currentMission === 'C' 
-                ? getButtonColor('C', true).active.border 
-                : getButtonColor('C', false).inactive.border,
-            }}
-          >
-            C
-          </Button>
-        );
+      // 3F 按鈕 - 檢查是否應該隱藏
+      if (!shouldHideButton('3F')) {
+        buttons.push(createButton('3F', () => handleMissionCycle(nurseId, dayIndex, '3F')));
       }
       
-      // 檢查F選項 (F1和F2)
-      if (identity === '麻醉專科護理師' || identity === '麻醉科Leader' || identity === '護理長') {
-        // 檢查F1和F2是否都已被分配且都不是當前護理師
-        const isFfull = assignments['F1'] !== null && assignments['F2'] !== null && 
-                        assignments['F1'] !== nurseId && assignments['F2'] !== nurseId;
-        
-        if (!isFfull) {
-          buttons.push(
-            <Button 
-              key="F"
-              size="small"
-              variant="contained"
-              onClick={() => handleMissionChange(nurseId, dayIndex, 'F')}
-              sx={{
-                ...btnStyle,
-                backgroundColor: currentMission?.startsWith('F') 
-                  ? getButtonColor('F', true).active.bg 
-                  : getButtonColor('F', false).inactive.bg,
-                color: currentMission?.startsWith('F') 
-                  ? getButtonColor('F', true).active.text 
-                  : getButtonColor('F', false).inactive.text,
-                borderColor: currentMission?.startsWith('F') 
-                  ? getButtonColor('F', true).active.border 
-                  : getButtonColor('F', false).inactive.border,
-              }}
-            >
-              {currentMission?.startsWith('F') ? currentMission : 'F'}
-            </Button>
-          );
-        }
+      // HC 按鈕 - 檢查是否應該隱藏
+      if (!shouldHideButton('HC')) {
+        buttons.push(createButton('HC', () => handleMissionCycle(nurseId, dayIndex, 'HC')));
       }
       
-      // 檢查HC選項 (適用於麻醉專科護理師和護理長)
-      if ((identity === '麻醉專科護理師' || identity === '護理長') && isWeekday) {
-        // 檢查HC1、HC2和HC3是否都已被分配且都不是當前護理師
-        const isHCFull = assignments['HC1'] !== null && assignments['HC2'] !== null && assignments['HC3'] !== null && 
-                          assignments['HC1'] !== nurseId && assignments['HC2'] !== nurseId && assignments['HC3'] !== nurseId;
-        
-        if (!isHCFull) {
-          buttons.push(
-            <Button 
-              key="HC"
-              size="small"
-              variant="contained"
-              onClick={() => handleMissionChange(nurseId, dayIndex, 'HC')}
-              sx={{
-                ...btnStyle,
-                backgroundColor: currentMission?.startsWith('HC') 
-                  ? getButtonColor('HC', true).active.bg 
-                  : getButtonColor('HC', false).inactive.bg,
-                color: currentMission?.startsWith('HC') 
-                  ? getButtonColor('HC', true).active.text 
-                  : getButtonColor('HC', false).inactive.text,
-                borderColor: currentMission?.startsWith('HC') 
-                  ? getButtonColor('HC', true).active.border 
-                  : getButtonColor('HC', false).inactive.border,
-              }}
-            >
-              {currentMission?.startsWith('HC') ? currentMission : 'HC'}
-            </Button>
-          );
-        }
+      // F 按鈕 - 檢查是否應該隱藏
+      if (!shouldHideButton('F')) {
+        buttons.push(createButton('F', () => handleMissionCycle(nurseId, dayIndex, 'F')));
       }
       
-      // 如果沒有可用按鈕，顯示提示
-      if (buttons.length === 0) {
-        return (
-          <Box sx={{ 
-            display: 'flex', 
-            justifyContent: 'center', 
-            alignItems: 'center',
-            width: '100%', 
-            height: '100%',
-            color: '#9e9e9e',
-            fontSize: '0.6rem'
-          }}>
-            工作已滿
-        </Box>
-      );
-    }
+      // PM 按鈕 - 只在週一到週五顯示（dayOfWeek 1-5）
+      if (dayOfWeek >= 1 && dayOfWeek <= 5) {
+        buttons.push(createButton('PM', () => handlePmCycle(nurseId, dayIndex)));
+      }
     
       return (
         <Box sx={{ 
@@ -1120,155 +1026,46 @@ const WeeklySchedule = () => {
           flexDirection: 'row', 
           flexWrap: 'wrap', 
           gap: 0.2, 
-          justifyContent: 'center', 
+          justifyContent: 'flex-start',
+          alignItems: 'flex-start',
           m: 0, 
           p: 0.2, 
           width: '100%', 
           height: '100%',
-          overflow: 'hidden' // 確保超出部分不會影響佈局
+          overflow: 'visible',
         }}>
           {buttons}
         </Box>
       );
     }
     
-    // 恢復室護理師的选项
+    // 恢復室護理師的按鈕邏輯
     if (identity === '恢復室護理師') {
-      // 恢復室護理師使用與麻醉專科護理師相同的按鈕樣式
-      const recoveryBtnStyle = { 
-        ...btnStyle
-        // 移除特殊的樣式設定，使其與麻醉專科護理師按鈕樣式相同
-      };
-      
-      // 獲取當前日期的工作分配情況
-      const assignments = getCurrentDayAssignments(dayIndex);
-      
-      // 準備要顯示的按鈕
       const buttons = [];
       
-      // 檢查P選項
-      if (assignments['P'] === null || assignments['P'] === nurseId) {
-        buttons.push(
-          <Button 
-            key="P"
-            size="small"
-            variant="contained"
-            onClick={() => handleMissionChange(nurseId, dayIndex, 'P')}
-            sx={{
-              ...recoveryBtnStyle,
-              backgroundColor: currentMission === 'P' 
-                ? getButtonColor('P', true).active.bg 
-                : getButtonColor('P', false).inactive.bg,
-              color: currentMission === 'P' 
-                ? getButtonColor('P', true).active.text 
-                : getButtonColor('P', false).inactive.text,
-              borderColor: currentMission === 'P' 
-                ? getButtonColor('P', true).active.border 
-                : getButtonColor('P', false).inactive.border,
-            }}
-          >
-            P
-          </Button>
-        );
+      // PAR 按鈕 - 檢查是否應該隱藏
+      if (!shouldHideButton('PAR')) {
+        buttons.push(createButton('PAR', () => handleMissionCycle(nurseId, dayIndex, 'PAR')));
       }
       
-      // 工作日顯示更多選項
-      if (isWeekday) {
-        // 檢查3F選項
-        if (assignments['3F_Recovery'] === null || assignments['3F_Recovery'] === nurseId) {
-          buttons.push(
-          <Button 
-              key="3F"
-            size="small"
-            variant="contained"
-            onClick={() => handleMissionChange(nurseId, dayIndex, '3F')}
-            sx={{
-                ...recoveryBtnStyle,
-                backgroundColor: currentMission === '3F' 
-                ? getButtonColor('3F', true).active.bg 
-                : getButtonColor('3F', false).inactive.bg,
-                color: currentMission === '3F' 
-                ? getButtonColor('3F', true).active.text 
-                : getButtonColor('3F', false).inactive.text,
-                borderColor: currentMission === '3F' 
-                ? getButtonColor('3F', true).active.border 
-                : getButtonColor('3F', false).inactive.border,
-            }}
-          >
-              3F
-          </Button>
-          );
-        }
-        
-        // 檢查PAR選項
-        if (assignments['PAR1'] === null || assignments['PAR2'] === null ||
-            assignments['PAR1'] === nurseId || assignments['PAR2'] === nurseId) {
-          buttons.push(
-          <Button 
-              key="PAR"
-            size="small"
-            variant="contained"
-            onClick={() => handleMissionChange(nurseId, dayIndex, 'PAR')}
-            sx={{
-                ...recoveryBtnStyle,
-              backgroundColor: currentMission?.startsWith('PAR') || currentMission === 'PAR'
-                ? getButtonColor('PAR', true).active.bg 
-                : getButtonColor('PAR', false).inactive.bg,
-              color: currentMission?.startsWith('PAR') || currentMission === 'PAR'
-                ? getButtonColor('PAR', true).active.text 
-                : getButtonColor('PAR', false).inactive.text,
-              borderColor: currentMission?.startsWith('PAR') || currentMission === 'PAR'
-                ? getButtonColor('PAR', true).active.border 
-                : getButtonColor('PAR', false).inactive.border,
-            }}
-          >
-            {currentMission?.startsWith('PAR') ? currentMission : 'PAR'}
-          </Button>
-          );
-        }
-        
-        // 檢查C選項
-        if (assignments['C'] === null || assignments['C'] === nurseId) {
-          buttons.push(
-          <Button 
-              key="C"
-            size="small"
-            variant="contained"
-            onClick={() => handleMissionChange(nurseId, dayIndex, 'C')}
-            sx={{
-                ...recoveryBtnStyle,
-              backgroundColor: currentMission === 'C' 
-                ? getButtonColor('C', true).active.bg 
-                : getButtonColor('C', false).inactive.bg,
-              color: currentMission === 'C' 
-                ? getButtonColor('C', true).active.text 
-                : getButtonColor('C', false).inactive.text,
-              borderColor: currentMission === 'C' 
-                ? getButtonColor('C', true).active.border 
-                : getButtonColor('C', false).inactive.border,
-            }}
-          >
-            C
-          </Button>
-          );
-        }
+      // PCA 按鈕 - 檢查是否應該隱藏
+      if (!shouldHideButton('PCA')) {
+        buttons.push(createButton('PCA', () => handleMissionCycle(nurseId, dayIndex, 'PCA')));
       }
       
-      // 如果沒有可用按鈕，顯示提示
-      if (buttons.length === 0) {
-        return (
-          <Box sx={{ 
-            display: 'flex', 
-            justifyContent: 'center', 
-            alignItems: 'center',
-            width: '100%', 
-            height: '100%',
-            color: '#9e9e9e',
-            fontSize: '0.6rem'
-          }}>
-            工作已滿
-          </Box>
-        );
+      // C 按鈕 - 檢查是否應該隱藏
+      if (!shouldHideButton('C')) {
+        buttons.push(createButton('C', () => handleMissionCycle(nurseId, dayIndex, 'C')));
+      }
+      
+      // 3F2 按鈕 - 檢查是否應該隱藏
+      if (!shouldHideButton('3F2')) {
+        buttons.push(createButton('3F2', () => handleMissionCycle(nurseId, dayIndex, '3F2')));
+      }
+      
+      // HC3 按鈕 - 檢查是否應該隱藏
+      if (!shouldHideButton('HC3')) {
+        buttons.push(createButton('HC3', () => handleMissionCycle(nurseId, dayIndex, 'HC3')));
       }
       
       return (
@@ -1277,12 +1074,13 @@ const WeeklySchedule = () => {
           flexDirection: 'row', 
           flexWrap: 'wrap', 
           gap: 0.2, 
-          justifyContent: 'center', 
+          justifyContent: 'flex-start',
+          alignItems: 'flex-start',
           m: 0, 
           p: 0.2, 
           width: '100%', 
           height: '100%',
-          overflow: 'hidden' // 確保超出部分不會影響佈局
+          overflow: 'visible',
         }}>
           {buttons}
         </Box>
@@ -1292,8 +1090,8 @@ const WeeklySchedule = () => {
     return null;
   };
 
-  // 處理工作分配變更
-  const handleMissionChange = async (nurseId, dayIndex, value) => {
+  // 處理工作分配循環邏輯
+  const handleMissionCycle = (nurseId, dayIndex, mission) => {
     // 查找該護理師該天的班次
     const nurseData = currentWeekSchedule.find(n => n.id === nurseId);
     if (!nurseData) return;
@@ -1305,499 +1103,303 @@ const WeeklySchedule = () => {
       console.log(`只有A班才能修改工作分區，當前班次為 ${shift}`);
       return;
     }
-    
-    // 確保HC只能被麻醉專科護理師和護理長分配
-    if (value === 'HC' && nurseData.identity !== '麻醉專科護理師' && nurseData.identity !== '護理長') {
-      console.log(`HC只能分配給麻醉專科護理師或護理長，當前護理師身份為 ${nurseData.identity}`);
-      return;
-    }
-    
+
     // 任務值的key
     const key = `${nurseId}-${currentWeek}-${dayIndex}`;
+    const currentMission = missionValues[key];
     
-    // 克隆当前的任务值对象
+    // 計算當前是星期幾
+    const currentDate = parseInt(getDateOfWeek(currentWeek - 1, dayIndex + 1));
+    if (!currentDate) return;
+    
+    const date = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), currentDate);
+    const dayOfWeek = date.getDay();
+
+    // 獲取當天所有已分配的工作（排除當前護理師）
+    const getAssignedMissions = () => {
+      const assigned = new Set();
+      currentWeekSchedule.forEach(nurse => {
+        if (nurse.id === nurseId) return; // 排除當前護理師
+        
+        const otherMissionKey = `${nurse.id}-${currentWeek}-${dayIndex}`;
+        const otherMission = missionValues[otherMissionKey];
+        const otherPmMission = pmValues[otherMissionKey];
+        
+        if (otherMission) {
+          assigned.add(otherMission);
+        }
+        if (otherPmMission) {
+          assigned.add(otherPmMission);
+        }
+      });
+      return assigned;
+    };
+
+    // 獲取新的工作分配值（考慮已分配的工作）
+    const getNextMissionValue = (baseType) => {
+      const assignedMissions = getAssignedMissions();
+      
+      if (baseType === 'OR') {
+        // OR 循環邏輯：OR2, OR3, OR5, OR6, OR7, OR8, OR9, OR11, OR13, 取消
+        // 週一、週三、週五額外有 OR1
+        const baseOptions = ['OR2', 'OR3', 'OR5', 'OR6', 'OR7', 'OR8', 'OR9', 'OR11', 'OR13'];
+        let options = baseOptions;
+        
+        if (dayOfWeek === 1 || dayOfWeek === 3 || dayOfWeek === 5) { // 週一、週三、週五
+          options = ['OR1', ...baseOptions];
+        }
+        
+        // 過濾掉已分配的選項
+        const availableOptions = options.filter(option => !assignedMissions.has(option));
+        
+        if (!currentMission || !currentMission.startsWith('OR')) {
+          // 如果沒有當前任務或不是OR類型，選擇第一個可用選項
+          return availableOptions.length > 0 ? availableOptions[0] : null;
+        }
+        
+        const currentIndex = options.indexOf(currentMission);
+        if (currentIndex === -1) {
+          // 當前任務不在列表中，選擇第一個可用選項
+          return availableOptions.length > 0 ? availableOptions[0] : null;
+        }
+        
+        // 從當前位置開始查找下一個可用選項
+        for (let i = currentIndex + 1; i < options.length; i++) {
+          if (!assignedMissions.has(options[i])) {
+            return options[i];
+          }
+        }
+        
+        // 如果沒有找到可用選項，返回取消
+        return null;
+        
+      } else if (baseType === 'DR') {
+        // DR 循環邏輯：DR, 取消（移除TAE）
+        if (currentMission === 'DR' || assignedMissions.has('DR')) {
+          return null; // 取消
+        }
+        return 'DR';
+        
+      } else if (baseType === 'C') {
+        // C 循環邏輯：C, 取消
+        if (currentMission === 'C' || assignedMissions.has('C')) {
+          return null; // 取消
+        }
+        return 'C';
+        
+      } else if (baseType === 'CC') {
+        // CC 循環邏輯：CC, 取消
+        if (currentMission === 'CC' || assignedMissions.has('CC')) {
+          return null; // 取消
+        }
+        return 'CC';
+        
+      } else if (baseType === '3F') {
+        // 3F 循環邏輯：3F1, 3F2, 3F3, 取消
+        const options = ['3F1', '3F2', '3F3'];
+        
+        // 過濾掉已分配的選項
+        const availableOptions = options.filter(option => !assignedMissions.has(option));
+        
+        if (!currentMission || !currentMission.startsWith('3F')) {
+          return availableOptions.length > 0 ? availableOptions[0] : null;
+        }
+        
+        const currentIndex = options.indexOf(currentMission);
+        if (currentIndex === -1) {
+          return availableOptions.length > 0 ? availableOptions[0] : null;
+        }
+        
+        // 從當前位置開始查找下一個可用選項
+        for (let i = currentIndex + 1; i < options.length; i++) {
+          if (!assignedMissions.has(options[i])) {
+            return options[i];
+          }
+        }
+        
+        return null; // 取消
+        
+      } else if (baseType === 'HC') {
+        // HC 循環邏輯：HC1, HC2, HC3, 取消
+        const options = ['HC1', 'HC2', 'HC3'];
+        
+        // 過濾掉已分配的選項
+        const availableOptions = options.filter(option => !assignedMissions.has(option));
+        
+        if (!currentMission || !currentMission.startsWith('HC')) {
+          return availableOptions.length > 0 ? availableOptions[0] : null;
+        }
+        
+        const currentIndex = options.indexOf(currentMission);
+        if (currentIndex === -1) {
+          return availableOptions.length > 0 ? availableOptions[0] : null;
+        }
+        
+        // 從當前位置開始查找下一個可用選項
+        for (let i = currentIndex + 1; i < options.length; i++) {
+          if (!assignedMissions.has(options[i])) {
+            return options[i];
+          }
+        }
+        
+        return null; // 取消
+        
+      } else if (baseType === 'F') {
+        // F 循環邏輯：F1, F2, TAE（週三週四）, PCA, SEC, 取消
+        let options = ['F1', 'F2', 'PCA', 'SEC'];
+        
+        if (dayOfWeek === 3 || dayOfWeek === 4) { // 週三、週四加入TAE
+          options = ['F1', 'F2', 'TAE', 'PCA', 'SEC'];
+        }
+        
+        // 過濾掉已分配的選項
+        const availableOptions = options.filter(option => !assignedMissions.has(option));
+        
+        if (!currentMission || (!currentMission.startsWith('F') && currentMission !== 'PCA' && currentMission !== 'SEC' && currentMission !== 'TAE')) {
+          return availableOptions.length > 0 ? availableOptions[0] : null;
+        }
+        
+        const currentIndex = options.indexOf(currentMission);
+        if (currentIndex === -1) {
+          return availableOptions.length > 0 ? availableOptions[0] : null;
+        }
+        
+        // 從當前位置開始查找下一個可用選項
+        for (let i = currentIndex + 1; i < options.length; i++) {
+          if (!assignedMissions.has(options[i])) {
+            return options[i];
+          }
+        }
+        
+        return null; // 取消
+        
+      } else if (baseType === 'PAR') {
+        // PAR 循環邏輯：PAR, 取消
+        if (currentMission === 'PAR' || assignedMissions.has('PAR')) {
+          return null; // 取消
+        }
+        return 'PAR';
+        
+      } else if (baseType === 'PCA') {
+        // PCA 循環邏輯：PCA, 取消
+        if (currentMission === 'PCA' || assignedMissions.has('PCA')) {
+          return null; // 取消
+        }
+        return 'PCA';
+        
+      } else if (baseType === '3F2') {
+        // 3F2 循環邏輯：3F2, 取消
+        if (currentMission === '3F2' || assignedMissions.has('3F2')) {
+          return null; // 取消
+        }
+        return '3F2';
+        
+      } else if (baseType === 'HC3') {
+        // HC3 循環邏輯：HC3, 取消
+        if (currentMission === 'HC3' || assignedMissions.has('HC3')) {
+          return null; // 取消
+        }
+        return 'HC3';
+      }
+      
+      return null;
+    };
+
+    const nextValue = getNextMissionValue(mission);
+    
+    // 更新工作分配
     const newMissionValues = { ...missionValues };
     
-    // 獲取當前資料庫中的值（從nurse.area_codes中獲取）
-    const savedMission = currentWeekSchedule.find(n => n.id === nurseId)?.area_codes?.[dayIndex];
-    
-    // 檢查是否是取消操作（點擊了與當前選中值相同的按鈕）
-    // 需考慮兩種情況：1. 用戶剛選的值 2. 資料庫中已存在的值
-    const isCancel = newMissionValues[key] === value || (savedMission === value && !newMissionValues[key]);
-    
-    // 如果選擇的是 OR，判斷是新增還是循環
-    if (value === 'OR') {
-      // 計算當前是星期幾
-      const currentDate = parseInt(getDateOfWeek(currentWeek - 1, dayIndex + 1));
-      if (!currentDate) {
-        newMissionValues[key] = 'OR2'; // 預設值
-        setMissionValues(newMissionValues);
-        return;
-      }
-      
-      const date = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), currentDate);
-      const dayOfWeek = date.getDay();
-      const isFriday = dayOfWeek === 5;
-      
-      // 依據星期選擇不同的OR數字
-      const orNumbers = (isFriday || dayOfWeek === 3) 
-        ? ['1', '2', '3', '5', '6', '7', '8', '9', '11', '13'] 
-        : ['2', '3', '5', '6', '7', '8', '9', '11', '13'];
-      
-      // 需要考慮資料庫中已存在的OR值
-      const currentValueIsOR = newMissionValues[key]?.startsWith('OR') || (savedMission?.startsWith('OR') && !newMissionValues[key]);
-      
-      if (currentValueIsOR) {
-        // 已經有OR，循環到下一個值
-        // 先確定當前的OR值，優先使用暫存狀態中的值，如果沒有則使用資料庫中的值
-        const currentValue = newMissionValues[key] || savedMission;
-        const currentOR = currentValue?.replace('OR', '') || '';
-        const currentIndex = orNumbers.indexOf(currentOR);
-        const nextIndex = (currentIndex + 1) % (orNumbers.length + 1); // +1 是為了讓最後能回到 null
-        
-        if (nextIndex === orNumbers.length) {
-          // 循環回 null，並跳到下一個任務種類
-          delete newMissionValues[key];
-          // 如果資料庫中有值，需要標記為null以便取消
-          if (savedMission) {
-            newMissionValues[key] = null;
-          }
-          // 這是取消操作
-          await updateDatabaseAreaCode(nurseId, dayIndex, null);
-          // 跳到下一個任務種類
-          handleMissionChange(nurseId, dayIndex, 'DR');
-          return;
-        } else {
-          // 檢查下一個OR房間是否已有人
-          const nextOR = `OR${orNumbers[nextIndex]}`;
-          const assignments = getCurrentDayAssignments(dayIndex);
-          
-          // 如果下一個房間已有人，則找尋下一個可用的房間
-          if (assignments[nextOR] !== null && assignments[nextOR] !== nurseId) {
-            // 尋找可用的房間
-            let foundAvailableOR = false;
-            let checkIndex = (nextIndex + 1) % orNumbers.length;
-            
-            // 最多循環一輪
-            for (let i = 0; i < orNumbers.length; i++) {
-              const checkOR = `OR${orNumbers[checkIndex]}`;
-              
-              if (assignments[checkOR] === null || assignments[checkOR] === nurseId) {
-                // 找到可用的房間
-                newMissionValues[key] = checkOR;
-                foundAvailableOR = true;
-                break;
-              }
-              
-              checkIndex = (checkIndex + 1) % orNumbers.length;
-            }
-            
-            // 如果沒有找到可用的房間，則清除任務並跳到下一個任務種類
-            if (!foundAvailableOR) {
-              delete newMissionValues[key];
-              if (savedMission) {
-                newMissionValues[key] = null;
-              }
-              await updateDatabaseAreaCode(nurseId, dayIndex, null);
-              // 跳到下一個任務種類
-              handleMissionChange(nurseId, dayIndex, 'DR');
-              return;
-            }
-          } else {
-            // 下一個房間可用，直接設置
-            newMissionValues[key] = nextOR;
-          }
-        }
-      } else {
-        // 沒有OR，設置為第一個值，但需要檢查該值是否已有人
-        const assignments = getCurrentDayAssignments(dayIndex);
-        let foundAvailableOR = false;
-        
-        // 尋找第一個可用的OR房間
-        for (const num of orNumbers) {
-          const orKey = `OR${num}`;
-          if (assignments[orKey] === null) {
-            newMissionValues[key] = orKey;
-            foundAvailableOR = true;
-            break;
-          }
-        }
-        
-        // 如果沒有找到可用的OR房間，則不分配並跳到下一個任務種類
-        if (!foundAvailableOR) {
-          console.log('所有OR房間已被分配，無法分配新的OR');
-          // 跳到下一個任務種類
-          handleMissionChange(nurseId, dayIndex, 'DR');
-          return;
-        }
-      }
-    }
-    // 如果選擇的是 HC，判斷是新增還是循環
-    else if (value === 'HC') {
-      // 確保是麻醉專科護理師或護理長
-      if (nurseData.identity !== '麻醉專科護理師' && nurseData.identity !== '護理長') {
-        return;
-      }
-      
-      // HC有三個位置（HC1、HC2和HC3）
-      const hcNumbers = ['1', '2', '3'];
-      
-      // 需要考慮資料庫中已存在的HC值
-      const currentValueIsHC = newMissionValues[key]?.startsWith('HC') || (savedMission?.startsWith('HC') && !newMissionValues[key]);
-      
-      if (currentValueIsHC) {
-        // 已經有HC，循環到下一個值
-        // 先確定當前的HC值，優先使用暫存狀態中的值，如果沒有則使用資料庫中的值
-        const currentValue = newMissionValues[key] || savedMission;
-        const currentHC = currentValue?.replace('HC', '') || '';
-        const currentIndex = hcNumbers.indexOf(currentHC);
-        const nextIndex = (currentIndex + 1) % (hcNumbers.length + 1); // +1 是為了讓最後能回到 null
-        
-        if (nextIndex === hcNumbers.length) {
-          // 循環回 null，並清除任務
-          delete newMissionValues[key];
-          // 如果資料庫中有值，需要標記為null以便取消
-          if (savedMission) {
-            newMissionValues[key] = null;
-          }
-          // 這是取消操作
-          await updateDatabaseAreaCode(nurseId, dayIndex, null);
-        } else {
-          // 檢查下一個HC位置是否已有人
-          const nextHC = `HC${hcNumbers[nextIndex]}`;
-          const assignments = getCurrentDayAssignments(dayIndex);
-          
-          // 如果下一個位置已有人，則找尋另一個可用位置
-          if (assignments[nextHC] !== null && assignments[nextHC] !== nurseId) {
-            // 尋找可用的位置
-            let foundAvailableHC = false;
-            
-            for (const num of hcNumbers) {
-              const hcKey = `HC${num}`;
-              if (assignments[hcKey] === null || assignments[hcKey] === nurseId) {
-                // 找到可用的位置
-                newMissionValues[key] = hcKey;
-                foundAvailableHC = true;
-                break;
-              }
-            }
-            
-            // 如果沒有找到可用的位置，則清除任務
-            if (!foundAvailableHC) {
-              delete newMissionValues[key];
-              if (savedMission) {
-                newMissionValues[key] = null;
-              }
-              await updateDatabaseAreaCode(nurseId, dayIndex, null);
-            }
-          } else {
-            // 下一個位置可用，直接設置
-            newMissionValues[key] = nextHC;
-          }
-        }
-      } else {
-        // 沒有HC，設置為第一個值，但需檢查是否已有人
-        const assignments = getCurrentDayAssignments(dayIndex);
-        let foundAvailableHC = false;
-        
-        // 尋找第一個可用的HC位置
-        for (const num of hcNumbers) {
-          const hcKey = `HC${num}`;
-          if (assignments[hcKey] === null) {
-            newMissionValues[key] = hcKey;
-            foundAvailableHC = true;
-            break;
-          }
-        }
-        
-        // 如果沒有找到可用的HC位置，則不分配
-        if (!foundAvailableHC) {
-          console.log('所有HC位置已被分配，無法分配新的HC');
-          return;
-        }
-      }
-    }
-    // 處理3F類型的循環 (3F1, 3F2)
-    else if (value === '3F') {
-      // 恢復室護理師和麻醉專科護理師的3F邏輯不同
-      if (nurseData.identity === '恢復室護理師') {
-        // 檢查是否已經有恢復室護理師分配了3F
-        const has3FRecoveryNurse = currentWeekSchedule.some(n => 
-          n.identity === '恢復室護理師' && 
-          n.id !== nurseId && 
-          (n.area_codes?.[dayIndex] === '3F' || 
-           missionValues[`${n.id}-${currentWeek}-${dayIndex}`] === '3F')
-        );
-        
-        if (has3FRecoveryNurse) {
-          // 如果已經有恢復室護理師分配了3F，則不允許再分配
-          console.log('已經有恢復室護理師分配了3F，不允許再分配');
-          return;
-        }
-        
-        // 恢復室護理師的3F只有一個位置，直接設置為3F（不帶數字）
-        const currentValueIs3F = newMissionValues[key] === '3F' || (savedMission === '3F' && !newMissionValues[key]);
-        
-        if (currentValueIs3F) {
-          // 已經有3F，取消分配並跳到下一個任務種類
-          delete newMissionValues[key];
-          if (savedMission) {
-            newMissionValues[key] = null;
-          }
-          await updateDatabaseAreaCode(nurseId, dayIndex, null);
-          // 跳到下一個任務種類
-          handleMissionChange(nurseId, dayIndex, 'PAR');
-          return;
-        } else {
-          // 設置為3F
-          newMissionValues[key] = '3F';
-        }
-      } else {
-        // 麻醉專科護理師的3F有兩個位置 (3F1和3F2)
-        const threeFNumbers = ['1', '2'];
-        
-        // 需要考慮資料庫中已存在的3F值
-        const currentValueIs3F = newMissionValues[key]?.startsWith('3F') || (savedMission?.startsWith('3F') && !newMissionValues[key]);
-        
-        if (currentValueIs3F) {
-          // 已經有3F，循環到下一個值
-          // 先確定當前的3F值，優先使用暫存狀態中的值，如果沒有則使用資料庫中的值
-          const currentValue = newMissionValues[key] || savedMission;
-          const current3F = currentValue?.replace('3F', '') || '';
-          const currentIndex = threeFNumbers.indexOf(current3F);
-          const nextIndex = (currentIndex + 1) % (threeFNumbers.length + 1); // +1 是為了讓最後能回到 null
-          
-          if (nextIndex === threeFNumbers.length) {
-            // 循環回 null，並跳到下一個任務種類
-            delete newMissionValues[key];
-            // 如果資料庫中有值，需要標記為null以便取消
-            if (savedMission) {
-              newMissionValues[key] = null;
-            }
-            // 這是取消操作
-            await updateDatabaseAreaCode(nurseId, dayIndex, null);
-            // 跳到下一個任務種類
-            handleMissionChange(nurseId, dayIndex, 'CC');
-            return;
-          } else {
-            // 檢查下一個3F位置是否已有人
-            const next3F = `3F${threeFNumbers[nextIndex]}`;
-            const assignments = getCurrentDayAssignments(dayIndex);
-            
-            // 如果下一個位置已有人，則找尋另一個可用位置
-            if (assignments[next3F] !== null && assignments[next3F] !== nurseId) {
-              // 尋找可用的位置
-              let foundAvailable3F = false;
-              
-              for (const num of threeFNumbers) {
-                const threeFKey = `3F${num}`;
-                if (assignments[threeFKey] === null || assignments[threeFKey] === nurseId) {
-                  // 找到可用的位置
-                  newMissionValues[key] = threeFKey;
-                  foundAvailable3F = true;
-                  break;
-                }
-              }
-              
-              // 如果沒有找到可用的位置，則清除任務並跳到下一個任務種類
-              if (!foundAvailable3F) {
-                delete newMissionValues[key];
-                if (savedMission) {
-                  newMissionValues[key] = null;
-                }
-                await updateDatabaseAreaCode(nurseId, dayIndex, null);
-                // 跳到下一個任務種類
-                handleMissionChange(nurseId, dayIndex, 'CC');
-                return;
-              }
-            } else {
-              // 下一個位置可用，直接設置
-              newMissionValues[key] = next3F;
-            }
-          }
-        } else {
-          // 沒有3F，設置為第一個值，但需檢查是否已有人
-          const assignments = getCurrentDayAssignments(dayIndex);
-          let foundAvailable3F = false;
-          
-          // 尋找第一個可用的3F位置
-          for (const num of threeFNumbers) {
-            const threeFKey = `3F${num}`;
-            if (assignments[threeFKey] === null) {
-              newMissionValues[key] = threeFKey;
-              foundAvailable3F = true;
-              break;
-            }
-          }
-          
-          // 如果沒有找到可用的3F位置，則不分配並跳到下一個任務種類
-          if (!foundAvailable3F) {
-            console.log('所有3F位置已被分配，無法分配新的3F');
-            // 跳到下一個任務種類
-            handleMissionChange(nurseId, dayIndex, 'CC');
-            return;
-          }
-        }
-      }
-    }
-    // 處理F類型的循環 (F1, F2)
-    else if (value === 'F') {
-      // F有兩個位置 (F1和F2)
-      const fNumbers = ['1', '2'];
-      
-      // 需要考慮資料庫中已存在的F值
-      const currentValueIsF = newMissionValues[key]?.startsWith('F') || (savedMission?.startsWith('F') && !newMissionValues[key]);
-      
-      if (currentValueIsF) {
-        // 已經有F，循環到下一個值
-        // 先確定當前的F值，優先使用暫存狀態中的值，如果沒有則使用資料庫中的值
-        const currentValue = newMissionValues[key] || savedMission;
-        const currentF = currentValue?.replace('F', '') || '';
-        const currentIndex = fNumbers.indexOf(currentF);
-        const nextIndex = (currentIndex + 1) % (fNumbers.length + 1); // +1 是為了讓最後能回到 null
-        
-        if (nextIndex === fNumbers.length) {
-          // 循環回 null，並跳到下一個任務種類
-          delete newMissionValues[key];
-          // 如果資料庫中有值，需要標記為null以便取消
-          if (savedMission) {
-            newMissionValues[key] = null;
-          }
-          // 這是取消操作
-          await updateDatabaseAreaCode(nurseId, dayIndex, null);
-          // 跳到下一個任務種類
-          if (nurseData.identity === '麻醉專科護理師' || nurseData.identity === '護理長') {
-            handleMissionChange(nurseId, dayIndex, 'HC');
-          } else {
-            // 麻醉科Leader不分配HC，直接清除
-            handleMissionChange(nurseId, dayIndex, null);
-          }
-          return;
-        } else {
-          // 檢查下一個F位置是否已有人
-          const nextF = `F${fNumbers[nextIndex]}`;
-          const assignments = getCurrentDayAssignments(dayIndex);
-          
-          // 如果下一個位置已有人，則找尋另一個可用位置
-          if (assignments[nextF] !== null && assignments[nextF] !== nurseId) {
-            // 尋找可用的位置
-            let foundAvailableF = false;
-            
-            for (const num of fNumbers) {
-              const fKey = `F${num}`;
-              if (assignments[fKey] === null || assignments[fKey] === nurseId) {
-                // 找到可用的位置
-                newMissionValues[key] = fKey;
-                foundAvailableF = true;
-                break;
-              }
-            }
-            
-            // 如果沒有找到可用的位置，則清除任務並跳到下一個任務種類
-            if (!foundAvailableF) {
-              delete newMissionValues[key];
-              if (savedMission) {
-                newMissionValues[key] = null;
-              }
-              await updateDatabaseAreaCode(nurseId, dayIndex, null);
-              // 跳到下一個任務種類
-              if (nurseData.identity === '麻醉專科護理師' || nurseData.identity === '護理長') {
-                handleMissionChange(nurseId, dayIndex, 'HC');
-              } else {
-                // 麻醉科Leader不分配HC，直接清除
-                handleMissionChange(nurseId, dayIndex, null);
-              }
-              return;
-            }
-          } else {
-            // 下一個位置可用，直接設置
-            newMissionValues[key] = nextF;
-          }
-        }
-      } else {
-        // 沒有F，設置為第一個值，但需檢查是否已有人
-        const assignments = getCurrentDayAssignments(dayIndex);
-        let foundAvailableF = false;
-        
-        // 尋找第一個可用的F位置
-        for (const num of fNumbers) {
-          const fKey = `F${num}`;
-          if (assignments[fKey] === null) {
-            newMissionValues[key] = fKey;
-            foundAvailableF = true;
-            break;
-          }
-        }
-        
-        // 如果沒有找到可用的F位置，則不分配並跳到下一個任務種類
-        if (!foundAvailableF) {
-          console.log('所有F位置已被分配，無法分配新的F');
-          // 跳到下一個任務種類
-          if (nurseData.identity === '麻醉專科護理師' || nurseData.identity === '護理長') {
-            handleMissionChange(nurseId, dayIndex, 'HC');
-          } else {
-            // 麻醉科Leader不分配HC，直接清除
-            handleMissionChange(nurseId, dayIndex, null);
-          }
-          return;
-        }
-      }
-    }
-    // 處理PAR類型的循環 (PAR1, PAR2)
-    else if (value === 'PAR') {
-      // PAR有兩個位置 (PAR1和PAR2)
-      const parNumbers = ['1', '2'];
-      
-      // 需要考慮資料庫中已存在的PAR值
-      const currentValueIsPAR = newMissionValues[key]?.startsWith('PAR') || (savedMission?.startsWith('PAR') && !newMissionValues[key]);
-      
-      if (currentValueIsPAR) {
-        // 已經有PAR，循環到下一個值
-        // 先確定當前的PAR值，優先使用暫存狀態中的值，如果沒有則使用資料庫中的值
-        const currentValue = newMissionValues[key] || savedMission;
-        const currentPAR = currentValue?.replace('PAR', '') || '';
-        const currentIndex = parNumbers.indexOf(currentPAR);
-        const nextIndex = (currentIndex + 1) % (parNumbers.length + 1); // +1 是為了讓最後能回到 null
-        
-        if (nextIndex === parNumbers.length) {
-          // 循環回 null，並跳到下一個任務種類
-          delete newMissionValues[key];
-          // 如果資料庫中有值，需要標記為null以便取消
-          if (savedMission) {
-            newMissionValues[key] = null;
-          }
-          // 這是取消操作
-          await updateDatabaseAreaCode(nurseId, dayIndex, null);
-          // 跳到下一個任務種類
-          handleMissionChange(nurseId, dayIndex, 'C');
-          return;
-        } else {
-          newMissionValues[key] = `PAR${parNumbers[nextIndex]}`;
-        }
-      } else {
-        // 沒有PAR，設置為第一個值
-        newMissionValues[key] = `PAR${parNumbers[0]}`;
-      }
+    if (nextValue === null) {
+      delete newMissionValues[key]; // 取消分配
     } else {
-      // 其他任務值的處理
-      if (isCancel) {
-        // 如果是取消操作，清除值並更新資料庫
-        delete newMissionValues[key];
-        // 如果資料庫中有值，需要標記為null以便取消
-        if (savedMission) {
-          newMissionValues[key] = null;
-        }
-        // 這是取消操作
-        await updateDatabaseAreaCode(nurseId, dayIndex, null);
-      } else {
-        // 否則設置新值
-        newMissionValues[key] = value;
-      }
+      newMissionValues[key] = nextValue;
     }
     
     setMissionValues(newMissionValues);
   };
-  
+
+  // 處理PM工作分配循環邏輯
+  const handlePmCycle = (nurseId, dayIndex) => {
+    // 查找該護理師該天的班次
+    const nurseData = currentWeekSchedule.find(n => n.id === nurseId);
+    if (!nurseData) return;
+    
+    const shift = nurseData.shifts[dayIndex];
+    
+    // 確保只有A班才能修改工作分區
+    if (shift !== 'A') {
+      console.log(`只有A班才能修改工作分區，當前班次為 ${shift}`);
+      return;
+    }
+
+    // PM任務值的key
+    const key = `${nurseId}-${currentWeek}-${dayIndex}`;
+    const currentPmMission = pmValues[key];
+    
+    // 獲取當天所有其他護理師已分配的PM工作（排除當前護理師）
+    const getOtherAssignedPmMissions = () => {
+      const assigned = new Set();
+      currentWeekSchedule.forEach(nurse => {
+        if (nurse.id === nurseId) return; // 排除當前護理師
+        
+        const pmMissionKey = `${nurse.id}-${currentWeek}-${dayIndex}`;
+        const pmMission = pmValues[pmMissionKey];
+        
+        if (pmMission) {
+          assigned.add(pmMission);
+        }
+      });
+      return assigned;
+    };
+    
+    // PM循環邏輯：PMTAE → PMC → PMF2 → 取消
+    const pmOptions = ['PMTAE', 'PMC', 'PMF2'];
+    const assignedPmMissions = getOtherAssignedPmMissions();
+    
+    // 過濾掉已被其他護理師分配的PM選項
+    const availablePmOptions = pmOptions.filter(option => !assignedPmMissions.has(option));
+    
+    let nextPmValue = null;
+    
+    if (!currentPmMission) {
+      // 沒有當前PM任務，選擇第一個可用選項
+      nextPmValue = availablePmOptions.length > 0 ? availablePmOptions[0] : null;
+    } else {
+      const currentIndex = pmOptions.indexOf(currentPmMission);
+      if (currentIndex === -1) {
+        // 當前任務不在列表中，選擇第一個可用選項
+        nextPmValue = availablePmOptions.length > 0 ? availablePmOptions[0] : null;
+      } else {
+        // 從當前位置開始查找下一個可用選項
+        let foundNext = false;
+        for (let i = currentIndex + 1; i < pmOptions.length; i++) {
+          if (!assignedPmMissions.has(pmOptions[i])) {
+            nextPmValue = pmOptions[i];
+            foundNext = true;
+            break;
+          }
+        }
+        
+        // 如果沒有找到下一個可用選項，返回取消（null）
+        if (!foundNext) {
+          nextPmValue = null;
+        }
+      }
+    }
+    
+    // 更新PM工作分配
+    const newPmValues = { ...pmValues };
+    
+    if (nextPmValue === null) {
+      delete newPmValues[key]; // 取消PM分配
+    } else {
+      newPmValues[key] = nextPmValue;
+    }
+    
+    setPmValues(newPmValues);
+  };
+
   // 更新資料庫中的area_code
   const updateDatabaseAreaCode = async (nurseId, dayIndex, value) => {
     try {
@@ -2117,20 +1719,11 @@ const WeeklySchedule = () => {
         // 如果組件已卸載，不繼續執行
         if (!isMounted) return;
         
-        // 再獲取工作分配數據（首次載入強制刷新）
+        // 再獲取工作分配數據
         try {
           console.log('開始加載工作分配數據...');
           
-          // 檢查是否為首次載入或重新載入
-          const currentSchedule = useScheduleStore.getState().monthlySchedule;
-          const hasAreaCodes = currentSchedule.some(nurse => 
-            nurse.area_codes && nurse.area_codes.some(code => code !== null)
-          );
-          
-          // 如果沒有工作分配資料或者是新的月份，強制刷新
-          const forceRefresh = !hasAreaCodes;
-          
-          const result = await cachedScheduleDetailsRequest(apiService, 'weekly-schedule', year, month, forceRefresh);
+          const result = await cachedScheduleDetailsRequest(apiService, 'weekly-schedule', year, month);
           
           // 如果組件已卸載，不繼續執行
           if (!isMounted) return;
@@ -2165,7 +1758,11 @@ const WeeklySchedule = () => {
             
             // 更新store中的數據
             useScheduleStore.setState({ monthlySchedule: monthlyData });
-            console.log('工作分配數據加載完成');
+            
+            // 同步API數據到missionValue
+            syncApiDataToMissionValue(monthlyData);
+            
+            console.log('工作分配數據加載完成並同步到missionValue');
           }
         } catch (areaCodeErr) {
           console.error('獲取工作分配資料失敗:', areaCodeErr);
@@ -2190,20 +1787,8 @@ const WeeklySchedule = () => {
     // 使用相同的鍵格式來獲取任務值
     const missionKey = `${nurse.id}-${currentWeek}-${dayIndex}`;
     
-    // 優先顯示順序：
-    // 1. 編輯模式下的 missionValues (新輸入的值)
-    // 2. area_codes (從資料庫讀取的 area_code 欄位)
-    // 3. 正常班次顯示
-    // 注意：如果 missionValues[missionKey] 存在且為 null，表示用戶已經取消了工作分配
-    let mission;
-    
-    if (missionKey in missionValues) {
-      // 如果在編輯狀態中有此鍵值（即使值為null）
-      mission = missionValues[missionKey];
-    } else {
-      // 否則使用資料庫中的值
-      mission = nurse.area_codes?.[dayIndex];
-    }
+    // 完全依賴missionValue來顯示工作分配
+    const mission = missionValues[missionKey];
     
     if (!shift) return '';
     
@@ -2231,8 +1816,11 @@ const WeeklySchedule = () => {
         );
       }
       
-      // A班並有工作分配，顯示工作分配
-      if (mission) {
+      // A班在非編輯模式，直接顯示完整的area_code值
+      // 從API數據中獲取原始的area_code值
+      const nurseScheduleData = currentWeekSchedule.find(n => n.id === nurse.id);
+      if (nurseScheduleData && nurseScheduleData.area_codes && nurseScheduleData.area_codes[dayIndex]) {
+        const areaCode = nurseScheduleData.area_codes[dayIndex];
         return (
           <Box component="span" sx={{ 
             whiteSpace: 'nowrap', 
@@ -2245,7 +1833,7 @@ const WeeklySchedule = () => {
             height: '22px',
             lineHeight: '22px',
           }}>
-            {mission}
+            {areaCode}
           </Box>
         );
       }
@@ -2285,314 +1873,20 @@ const WeeklySchedule = () => {
     );
   };
 
-  // 處理工作分配點擊循環
-  const handleMissionCycle = (nurse, dayIndex, mission) => {
-    // 計算當前是星期幾
-    const currentDate = parseInt(getDateOfWeek(currentWeek - 1, dayIndex + 1));
-    if (!currentDate) return;
-    
-    const date = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), currentDate);
-    const dayOfWeek = date.getDay(); // 0是週日，1-5是週一到週五，6是週六
-    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6; // 週六或週日
-    const isSaturday = dayOfWeek === 6;
-    const isFriday = dayOfWeek === 5;
-    
-    // 獲取當前工作分配情況
-    const assignments = getCurrentDayAssignments(dayIndex);
-    
-    // 檢查特定任務類型是否已滿
-    const checkMissionAvailability = (baseType) => {
-      // 基本類型直接檢查
-      if (baseType === 'DR' || baseType === 'CC' || baseType === 'P' || 
-          baseType === 'C') {
-        return assignments[baseType] === null || assignments[baseType] === nurse.id;
-      }
-      
-      // 對於3F類型，分別檢查麻醉專科護理師和恢復室護理師
-      if (baseType === '3F') {
-        if (nurse.identity === '恢復室護理師') {
-          // 恢復室護理師只檢查3F_Recovery
-          return assignments['3F_Recovery'] === null || assignments['3F_Recovery'] === nurse.id ? '3F' : false;
-        } else {
-          // 麻醉專科護理師檢查3F1和3F2
-          if (assignments['3F1'] === null) return '3F1';
-          if (assignments['3F2'] === null) return '3F2';
-          return assignments['3F1'] === nurse.id ? '3F1' : 
-                (assignments['3F2'] === nurse.id ? '3F2' : false);
-        }
-      }
-      
-      // 對於PAR類型，檢查PAR1和PAR2
-      if (baseType === 'PAR') {
-        if (assignments['PAR1'] === null) return 'PAR1';
-        if (assignments['PAR2'] === null) return 'PAR2';
-        return assignments['PAR1'] === nurse.id ? 'PAR1' : 
-              (assignments['PAR2'] === nurse.id ? 'PAR2' : false);
-      }
-      
-      // 對於F類型，檢查F1和F2
-      if (baseType === 'F') {
-        if (assignments['F1'] === null) return 'F1';
-        if (assignments['F2'] === null) return 'F2';
-        return assignments['F1'] === nurse.id ? 'F1' : 
-              (assignments['F2'] === nurse.id ? 'F2' : false);
-      }
-      
-      // 對於HC類型，檢查HC1、HC2和HC3
-      if (baseType === 'HC') {
-        if (assignments['HC1'] === null) return 'HC1';
-        if (assignments['HC2'] === null) return 'HC2';
-        if (assignments['HC3'] === null) return 'HC3';
-        return assignments['HC1'] === nurse.id ? 'HC1' : 
-              (assignments['HC2'] === nurse.id ? 'HC2' : 
-               (assignments['HC3'] === nurse.id ? 'HC3' : false));
-      }
-      
-      // 對於OR類型，檢查各個房間
-      if (baseType === 'OR') {
-        const orNumbers = (isFriday || dayOfWeek === 3) 
-          ? ['1', '2', '3', '5', '6', '7', '8', '9', '11', '13'] 
-          : ['2', '3', '5', '6', '7', '8', '9', '11', '13'];
-        
-        for (const num of orNumbers) {
-          const orKey = `OR${num}`;
-          if (assignments[orKey] === null) return orKey;
-        }
-        
-        // 檢查是否有當前護理師已分配的OR
-        for (const num of orNumbers) {
-          const orKey = `OR${num}`;
-          if (assignments[orKey] === nurse.id) return orKey;
-        }
-        
-        return false;
-      }
-      
-      return false;
-    };
-    
-    // 週末麻醉專科護理師只能切換CC和清除
-    if (isWeekend && nurse.identity === '麻醉專科護理師') {
-      // 週末麻醉專科護理師只能切換CC和清除
-      if (!mission || mission === '') {
-        // 未分配任務時，分配CC
-        if (assignments['CC'] === null) {
-          handleMissionChange(nurse.id, dayIndex, 'CC');
-        }
-      } else if (mission === 'CC') {
-        // 已分配CC時，清除任務
-        handleMissionChange(nurse.id, dayIndex, null);
-      } else {
-        // 其他任務改為CC
-        if (assignments['CC'] === null || assignments['CC'] === nurse.id) {
-          handleMissionChange(nurse.id, dayIndex, 'CC');
-        } else {
-          handleMissionChange(nurse.id, dayIndex, null);
-        }
-      }
-      return;
-    }
-    
-    // 週六的恢復室護理師需要排P一人
-    if (isSaturday && nurse.identity === '恢復室護理師') {
-      if (!mission) {
-        // 尚未有P任務但恢復室護理師，則安排P
-        if (assignments['P'] === null) {
-          handleMissionChange(nurse.id, dayIndex, 'P');
-        }
-      } else if (mission === 'P') {
-        // 已經是P，取消任務
-        handleMissionChange(nurse.id, dayIndex, null);
-      } else {
-        // 其他任務，改為P如果沒有人排P
-        if (assignments['P'] === null) {
-          handleMissionChange(nurse.id, dayIndex, 'P');
-        } else if (assignments['P'] === nurse.id) {
-          // 如果護理師自己已經是P，則取消任務
-          handleMissionChange(nurse.id, dayIndex, null);
-        }
-      }
-      return;
-    }
-    
-    // 週日的恢復室護理師也需要安排P一人
-    if (dayOfWeek === 0 && nurse.identity === '恢復室護理師') {
-      if (!mission) {
-        // 尚未有P任務但恢復室護理師，則安排P
-        if (assignments['P'] === null) {
-          handleMissionChange(nurse.id, dayIndex, 'P');
-        }
-      } else if (mission === 'P') {
-        // 已經是P，取消任務
-        handleMissionChange(nurse.id, dayIndex, null);
-      } else {
-        // 其他任務，改為P如果沒有人排P
-        if (assignments['P'] === null) {
-          handleMissionChange(nurse.id, dayIndex, 'P');
-        } else if (assignments['P'] === nurse.id) {
-          // 如果護理師自己已經是P，則取消任務
-          handleMissionChange(nurse.id, dayIndex, null);
-        }
-      }
-      return;
-    }
-    
-    // 根據護理師身份處理不同的循環順序
-    if (nurse.identity === '麻醉專科護理師' || nurse.identity === '麻醉科Leader' || nurse.identity === '護理長') {
-      // 麻醉專科護理師、麻醉科Leader和護理長的循環: OR系列 → DR → 3F → CC → C → F → HC → 清除
-      
-      // 根據當前任務決定下一個任務
-      if (!mission) {
-        // 如果當前沒有任務，嘗試從OR開始循環
-        const nextOR = checkMissionAvailability('OR');
-        if (nextOR) {
-          handleMissionChange(nurse.id, dayIndex, nextOR);
-        } else {
-          // 如果OR已滿，嘗試DR
-          handleNextMission('DR');
-        }
-      } else {
-        // 如果當前有任務，依照循環順序：OR系列 → DR → 3F → CC → C → F → HC → 清除
-        const baseType = mission.replace(/\d+$/, '');
-        
-        switch (baseType) {
-          case 'OR':
-            // 處理OR子類型的循環
-            handleMissionChange(nurse.id, dayIndex, 'OR');
-            break;
-          case 'DR':
-            // DR後面是3F
-            handleNextMission('3F');
-            break;
-          case '3F':
-            // 處理3F子類型的循環
-            handleMissionChange(nurse.id, dayIndex, '3F');
-            break;
-          case 'CC':
-            // CC後面是C
-            handleNextMission('C');
-            break;
-          case 'C':
-            // C後面是F
-            handleNextMission('F');
-            break;
-          case 'F':
-            // 處理F子類型的循環
-            handleMissionChange(nurse.id, dayIndex, 'F');
-            break;
-          case 'HC':
-            // 處理HC子類型的循環
-            handleMissionChange(nurse.id, dayIndex, 'HC');
-            break;
-          default:
-            // 如果是其他任務，清除
-            handleMissionChange(nurse.id, dayIndex, null);
-        }
-      }
-    } else if (nurse.identity === '恢復室護理師') {
-      // 恢復室護理師的循環，週末只有P，工作日有P → 3F → PAR → C → 清除
-      
-      if (isWeekend) {
-        // 週末只允許分配P任務
-        if (!mission) {
-          // 如果尚未分配任務，且P還沒有人分配，則分配P
-          if (assignments['P'] === null) {
-            handleMissionChange(nurse.id, dayIndex, 'P');
-          }
-        } else if (mission === 'P') {
-          // 如果已經分配P，則清除
-          handleMissionChange(nurse.id, dayIndex, null);
-        } else {
-          // 如果是其他任務，檢查P是否已分配
-          if (assignments['P'] === null) {
-            handleMissionChange(nurse.id, dayIndex, 'P');
-          } else {
-            // P已有人分配，則清除當前任務
-            handleMissionChange(nurse.id, dayIndex, null);
-          }
-        }
-      } else {
-        // 工作日循環：P → 3F → PAR → C → 清除
-        if (!mission) {
-          // 第一次點擊，檢查P是否可分配
-          handleNextMission('P');
-        } else if (mission === 'P') {
-          // P後面是3F
-          handleNextMission('3F');
-        } else if (mission?.startsWith('3F') || mission === '3F') {
-          // 3F後面是PAR
-          handleNextMission('PAR');
-        } else if (mission?.startsWith('PAR')) {
-          // PAR後面是C
-          handleNextMission('C');
-        } else if (mission === 'C') {
-          // C後面是清除
-          handleMissionChange(nurse.id, dayIndex, null);
-        }
-      }
-    }
-    
-    function handleNextMission(baseType) {
-      const availability = checkMissionAvailability(baseType);
-      
-      if (availability) {
-        // 如果基本任務類型有空位，分配該任務
-        handleMissionChange(nurse.id, dayIndex, availability === true ? baseType : availability);
-      } else {
-        // 根據任務類型處理下一個循環
-        switch (baseType) {
-          case 'OR':
-            handleNextMission('DR');
-            break;
-          case 'DR':
-            handleNextMission('3F');
-            break;
-          case '3F':
-            if (nurse.identity === '麻醉專科護理師' || nurse.identity === '麻醉科Leader' || nurse.identity === '護理長') {
-              handleNextMission('CC');
-            } else if (nurse.identity === '恢復室護理師') {
-              handleNextMission('PAR');
-            }
-            break;
-          case 'CC':
-            handleNextMission('C');
-            break;
-          case 'PAR':
-            handleNextMission('C');
-            break;
-          case 'C':
-            if (nurse.identity === '麻醉專科護理師' || nurse.identity === '麻醉科Leader' || nurse.identity === '護理長') {
-              handleNextMission('F');
-            } else {
-              // 恢復室護理師在C之後直接清除
-              handleMissionChange(nurse.id, dayIndex, null);
-            }
-            break;
-          case 'F':
-            if (nurse.identity === '麻醉專科護理師' || nurse.identity === '護理長') {
-              handleNextMission('HC');
-            } else {
-              // 麻醉科Leader不分配HC，直接清除
-              handleMissionChange(nurse.id, dayIndex, null);
-            }
-            break;
-          case 'HC':
-          case 'P':
-          default:
-            // 沒有下一個循環，清除任務
-            handleMissionChange(nurse.id, dayIndex, null);
-        }
-      }
-    }
-  };
-
   return (
     <Box sx={{ padding: 1 }} id="weekly-schedule">
       <Typography variant="h4" gutterBottom sx={{ display: { xs: 'none', md: 'block' } }}>
         {formattedDate}週班表
       </Typography>
       
-      <Box className="hide-for-pdf" sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap', alignItems: 'center' }}>
+      <Box className="hide-for-pdf" sx={{ 
+        display: 'flex', 
+        gap: 1, 
+        mb: 2, 
+        flexWrap: { xs: 'wrap', md: 'nowrap' }, // 手機可換行，桌面不換行
+        alignItems: 'center',
+        justifyContent: { xs: 'space-between', md: 'flex-start' } // 手機分散對齊，桌面靠左
+      }}>
         <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={zhTW}>
           <DatePicker
             views={['year', 'month']}
@@ -2602,7 +1896,11 @@ const WeeklySchedule = () => {
             value={selectedDate}
             onChange={handleDateChange}
             onAccept={handleDateAccept}
-            sx={{ width: 200 }}
+            sx={{ 
+              width: 200, 
+              flexShrink: 0,
+              order: { xs: 1, md: 0 } // 手機版排在前面
+            }}
             openTo="month"
             closeOnSelect={false}
             slotProps={{
@@ -2621,7 +1919,13 @@ const WeeklySchedule = () => {
         </LocalizationProvider>
         
         {/* 週別切換區域 - 桌面版使用按鈕組，手機版使用下拉選單 */}
-        <Box sx={{ display: { xs: 'none', md: 'flex' }, gap: 1, ml: 2 }}>
+        <Box sx={{ 
+          display: { xs: 'none', md: 'flex' }, 
+          gap: 1, 
+          ml: 2, 
+          flexShrink: 0,
+          flexWrap: 'wrap' // 允許按鈕換行
+        }}>
           {Array.from({ length: weeksInMonth }, (_, i) => i + 1).map(week => (
             <Button 
               key={week}
@@ -2636,7 +1940,12 @@ const WeeklySchedule = () => {
         </Box>
         
         {/* 手機版下拉選單 */}
-        <FormControl sx={{ display: { xs: 'block', md: 'none' }, minWidth: 120, ml: 2 }}>
+        <FormControl sx={{ 
+          display: { xs: 'block', md: 'none' }, 
+          minWidth: 120,
+          flexShrink: 0,
+          order: { xs: 2, md: 0 } // 手機版排在後面
+        }}>
           <InputLabel>週別</InputLabel>
           <Select
             value={currentWeek}
@@ -2653,13 +1962,52 @@ const WeeklySchedule = () => {
           </Select>
         </FormControl>
         
+        {/* 手機版生成PDF和班次顯示按鈕 */}
+        <Box sx={{ 
+          display: { xs: 'flex', md: 'none' }, 
+          gap: 1, 
+          flexWrap: 'wrap',
+          order: { xs: 3, md: 0 },
+          width: '100%',
+          justifyContent: 'space-between'
+        }}>
+          {hasEditPermission && (
+            <Button 
+              variant="contained" 
+              color="warning"
+              onClick={generatePDF}
+              disabled={!monthlySchedule.length}
+              size="small"
+              sx={{ flex: 1, maxWidth: '48%' }}
+            >
+              生成 PDF
+            </Button>
+          )}
+          
+          <Button 
+            variant="contained" 
+            color="secondary"
+            onClick={toggleShiftDisplay}
+            disabled={!monthlySchedule.length || editMode}
+            size="small"
+            sx={{ flex: 1, maxWidth: hasEditPermission ? '48%' : '100%' }}
+          >
+            {showShiftTime ? '顯示班次代碼' : '顯示班次時間'}
+          </Button>
+        </Box>
+        
         {hasEditPermission && ( // 僅在有編輯權限時顯示
           <Button 
             variant="contained" 
             color="warning"
             onClick={generatePDF}
             disabled={!monthlySchedule.length}
-            sx={{ ml: 2, display: { xs: 'none', md: 'block' }, height: 40 }}
+            sx={{ 
+              ml: { xs: 0, md: 2 }, 
+              display: { xs: 'none', md: 'block' }, 
+              height: 40,
+              order: { xs: 3, md: 0 }
+            }}
           >
             生成 PDF
           </Button>
@@ -2670,7 +2018,12 @@ const WeeklySchedule = () => {
           color="secondary"
           onClick={toggleShiftDisplay}
           disabled={!monthlySchedule.length || editMode}
-          sx={{ ml: 2, display: { xs: 'none', md: 'block' }, height: 40 }}
+          sx={{ 
+            ml: { xs: 0, md: 2 }, 
+            display: { xs: 'none', md: 'block' }, 
+            height: 40,
+            order: { xs: 4, md: 0 }
+          }}
         >
           {showShiftTime ? '顯示班次代碼' : '顯示班次時間'}
         </Button>

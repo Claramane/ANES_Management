@@ -668,12 +668,12 @@ const Settings = () => {
         <Grid container spacing={2}>
           <Grid item xs={12} sm={6}>
             <Typography variant="body1">
-              系統版本: v0.9.1
+              系統版本: v0.9.1 beta
             </Typography>
           </Grid>
           <Grid item xs={12} sm={6}>
             <Typography variant="body1">
-              最後更新: 2025-05-27
+              最後更新: 2025-06-02
             </Typography>
           </Grid>
         </Grid>
