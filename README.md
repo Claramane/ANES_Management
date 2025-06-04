@@ -1,14 +1,15 @@
 # 麻醉科護理班表管理系統
 
-![Version](https://img.shields.io/badge/version-0.9.2-blue)
+![Version](https://img.shields.io/badge/version-0.9.3-blue)
 ![License](https://img.shields.io/badge/license-Apache%202.0-green)
 
-這是一個專為麻醉科部門設計的護理班表管理系統，旨在簡化護理長排班和護理師查詢班表的流程。系統支援麻醉科、恢復室等專科護理師的特殊排班需求，提供直覺化的界面和高效的排班工具。**版本 0.9.2 重寫了工作分配模式規則，新增PM工作分配複選功能，大幅改善工作分配的靈活性和準確性。**
+這是一個專為麻醉科部門設計的護理班表管理系統，旨在簡化護理長排班和護理師查詢班表的流程。系統支援麻醉科、恢復室等專科護理師的特殊排班需求，提供直覺化的界面和高效的排班工具。**版本 0.9.3 新增醫師班表系統並完成UI扁平化設計改造，提供更現代化的使用體驗。**
 
 ## 系統特色
 
-- **直覺化界面**：現代化設計，易於使用
+- **直覺化界面**：現代化扁平化設計，易於使用
 - **專科排班**：專為麻醉科和恢復室等特殊班表需求設計
+- **醫師班表系統**：全新醫師班表功能，自動獲取並顯示當值醫師資訊
 - **Passkey無密碼登入**：支援FIDO2/WebAuthn Passkey，提供更安全、便利、跨裝置的無密碼登入與管理（可於系統設定頁註冊、刪除Passkey，支援生物辨識/PIN驗證，資料僅儲存於本地裝置，保障隱私）
 - **智能工作分配**：支援A班時的特殊工作分配管理（手術室、恢復室等），全新PM工作分配功能提供更靈活的複選選項
 - **統計分析**：提供班表統計與人力配置分析
@@ -66,58 +67,79 @@
 - 重要公告突出顯示
 - 分頁顯示 (每頁最多30則公告)，提升列表載入效能
 
+### 醫師班表系統 ✨ 全新功能 (v0.9.3)
+- **自動資料獲取**：從外部API自動獲取醫師班表資料
+- **即時更新機制**：定時任務每5分鐘更新當月班表，每日凌晨自動更新未來四個月班表
+- **當值醫師顯示**：完整顯示每日當值醫師資訊
+- **手術室分配**：詳細列出各手術室與刀房的醫師分配
+- **科別區分**：支援顯示不同科別醫師（麻醉科、外科、婦產科等）
+- **月份切換**：直覺的月份選擇器，支援左右箭頭快速切換
+- **響應式設計**：優化的移動設備顯示體驗
+- **資料日誌**：完整的更新日誌追蹤系統
+
 ## 專案架構
 
 ### 後端 (Backend)
 ```
 backend
 ├── app
-│   ├── core
-│   │   ├── config.py
-│   │   ├── database.py
-│   │   └── security.py
-│   ├── models
-│   │   ├── __init__.py
-│   │   ├── announcement.py
-│   │   ├── formula.py
-│   │   ├── log.py
-│   │   ├── overtime.py
-│   │   ├── schedule.py
-│   │   ├── shift_swap.py
-│   │   ├── user.py
-│   │   └── webauthn.py
-│   ├── routes
-│   │   ├── __init__.py
-│   │   ├── announcements.py
-│   │   ├── formula_schedules.py
-│   │   ├── overtime.py
-│   │   ├── schedules.py
-│   │   ├── shift_swap.py
-│   │   ├── users.py
-│   │   └── webauthn.py
-│   └── schemas
-│       ├── __init__.py
-│       ├── announcement.py
-│       ├── overtime.py
-│       ├── schedule.py
-│       ├── shift_swap.py
-│       ├── user.py
-│       └── webauthn.py
+│   ├── core
+│   │   ├── config.py
+│   │   ├── database.py
+│   │   └── security.py
+│   ├── models
+│   │   ├── __init__.py
+│   │   ├── announcement.py
+│   │   ├── doctor_schedule.py
+│   │   ├── formula.py
+│   │   ├── log.py
+│   │   ├── overtime.py
+│   │   ├── schedule.py
+│   │   ├── shift_swap.py
+│   │   ├── user.py
+│   │   └── webauthn.py
+│   ├── routes
+│   │   ├── __init__.py
+│   │   ├── announcements.py
+│   │   ├── doctor_schedules.py
+│   │   ├── formula_schedules.py
+│   │   ├── overtime.py
+│   │   ├── schedules.py
+│   │   ├── shift_swap.py
+│   │   ├── users.py
+│   │   └── webauthn.py
+│   ├── schemas
+│   │   ├── __init__.py
+│   │   ├── announcement.py
+│   │   ├── doctor_schedule.py
+│   │   ├── overtime.py
+│   │   ├── schedule.py
+│   │   ├── shift_swap.py
+│   │   ├── user.py
+│   │   └── webauthn.py
+│   ├── services
+│   │   └── doctor_schedule_service.py
+│   └── tasks
+│       └── doctor_schedule_tasks.py
 ├── check_users.py
 ├── create_tables.py
 ├── init_db.py
 ├── main.py
+├── migration_add_doctor_schedule.py
 ├── migrations
-│   ├── add_hire_date.sql
-│   ├── add_is_pinned_to_announcements.py
-│   ├── add_special_type_to_schedules.py
-│   └── initial_data.py
+│   ├── add_hire_date.sql
+│   ├── add_is_pinned_to_announcements.py
+│   ├── add_special_type_to_schedules.py
+│   └── initial_data.py
 ├── requirements.txt
-└── scripts
-    ├── reset_logs.py
-    └── run_reset_logs.sh
+├── scripts
+│   ├── reset_logs.py
+│   └── run_reset_logs.sh
+├── setup_remote_tables.py
+├── test_doctor_schedule_data_flow.py
+└── test_doctor_schedule_system.py
 
-8 directories, 38 files
+12 directories, 45 files
 ```
 
 ### 前端 (Frontend)
@@ -126,41 +148,41 @@ frontend
 ├── package-lock.json
 ├── package.json
 ├── public
-│   ├── favicon.ico
-│   ├── index.html
-│   └── manifest.json
+│   ├── favicon.ico
+│   ├── index.html
+│   └── manifest.json
 ├── src
-│   ├── App.jsx
-│   ├── components
-│   │   ├── Layout.jsx
-│   │   └── OvertimeStaff.jsx
-│   ├── index.css
-│   ├── index.jsx
-│   ├── pages
-│   │   ├── Announcement.jsx
-│   │   ├── BigSchedule.jsx
-│   │   ├── Dashboard.jsx
-│   │   ├── Formula.jsx
-│   │   ├── Login.jsx
-│   │   ├── MonthlySchedule.jsx
-│   │   ├── NotFound.jsx
-│   │   ├── OvertimeStaff.jsx
-│   │   ├── PublishAnnouncementForm.jsx
-│   │   ├── Settings.jsx
-│   │   ├── ShiftSwap.jsx
-│   │   ├── StrictModeDroppable.jsx
-│   │   ├── UserManagement.jsx
-│   │   ├── VersionHistory.jsx
-│   │   └── WeeklySchedule.jsx
-│   ├── reportWebVitals.js
-│   ├── store
-│   │   ├── authStore.js
-│   │   ├── scheduleStore.js
-│   │   ├── settingsStore.js
-│   │   └── userStore.js
-│   └── utils
-│       ├── api.js
-│       └── migrateFormulaPatternsData.js
+│   ├── App.jsx
+│   ├── components
+│   │   ├── Layout.jsx
+│   │   └── OvertimeStaff.jsx
+│   ├── index.css
+│   ├── index.jsx
+│   ├── pages
+│   │   ├── Announcement.jsx
+│   │   ├── Dashboard.jsx
+│   │   ├── DoctorSchedule.jsx
+│   │   ├── Formula.jsx
+│   │   ├── Login.jsx
+│   │   ├── MonthlySchedule.jsx
+│   │   ├── NotFound.jsx
+│   │   ├── OvertimeStaff.jsx
+│   │   ├── PublishAnnouncementForm.jsx
+│   │   ├── Settings.jsx
+│   │   ├── ShiftSwap.jsx
+│   │   ├── StrictModeDroppable.jsx
+│   │   ├── UserManagement.jsx
+│   │   ├── VersionHistory.jsx
+│   │   └── WeeklySchedule.jsx
+│   ├── reportWebVitals.js
+│   ├── store
+│   │   ├── authStore.js
+│   │   ├── scheduleStore.js
+│   │   ├── settingsStore.js
+│   │   └── userStore.js
+│   └── utils
+│       ├── api.js
+│       └── migrateFormulaPatternsData.js
 └── temp_file.jsx
 
 7 directories, 33 files
@@ -232,6 +254,17 @@ frontend
 - 月度分數持久化存儲在資料庫
 - 年度統計表顯示1-12月分數
 - 專科護理師和Leader分開計算
+
+#### 8. 醫師班表系統 (v0.9.3 新增)
+- **資料獲取機制**：從外部API自動獲取醫師班表資料
+- **定時更新**：使用APScheduler實現定時任務，每5分鐘更新當月班表，每日凌晨更新未來四個月
+- **資料結構**：
+  - `doctor_schedules`：主要班表資料表（日期、當值醫師、排程備註）
+  - `day_shift_doctors`：白班醫師詳細資訊（姓名、摘要、時間、區域代碼）
+  - `doctor_schedule_update_logs`：更新日誌追蹤表
+- **API介面**：提供REST API供前端獲取醫師班表資料
+- **錯誤處理**：完整的錯誤捕獲與日誌記錄機制
+- **資料完整性**：外鍵約束確保資料一致性
 
 ## 安裝與啟動
 
@@ -381,7 +414,7 @@ npm start
 
 更多詳細使用說明，請參考 [USAGE.md](USAGE.md) 文件。 
 
-## 當前進度 (v0.9.2)
+## 當前進度 (v0.9.3)
 - 換班系統已完成，支援完整申請、審核、歷史紀錄與自動工時驗證
 - 新增Passkey（WebAuthn）無密碼登入與管理，整合至Settings頁面
 - 加入夜班包班管理系統，支援小夜班包班(SNP)和大夜班包班(LNP)的分類顯示與管理
@@ -393,6 +426,7 @@ npm start
 - 修復多個已知問題，增強系統穩定性
 - 強化Passkey設備綁定限制機制，實現了一台設備只能綁定一個帳號的安全限制
 - 重寫工作分配模式規則，新增PM工作分配複選功能，大幅改善工作分配的靈活性和準確性
+- 新增醫師班表系統並完成UI扁平化設計改造，提供更現代化的使用體驗
 
 ## 未來計劃
 - 班表版本管理git系統
