@@ -53,4 +53,22 @@ yarn-debug.log
 *.db
 
 # 日誌
-*.log 
+*.log
+
+# 敏感檔案和測試檔案
+setup_remote_*.py
+test_*.py
+migration_*.py
+*_test.py
+*_migration.py
+*.backup
+*.bak
+*.tmp
+config_*.py
+secrets.py
+credentials.py
+
+# 部署相關
+deploy_*.py
+remote_*.py
+production_*.py 
