@@ -1,1 +1,0 @@
-from app.core.database import SessionLocal; from app.models.user import User; db = SessionLocal(); users = db.query(User).all(); print(f"總計 {len(users)} 個使用者"); for user in users[:5]: print(f"- {user.username}: {user.full_name}, 身份={user.identity}, 角色={user.role}"); db.close()
