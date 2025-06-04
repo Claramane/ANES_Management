@@ -7,13 +7,12 @@ from sqlalchemy import and_
 
 from ..models.doctor_schedule import DoctorSchedule, DayShiftDoctor, DoctorScheduleUpdateLog
 from ..core.database import get_db
+from ..core.config import settings
 
 logger = logging.getLogger(__name__)
 
 class DoctorScheduleService:
     """醫師班表服務"""
-    
-    EXTERNAL_API_BASE = "https://docdutyapi.zeabur.app"
     
     # 區域代碼轉換映射
     AREA_CODE_MAPPING = {
@@ -45,7 +44,7 @@ class DoctorScheduleService:
     def fetch_external_schedule_data(cls, start_date: str, end_date: str) -> Dict:
         """從外部API獲取班表資料"""
         try:
-            url = f"{cls.EXTERNAL_API_BASE}/schedule/{start_date}/{end_date}"
+            url = f"{settings.EXTERNAL_API_BASE}/schedule/{start_date}/{end_date}"
             logger.info(f"正在請求外部API: {url}")
             
             response = requests.get(url, timeout=30)

@@ -78,6 +78,9 @@ class Settings(BaseSettings):
     # 管理員設置
     ADMIN_USERNAME: str = "admin"
     ADMIN_PASSWORD: str = "changeme"
+    
+    # 外部API設置
+    EXTERNAL_API_BASE: str = "https://docdutyapi.zeabur.app"
 
     class Config:
         case_sensitive = True

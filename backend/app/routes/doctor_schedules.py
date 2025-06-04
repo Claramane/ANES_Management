@@ -8,6 +8,7 @@ from ..core.database import get_db
 from ..services.doctor_schedule_service import DoctorScheduleService
 from ..core.security import get_current_user
 from ..models.user import User
+from ..core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -105,6 +106,115 @@ async def update_schedules_from_external(
     except Exception as e:
         logger.error(f"更新醫師班表失敗: {str(e)}")
         raise HTTPException(status_code=500, detail=f"更新醫師班表失敗: {str(e)}")
+
+@router.post("/update-future-four-months")
+async def update_future_four_months_schedules(
+    current_user: User = Depends(get_current_user)
+):
+    """
+    手動觸發更新未來四個月醫師班表資料
+    只有管理員可以手動觸發更新
+    """
+    try:
+        # 檢查權限（只有護理長或管理員可以更新）
+        if current_user.role not in ['head_nurse', 'admin']:
+            raise HTTPException(status_code=403, detail="權限不足，只有護理長或管理員可以更新班表")
+        
+        # 計算未來四個月的日期範圍
+        from datetime import datetime, timedelta
+        
+        now = datetime.now()
+        start_date = now.strftime('%Y%m%d')  # 今天開始
+        
+        # 更精確的計算：加4個月
+        current_year = now.year
+        current_month = now.month
+        
+        end_year = current_year
+        end_month = current_month + 4
+        
+        if end_month > 12:
+            end_year += end_month // 12
+            end_month = end_month % 12
+            if end_month == 0:
+                end_month = 12
+                end_year -= 1
+        
+        # 計算該月的最後一天
+        if end_month == 12:
+            next_month_for_calc = datetime(end_year + 1, 1, 1)
+        else:
+            next_month_for_calc = datetime(end_year, end_month + 1, 1)
+        
+        last_day = (next_month_for_calc - timedelta(days=1)).day
+        end_date = f"{end_year}{end_month:02d}{last_day:02d}"
+        
+        logger.info(f"手動觸發更新未來四個月醫師班表: {start_date} 到 {end_date}")
+        
+        # 更新班表
+        result = DoctorScheduleService.update_schedules_from_external_api(start_date, end_date)
+        
+        return {
+            "success": True,
+            "message": f"成功更新未來四個月班表資料 ({start_date} 到 {end_date})",
+            "date_range": {
+                "start_date": start_date,
+                "end_date": end_date,
+                "start_date_formatted": f"{start_date[:4]}-{start_date[4:6]}-{start_date[6:8]}",
+                "end_date_formatted": f"{end_date[:4]}-{end_date[4:6]}-{end_date[6:8]}"
+            },
+            "saved_count": result.get('saved_count', 0)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"手動更新未來四個月醫師班表失敗: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"更新失敗: {str(e)}")
+
+@router.get("/scheduler-status")
+async def get_scheduler_status(
+    current_user: User = Depends(get_current_user)
+):
+    """
+    獲取定時任務狀態
+    只有管理員可以查看
+    """
+    try:
+        # 檢查權限
+        if current_user.role not in ['head_nurse', 'admin']:
+            raise HTTPException(status_code=403, detail="權限不足，只有護理長或管理員可以查看")
+        
+        from ..tasks.doctor_schedule_tasks import doctor_schedule_task_manager
+        
+        if doctor_schedule_task_manager.scheduler is None:
+            return {
+                "success": True,
+                "scheduler_running": False,
+                "message": "定時任務尚未啟動"
+            }
+        
+        jobs = []
+        for job in doctor_schedule_task_manager.scheduler.get_jobs():
+            jobs.append({
+                "id": job.id,
+                "name": job.name,
+                "next_run_time": job.next_run_time.isoformat() if job.next_run_time else None,
+                "trigger": str(job.trigger)
+            })
+        
+        return {
+            "success": True,
+            "scheduler_running": doctor_schedule_task_manager.scheduler.running,
+            "jobs": jobs,
+            "message": "定時任務運行正常"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"獲取定時任務狀態失敗: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"獲取狀態失敗: {str(e)}")
 
 @router.put("/doctor/{doctor_id}/area-code")
 async def update_doctor_area_code(
@@ -210,7 +320,8 @@ async def check_api_health():
     """檢查外部API健康狀態"""
     try:
         import requests
-        response = requests.get(f"{DoctorScheduleService.EXTERNAL_API_BASE}/health", timeout=10)
+        
+        response = requests.get(f"{settings.EXTERNAL_API_BASE}/health", timeout=10)
         response.raise_for_status()
         
         return {
