@@ -357,7 +357,7 @@ const Announcement = () => {
   return (
     <Box sx={{ p: { xs: 0.25, sm: 2, md: 3 } }}>
       {/* 搜尋和操作區域 */}
-      <Paper sx={{ p: 1.5, mb: 3, display: 'flex', gap: 1.5, alignItems: 'center' }}>
+      <Paper sx={{ p: 1.5, mb: 3, display: 'flex', gap: 1.5, alignItems: 'center', boxShadow: 'none', border: '1px solid #e0e0e0' }}>
         <TextField
           label="搜尋公告"
           variant="outlined"
@@ -432,7 +432,7 @@ const Announcement = () => {
           <Alert severity="error">{error}</Alert>
         ) : filteredAnnouncements.length > 0 ? (
           <>
-            <List component={Paper}>
+            <List component={Paper} sx={{ boxShadow: 'none', border: '1px solid #e0e0e0' }}>
               {paginatedAnnouncements.map((ann, index) => (
                 <React.Fragment key={ann.id}>
                   <ListItem button onClick={() => handleOpenDetail(ann)}>
@@ -473,7 +473,7 @@ const Announcement = () => {
             )}
           </>
         ) : (
-          <Paper sx={{ p: 3, textAlign: 'center' }}>
+          <Paper sx={{ p: 3, textAlign: 'center', boxShadow: 'none', border: '1px solid #e0e0e0' }}>
             <Typography color="text.secondary">沒有找到符合條件的公告</Typography>
           </Paper>
         )}

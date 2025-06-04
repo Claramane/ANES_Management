@@ -2326,7 +2326,7 @@ const ShiftSwap = () => {
               }
             </Typography>
             
-            <Paper sx={{ p: 2, bgcolor: '#f5f5f5', mb: 3 }}>
+            <Paper sx={{ p: 2, bgcolor: '#f5f5f5', mb: 3, boxShadow: 'none', border: '1px solid #e0e0e0' }}>
               {/* 日期顯示在上方中央 */}
               <Box sx={{ textAlign: 'center', mb: 2 }}>
                 <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
@@ -2422,7 +2422,7 @@ const ShiftSwap = () => {
             
             {/* 備註 */}
             {selectedRequest.notes && (
-              <Paper sx={{ p: 2, mt: 2, backgroundColor: '#f5f5f5' }}>
+              <Paper sx={{ p: 2, mt: 2, backgroundColor: '#f5f5f5', boxShadow: 'none', border: '1px solid #e0e0e0' }}>
                 <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 0.5 }}>備註:</Typography>
                 <Typography variant="body2">{selectedRequest.notes}</Typography>
               </Paper>
@@ -2540,7 +2540,7 @@ const ShiftSwap = () => {
     const selectedDateStr = selectedDay.date instanceof Date ? format(selectedDay.date, 'yyyy-MM-dd') : '未選擇日期';
     
     return (
-      <Paper sx={{ p: 2, mt: 2, mb: 3 }}>
+      <Paper sx={{ p: 2, mt: 2, mb: 3, boxShadow: 'none', border: '1px solid #e0e0e0' }}>
         <Typography variant="subtitle1" gutterBottom>
           已選擇日期: {selectedDateStr} - 班別: {currentShift}
           {selectedDay.overtime && ' (有加班)'}
@@ -3476,7 +3476,7 @@ const ShiftSwap = () => {
       )}
       
       {/* 標籤導航 */}
-      <Paper sx={{ mb: 3 }}>
+      <Paper sx={{ mb: 3, boxShadow: 'none', border: '1px solid #e0e0e0' }}>
         <Tabs
           value={currentTab}
           onChange={handleTabChange}
@@ -3562,7 +3562,7 @@ const ShiftSwap = () => {
       />
       
       {/* 篩選工具列 */}
-      <Paper sx={{ p: 1.5, mb: 3, display: 'flex', gap: 1.5, alignItems: 'center' }}>
+      <Paper sx={{ p: 1.5, mb: 3, display: 'flex', gap: 1.5, alignItems: 'center', boxShadow: 'none', border: '1px solid #e0e0e0' }}>
         <TextField
           variant="outlined"
           size="small"
@@ -3644,7 +3644,7 @@ const ShiftSwap = () => {
           {filteredRequests.length > 0 ? (
             // 有數據顯示列表
             <>
-              <List component={Paper}>
+              <List component={Paper} sx={{ boxShadow: 'none', border: '1px solid #e0e0e0' }}>
                 {paginatedRequests.map((request, index) => {
                   const displayStatus = getRequestDisplayStatus(request);
                   const isFaded = displayStatus === 'cancelled' || displayStatus === 'expired' || displayStatus === 'accepted' || displayStatus === 'rejected';
@@ -3721,7 +3721,7 @@ const ShiftSwap = () => {
               )}
             </>
           ) : (
-            <Paper sx={{ p: 3, textAlign: 'center' }}>
+            <Paper sx={{ p: 3, textAlign: 'center', boxShadow: 'none', border: '1px solid #e0e0e0' }}>
               <Typography color="text.secondary">暫無符合條件的換班請求</Typography>
             </Paper>
           )}

@@ -262,7 +262,7 @@ function VersionHistory() {
 
   return (
     <Container maxWidth="lg">
-      <Paper sx={{ p: 3, mt: 3 }}>
+      <Paper sx={{ p: 3, mt: 3, boxShadow: 'none' }}>
         <Box display="flex" alignItems="center" mb={2}>
           <HistoryIcon sx={{ mr: 1 }} />
           <Typography variant="h5" component="h1">
@@ -317,7 +317,7 @@ function VersionHistory() {
               尚無版本記錄
             </Alert>
           ) : (
-            <TableContainer component={Paper} variant="outlined">
+            <TableContainer component={Paper} variant="outlined" sx={{ mb: 2, boxShadow: 'none' }}>
               <Table>
                 <TableHead>
                   <TableRow>
@@ -433,7 +433,7 @@ function VersionHistory() {
                       變更摘要:
                     </Typography>
                     <Box sx={{ maxHeight: '200px', overflow: 'auto', mb: 2 }}>
-                      <TableContainer component={Paper} variant="outlined">
+                      <TableContainer component={Paper} variant="outlined" sx={{ mb: 2, boxShadow: 'none' }}>
                         <Table size="small">
                           <TableHead>
                             <TableRow>
@@ -627,7 +627,7 @@ function VersionHistory() {
                   </Tabs>
                 </Box>
 
-                <TableContainer component={Paper} variant="outlined" sx={{ mb: 2 }}>
+                <TableContainer component={Paper} variant="outlined" sx={{ mb: 2, boxShadow: 'none' }}>
                   <Table size="small">
                     <TableHead>
                       <TableRow>
@@ -756,7 +756,7 @@ function VersionHistory() {
                     } 筆
                   </Typography>
 
-                  <TableContainer component={Paper} variant="outlined" sx={{ mb: 2 }}>
+                  <TableContainer component={Paper} variant="outlined" sx={{ mb: 2, boxShadow: 'none' }}>
                     <Table size="small">
                       <TableHead>
                         <TableRow>

@@ -834,7 +834,7 @@ function Dashboard() {
           <Grid container spacing={3} sx={{ height: '100%' }}>
             {/* 今日班表卡片 - 右上 */}
             <Grid item xs={12} sx={{ height: 'auto' }}>
-              <Card sx={{ height: 'fit-content' }}>
+              <Card sx={{ height: 'fit-content', boxShadow: 'none', border: '1px solid #e0e0e0' }}>
                 <CardContent>
                   <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                     <TodayIcon color="primary" sx={{ mr: 1 }} />
@@ -887,7 +887,7 @@ function Dashboard() {
             
             {/* 本月班表卡片 - 右下，填滿剩餘空間 */}
             <Grid item xs={12} sx={{ flex: 1, display: 'flex' }}>
-              <Card sx={{ width: '100%', display: 'flex', flexDirection: 'column' }}>
+              <Card sx={{ width: '100%', display: 'flex', flexDirection: 'column', boxShadow: 'none', border: '1px solid #e0e0e0' }}>
                 <CardContent sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                     <EventIcon color="primary" sx={{ mr: 1 }} />
@@ -980,7 +980,7 @@ function Dashboard() {
           <Grid container spacing={3} sx={{ height: '100%' }}>
             {/* 最新公告卡片 - 左上 */}
             <Grid item xs={12} sx={{ height: 'auto' }}>
-              <Card sx={{ height: 'fit-content' }}>
+              <Card sx={{ height: 'fit-content', boxShadow: 'none', border: '1px solid #e0e0e0' }}>
                 <CardContent>
                   <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                     <AnnouncementIcon color="primary" sx={{ mr: 1 }} />
@@ -1049,7 +1049,7 @@ function Dashboard() {
 
             {/* 換班請求卡片 - 左下，填滿剩餘空間 */}
             <Grid item xs={12} sx={{ flex: 1, display: 'flex' }}>
-              <Card sx={{ width: '100%', display: 'flex', flexDirection: 'column' }}>
+              <Card sx={{ width: '100%', display: 'flex', flexDirection: 'column', boxShadow: 'none', border: '1px solid #e0e0e0' }}>
                 <CardContent sx={{ flex: 1 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                     <SyncIcon color="primary" sx={{ mr: 1 }} />

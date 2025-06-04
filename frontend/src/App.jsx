@@ -10,7 +10,7 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import WeeklySchedule from './pages/WeeklySchedule';
 import MonthlySchedule from './pages/MonthlySchedule';
-import BigSchedule from './pages/BigSchedule';
+import DoctorSchedule from './pages/DoctorSchedule';
 import Formula from './pages/Formula';
 import ShiftSwapPage from './pages/ShiftSwap';
 import AnnouncementPage from './pages/Announcement';
@@ -150,7 +150,7 @@ function App() {
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="weekly-schedule" element={<WeeklySchedule />} />
             <Route path="monthly-schedule" element={<MonthlySchedule />} />
-            <Route path="big-schedule" element={<BigSchedule />} />
+            <Route path="doctor-schedule" element={<DoctorSchedule />} />
             <Route path="formula" element={<Formula />} />
             <Route path="shift-swap" element={<ShiftSwapPage />} />
             <Route path="announcements" element={<AnnouncementPage />} />

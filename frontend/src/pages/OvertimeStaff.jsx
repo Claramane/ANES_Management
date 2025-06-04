@@ -311,7 +311,7 @@ const StatRow = memo(({ staff, daysInMonth, selectedDate }) => {
                           color: 'white',
                           fontWeight: 'bold',
                           fontSize: '0.7rem',
-                          boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
+                          boxShadow: 'none'
                         }}
                       >
                         {dayData.overtimeShift.toUpperCase()}
@@ -2046,7 +2046,7 @@ const OvertimeStaff = () => {
       
       {/* 以下內容只有當班表存在時才顯示 */}
       {hasSchedule && !isLoading && Object.keys(overtimeData).length > 0 && (
-        <TableContainer component={Paper} sx={{ mt: 2 }}>
+        <TableContainer component={Paper} sx={{ mt: 2, boxShadow: 'none' }}>
           <Table stickyHeader aria-label="加班人員列表">
             <TableHead>
               <TableRow>
@@ -2105,7 +2105,7 @@ const OvertimeStaff = () => {
           
           {/* 月度加班統計表 */}
           {!isLoading && !isLoadingStatistics && statisticsData.length > 0 && (
-            <TableContainer component={Paper} sx={{ mt: 2 }}>
+            <TableContainer component={Paper} sx={{ mt: 2, boxShadow: 'none' }}>
               <Table stickyHeader aria-label="加班統計表格">
                 <TableHead>
                   <TableRow>

@@ -345,6 +345,72 @@ const apiService = {
   },
 };
 
+// 醫師班表相關 API (現在改為向後端請求)
+const doctorScheduleService = {
+  // 健康檢查 - 檢查後端和外部API狀態
+  getHealth: () => api.get('/doctor-schedules/health'),
+  
+  // 獲取醫師成員列表 (保留舊的外部API調用，因為後端沒有存儲成員資料)
+  getMembers: () => {
+    const externalApi = axios.create({
+      baseURL: 'https://docdutyapi.zeabur.app',
+      timeout: 10000,
+    });
+    return externalApi.get('/members');
+  },
+  
+  // 獲取當前月份所有成員的事件 (已棄用，改用範圍查詢)
+  getEvents: () => {
+    console.warn('getEvents已棄用，請使用getEventsInDateRange');
+    return Promise.reject(new Error('此方法已棄用，請使用getEventsInDateRange'));
+  },
+  
+  // 獲取特定成員的事件 (已棄用)
+  getMemberEvents: (memberId) => {
+    console.warn('getMemberEvents已棄用');
+    return Promise.reject(new Error('此方法已棄用'));
+  },
+  
+  // 獲取日期範圍內的醫師班表 (現在從後端獲取) - 自動1分鐘更新
+  getEventsInDateRange: (startDate, endDate) => {
+    console.log(`從後端獲取醫師班表: ${startDate} 到 ${endDate}`);
+    return api.get(`/doctor-schedules/schedules/${startDate}/${endDate}`)
+      .then(response => {
+        console.log('後端醫師班表API響應:', response.data);
+        return response;
+      })
+      .catch(error => {
+        console.error('獲取後端醫師班表失敗:', error);
+        throw error;
+      });
+  },
+  
+  // 獲取今日班表
+  getTodaySchedule: () => api.get('/doctor-schedules/today'),
+  
+  // 手動更新班表資料 (僅管理員)
+  updateFromExternal: (startDate, endDate) => 
+    api.post(`/doctor-schedules/update-from-external?start_date=${startDate}&end_date=${endDate}`),
+  
+  // 更新醫師區域代碼 (僅控台醫師)
+  updateDoctorAreaCode: (doctorId, newAreaCode) => 
+    api.put(`/doctor-schedules/doctor/${doctorId}/area-code?new_area_code=${encodeURIComponent(newAreaCode)}`),
+  
+  // 切換醫師啟用狀態 (僅控台醫師)
+  toggleDoctorActive: (doctorId) => 
+    api.put(`/doctor-schedules/doctor/${doctorId}/toggle-active`),
+  
+  // 獲取更新日誌
+  getUpdateLogs: (limit = 50) => 
+    api.get(`/doctor-schedules/update-logs?limit=${limit}`),
+  
+  // 獲取特定成員在日期範圍內的事件 (保持舊格式兼容性，但已棄用)
+  getMemberEventsInDateRange: (startDate, endDate, memberId) => {
+    console.warn('getMemberEventsInDateRange已棄用');
+    return Promise.reject(new Error('此方法已棄用'));
+  },
+};
+
 // 導出 API 實例和服務
-export { api, apiForCachedData };
+export { api, apiForCachedData, doctorScheduleService };
 export default apiService; 

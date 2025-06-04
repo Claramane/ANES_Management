@@ -1530,6 +1530,7 @@ const MonthlySchedule = () => {
             overflowX: 'auto', 
             padding: 0,
             width: '100%',
+            boxShadow: 'none',
             '& .MuiPaper-root': {
               boxShadow: 'none'
             }
@@ -1817,7 +1818,7 @@ const MonthlySchedule = () => {
           </Box>
         </TableContainer>
       ) : !isLoading && (
-        <Paper sx={{ padding: 3, marginTop: 2 }}>
+        <Paper sx={{ padding: 3, marginTop: 2, boxShadow: 'none', border: '1px solid #e0e0e0' }}>
           <Typography variant="body1" align="center">
             {activeTab === 1 ? '尚未生成班表，請點擊"生成月班表"按鈕' : '目前沒有此類型護理師的班表數據'}
           </Typography>
@@ -1825,7 +1826,7 @@ const MonthlySchedule = () => {
       )}
       
       <Box className="hide-for-pdf" sx={{ mt: 3, display: { xs: 'none', md: 'block' } }}>
-        <Paper sx={{ padding: 2 }}>
+        <Paper sx={{ padding: 2, boxShadow: 'none', border: '1px solid #e0e0e0' }}>
           <Typography variant="h6" gutterBottom>
             班次說明
           </Typography>

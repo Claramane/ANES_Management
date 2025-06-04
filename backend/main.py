@@ -10,6 +10,7 @@ from sqlalchemy import text
 from app.core.config import settings
 from app.core.database import engine, Base
 from app.routes import routers
+from app.tasks.doctor_schedule_tasks import doctor_schedule_task_manager
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -57,9 +58,26 @@ async def startup_event():
         # 創建資料庫表
         Base.metadata.create_all(bind=engine)
         logger.info("資料表建立流程完成（如表已存在則不會重複建立）")
+        
+        # 啟動醫師班表定時任務
+        try:
+            doctor_schedule_task_manager.start_scheduler()
+            logger.info("醫師班表定時任務啟動成功")
+        except Exception as e:
+            logger.error(f"啟動醫師班表定時任務失敗: {str(e)}")
+            
     except Exception as e:
         logger.error(f"資料庫連接失敗: {str(e)}")
         raise Exception("無法連接到資料庫，請檢查資料庫配置和連接狀態")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    try:
+        # 停止醫師班表定時任務
+        doctor_schedule_task_manager.stop_scheduler()
+        logger.info("醫師班表定時任務已停止")
+    except Exception as e:
+        logger.error(f"停止定時任務時發生錯誤: {str(e)}")
 
 @app.get("/")
 async def root():

@@ -73,7 +73,7 @@ function Layout() {
     { text: '首頁', icon: <HomeIcon />, path: '/dashboard' },
     { text: '週班表', icon: <ViewWeekIcon />, path: '/weekly-schedule' },
     { text: '月班表', icon: <CalendarMonthIcon />, path: '/monthly-schedule' },
-    // { text: '大班表', icon: <EventIcon />, path: '/big-schedule' },
+    { text: '醫師班表', icon: <EventIcon />, path: '/doctor-schedule' },
     { text: '換班申請', icon: <SyncIcon />, path: '/shift-swap' },
     { text: '加班人員', icon: <WorkIcon />, path: '/overtime-staff' },
     { text: '公告專區', icon: <AnnouncementIcon />, path: '/announcements' },

@@ -1965,7 +1965,7 @@ const Formula = () => {
           onKeyDown={handleKeyDown}
           sx={{ outline: 'none' }} // 確保容器永遠沒有外框
         >
-          <Paper sx={{ overflow: 'auto' }}>
+          <Paper sx={{ overflow: 'auto', boxShadow: 'none' }}>
             <Table size="small">
               <TableHead>
                 <TableRow>
@@ -2054,7 +2054,7 @@ const Formula = () => {
                                     ...prov.draggableProps.style,
                                     ...(snapshot.isDragging ? {
                                       opacity: 0.8,
-                                      boxShadow: '0 5px 15px rgba(0, 0, 0, 0.15)',
+                                      boxShadow: 'none',
                                       transform: prov.draggableProps.style?.transform,
                                       zIndex: 9999
                                     } : {})
@@ -2168,7 +2168,7 @@ const Formula = () => {
                             ...prov.draggableProps.style,
                             ...(snapshot.isDragging ? {
                               opacity: 0.8,
-                              boxShadow: '0 5px 15px rgba(0, 0, 0, 0.15)',
+                              boxShadow: 'none',
                               transform: prov.draggableProps.style?.transform,
                               zIndex: 9999
                             } : {})
@@ -2269,7 +2269,7 @@ const Formula = () => {
                                 ...prov.draggableProps.style,
                                 ...(snapshot.isDragging ? {
                                   opacity: 0.8,
-                                  boxShadow: '0 5px 15px rgba(0, 0, 0, 0.15)',
+                                  boxShadow: 'none',
                                   transform: prov.draggableProps.style?.transform,
                                   zIndex: 9999
                                 } : {})
@@ -2369,7 +2369,7 @@ const Formula = () => {
                                 ...prov.draggableProps.style,
                                 ...(snapshot.isDragging ? {
                                   opacity: 0.8,
-                                  boxShadow: '0 5px 15px rgba(0, 0, 0, 0.15)',
+                                  boxShadow: 'none',
                                   transform: prov.draggableProps.style?.transform,
                                   zIndex: 9999
                                 } : {})
@@ -2416,7 +2416,7 @@ const Formula = () => {
             </Box>
 
             {scheduleEditMode && (
-              <Paper sx={{ p: 2, mt: 2, backgroundColor: '#f5f5f5', border: '1px solid #e0e0e0' }}>
+              <Paper sx={{ p: 2, mt: 2, backgroundColor: '#f5f5f5', border: '1px solid #e0e0e0', boxShadow: 'none' }}>
                 <Typography variant="subtitle1" sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                   <InfoIcon sx={{ mr: 1, color: 'info.main' }} />
                   操作指南
@@ -2487,7 +2487,7 @@ const Formula = () => {
         <Grid container spacing={3}>
           {sortedSchedules.map((f) => (
             <Grid item xs={12} sm={6} md={3} key={f.id}>
-              <Card sx={{ height: '100%' }}>
+              <Card sx={{ height: '100%', boxShadow: 'none', border: '1px solid #e0e0e0' }}>
                 <CardContent>
                   <Typography variant="h6" gutterBottom sx={{ fontSize: '1.3rem' }}>
                     {FORMULA_TYPE_NAMES[Object.keys(FORMULA_TYPE_IDS).find(type => FORMULA_TYPE_IDS[type] === f.id)]}
@@ -2547,7 +2547,7 @@ const Formula = () => {
         </Alert>
       )}
 
-      <Card>
+      <Card sx={{ boxShadow: 'none', border: '1px solid #e0e0e0' }}>
         <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
           <Tabs
             value={mainTabValue}

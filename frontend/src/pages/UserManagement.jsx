@@ -526,7 +526,7 @@ const UserManagement = () => {
             </Button>
           </Box>
           
-          <Paper sx={{ width: '100%', overflow: 'auto' }}>
+          <Paper sx={{ width: '100%', overflow: 'auto', boxShadow: 'none' }}>
             <TableContainer>
               <Table>
                 <TableHead>

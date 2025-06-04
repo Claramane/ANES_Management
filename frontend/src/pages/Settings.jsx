@@ -338,7 +338,7 @@ const Settings = () => {
       )}
       
       {/* 個人資料修改區塊 */}
-      <Paper sx={{ padding: 3, marginBottom: 3 }}>
+      <Paper sx={{ padding: 3, marginBottom: 3, boxShadow: 'none', border: '1px solid #e0e0e0' }}>
         <Typography variant="h6" gutterBottom>
           個人資料設定
         </Typography>
@@ -390,7 +390,7 @@ const Settings = () => {
       </Paper>
       
       {/* Passkey管理區塊 */}
-      <Paper sx={{ padding: 3, marginBottom: 3 }}>
+      <Paper sx={{ padding: 3, marginBottom: 3, boxShadow: 'none', border: '1px solid #e0e0e0' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
           <FingerprintIcon sx={{ mr: 1, color: 'primary.main' }} />
           <Typography variant="h6">
@@ -551,7 +551,7 @@ const Settings = () => {
       </Paper>
       
       {/* 密碼修改區塊 */}
-      <Paper sx={{ padding: 3, marginBottom: 3 }}>
+      <Paper sx={{ padding: 3, marginBottom: 3, boxShadow: 'none', border: '1px solid #e0e0e0' }}>
         <Typography variant="h6" gutterBottom>
           修改密碼
         </Typography>
@@ -658,7 +658,7 @@ const Settings = () => {
         </Box>
       </Paper>
       
-      <Paper sx={{ padding: 3, marginTop: 3 }}>
+      <Paper sx={{ padding: 3, marginTop: 3, boxShadow: 'none', border: '1px solid #e0e0e0' }}>
         <Typography variant="h6" gutterBottom>
           系統信息
         </Typography>

@@ -849,7 +849,7 @@ const WeeklySchedule = () => {
       borderRadius: '3px',
       fontWeight: 'bold',
       border: '1px solid',
-      boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
+      boxShadow: 'none',
       whiteSpace: 'nowrap',
       overflow: 'hidden',
     };
@@ -2073,7 +2073,7 @@ const WeeklySchedule = () => {
       
       {currentWeekSchedule.length > 0 ? (
         <Box sx={{ position: 'relative' }}>
-          <TableContainer component={Paper} sx={{ overflowX: 'auto' }}>
+          <TableContainer component={Paper} sx={{ overflowX: 'auto', boxShadow: 'none' }}>
             <Table sx={{ minWidth: 650, '& .MuiTableCell-root': { padding: '2px 2px' }, tableLayout: 'fixed' }} size="small">
               <TableHead>
                 <TableRow sx={{ height: '28px' }}>
@@ -2180,7 +2180,7 @@ const WeeklySchedule = () => {
                 </Alert>
               )}
               
-              <TableContainer component={Paper} sx={{ mt: 1, mb: 3 }}>
+              <TableContainer component={Paper} sx={{ mt: 1, mb: 3, boxShadow: 'none' }}>
                 <Table size="small">
                   <TableHead>
                     <TableRow sx={{ backgroundColor: '#e0f2f1' }}>
@@ -2335,7 +2335,7 @@ const WeeklySchedule = () => {
               本週工作分配統計
             </Typography>
           </Box>
-          <TableContainer component={Paper} sx={{ mt: 1, mb: 3 }}>
+          <TableContainer component={Paper} sx={{ mt: 1, mb: 3, boxShadow: 'none' }}>
             <Table size="small" sx={{ tableLayout: 'fixed' }}>
               <TableHead>
                 <TableRow sx={{ backgroundColor: '#e0f2f1' }}>
@@ -2639,7 +2639,7 @@ const WeeklySchedule = () => {
           )}
         </Box>
       ) : !isLoading && (
-        <Paper sx={{ padding: 3, marginTop: 2 }}>
+        <Paper sx={{ padding: 3, marginTop: 2, boxShadow: 'none' }}>
           <Typography variant="body1" align="center">
             尚未生成班表，請先在月班表頁面生成月班表
           </Typography>
