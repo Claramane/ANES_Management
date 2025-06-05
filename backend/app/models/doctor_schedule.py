@@ -2,6 +2,7 @@ from sqlalchemy import Column, Integer, String, Boolean, DateTime, Date, Text, J
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from ..core.database import Base
+from datetime import datetime
 
 class DoctorSchedule(Base):
     """醫師每日班表"""
@@ -23,13 +24,14 @@ class DayShiftDoctor(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     schedule_id = Column(Integer, ForeignKey('doctor_schedules.id'), nullable=False)
-    name = Column(String(50), nullable=False)  # 醫師姓名（從summary中提取）
-    summary = Column(String(200), nullable=False)  # 原始summary，如"陳柏羽/A"
-    time = Column(String(50), nullable=False)  # 工作時間，如"08:00-18:00"
-    area_code = Column(String(20), nullable=False)  # 轉換後的區域代碼
-    active = Column(Boolean, default=True, nullable=False)  # 是否啟用
-    created_at = Column(DateTime, default=func.now())
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    name = Column(String(50), nullable=False, comment="醫師姓名")
+    summary = Column(String(100), nullable=False, comment="班表摘要")
+    time = Column(String(20), nullable=False, comment="工作時間")
+    area_code = Column(String(20), nullable=False, comment="區域代碼")
+    active = Column(Boolean, default=True, nullable=False, comment="是否啟用")
+    meeting_time = Column(String(20), nullable=True, comment="開會時間，格式如08:00-10:00")
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
     
     # 關聯班表
     schedule = relationship("DoctorSchedule", back_populates="day_shift_doctors")

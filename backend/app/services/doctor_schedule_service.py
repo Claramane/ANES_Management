@@ -20,8 +20,185 @@ class DoctorScheduleService:
         'B': '刀房',
         'C': '外圍(3F)',
         'D': '外圍(高階)',
-        'E': '刀房'
+        'E': '刀房',
+        'F': '外圍(TAE)'
     }
+    
+    @classmethod
+    def parse_work_time(cls, time_str: str) -> tuple:
+        """解析工作時間字串，返回開始和結束時間"""
+        try:
+            if not time_str or '-' not in time_str:
+                return None, None
+            
+            start_str, end_str = time_str.split('-')
+            start_time = datetime.strptime(start_str.strip(), '%H:%M').time()
+            end_time = datetime.strptime(end_str.strip(), '%H:%M').time()
+            
+            return start_time, end_time
+        except Exception as e:
+            logger.error(f"解析工作時間失敗: {time_str}, 錯誤: {str(e)}")
+            return None, None
+    
+    @classmethod
+    def is_doctor_in_working_hours(cls, work_time: str) -> bool:
+        """檢查醫師是否在工作時間內"""
+        try:
+            start_time, end_time = cls.parse_work_time(work_time)
+            if not start_time or not end_time:
+                return True  # 如果無法解析時間，預設為在工作時間內
+            
+            current_time = datetime.now().time()
+            
+            # 處理跨午夜的情況（如夜班）
+            if start_time <= end_time:
+                # 正常情況：08:00-18:00
+                return start_time <= current_time <= end_time
+            else:
+                # 跨午夜情況：22:00-06:00
+                return current_time >= start_time or current_time <= end_time
+                
+        except Exception as e:
+            logger.error(f"檢查工作時間失敗: {work_time}, 錯誤: {str(e)}")
+            return True  # 發生錯誤時預設為在工作時間內
+    
+    @classmethod
+    def is_doctor_in_meeting(cls, meeting_time: str) -> bool:
+        """檢查醫師是否在開會時間內"""
+        try:
+            if not meeting_time:
+                return False
+                
+            start_time, end_time = cls.parse_work_time(meeting_time)
+            if not start_time or not end_time:
+                return False
+            
+            current_time = datetime.now().time()
+            
+            # 處理跨午夜的情況（開會時間不太可能跨午夜，但為了完整性）
+            if start_time <= end_time:
+                # 正常情況：09:00-11:00
+                return start_time <= current_time <= end_time
+            else:
+                # 跨午夜情況：22:00-02:00
+                return current_time >= start_time or current_time <= end_time
+                
+        except Exception as e:
+            logger.error(f"檢查開會時間失敗: {meeting_time}, 錯誤: {str(e)}")
+            return False
+    
+    @classmethod
+    def set_doctor_meeting_time(cls, db: Session, doctor_id: int, meeting_time: str) -> bool:
+        """設定醫師的開會時間"""
+        try:
+            doctor = db.query(DayShiftDoctor).filter(DayShiftDoctor.id == doctor_id).first()
+            if doctor:
+                doctor.meeting_time = meeting_time
+                doctor.updated_at = datetime.now()
+                
+                # 如果目前在開會時間內，設定為非活躍狀態
+                if meeting_time and cls.is_doctor_in_meeting(meeting_time):
+                    doctor.active = False
+                
+                db.commit()
+                logger.info(f"醫師 {doctor.name} 的開會時間已設定為: {meeting_time}")
+                return True
+            return False
+        except Exception as e:
+            logger.error(f"設定醫師開會時間失敗: {str(e)}")
+            db.rollback()
+            return False
+    
+    @classmethod
+    def delete_doctor_meeting_time(cls, db: Session, doctor_id: int) -> bool:
+        """刪除醫師的開會時間"""
+        try:
+            doctor = db.query(DayShiftDoctor).filter(DayShiftDoctor.id == doctor_id).first()
+            if doctor:
+                old_meeting_time = doctor.meeting_time
+                doctor.meeting_time = None
+                doctor.updated_at = datetime.now()
+                
+                # 刪除開會時間後，如果在工作時間內，恢復活躍狀態
+                if old_meeting_time and cls.is_doctor_in_working_hours(doctor.time):
+                    doctor.active = True
+                
+                db.commit()
+                logger.info(f"醫師 {doctor.name} 的開會時間已刪除，原時間為: {old_meeting_time}")
+                return True
+            return False
+        except Exception as e:
+            logger.error(f"刪除醫師開會時間失敗: {str(e)}")
+            db.rollback()
+            return False
+    
+    @classmethod
+    def update_doctors_active_status_by_time(cls, db: Session):
+        """根據工作時間和開會時間在關鍵時刻更新醫師的active狀態"""
+        try:
+            # 獲取今天的所有白班醫師
+            today = datetime.now().strftime('%Y%m%d')
+            today_schedule = db.query(DoctorSchedule).filter(
+                DoctorSchedule.date == today
+            ).first()
+            
+            if not today_schedule:
+                return
+            
+            current_time = datetime.now().time()
+            updated_count = 0
+            
+            # 檢查每個醫師的狀態轉換
+            for doctor in today_schedule.day_shift_doctors:
+                start_time, end_time = cls.parse_work_time(doctor.time)
+                if not start_time or not end_time:
+                    continue
+                
+                # 檢查是否為時間點（容許1分鐘誤差）
+                current_minutes = current_time.hour * 60 + current_time.minute
+                
+                # 檢查是否在開會中
+                is_in_meeting = cls.is_doctor_in_meeting(doctor.meeting_time) if doctor.meeting_time else False
+                
+                # 下班時間到了：如果醫師還在上班，自動設為下班
+                end_minutes = end_time.hour * 60 + end_time.minute
+                if abs(current_minutes - end_minutes) <= 1 and doctor.active:
+                    doctor.active = False
+                    doctor.updated_at = datetime.now()
+                    updated_count += 1
+                    logger.info(f"醫師 {doctor.name} 已自動設為下班狀態（下班時間到）")
+                
+                # 開會時間檢查：開會時設為非活躍，開會結束時恢復活躍（如果在工作時間內且原本就是活躍狀態）
+                if doctor.meeting_time:
+                    meeting_start, meeting_end = cls.parse_work_time(doctor.meeting_time)
+                    if meeting_start and meeting_end:
+                        meeting_start_minutes = meeting_start.hour * 60 + meeting_start.minute
+                        meeting_end_minutes = meeting_end.hour * 60 + meeting_end.minute
+                        
+                        # 開會開始時間到了：設為非活躍
+                        if abs(current_minutes - meeting_start_minutes) <= 1 and doctor.active:
+                            doctor.active = False
+                            doctor.updated_at = datetime.now()
+                            updated_count += 1
+                            logger.info(f"醫師 {doctor.name} 已自動設為非活躍狀態（開會開始）")
+                        
+                        # 開會結束時間到了：如果在工作時間內且開會前是活躍狀態，恢復活躍
+                        # 注意：我們不會自動恢復活躍狀態，因為可能醫師已經請假或下班
+                        if abs(current_minutes - meeting_end_minutes) <= 1 and not doctor.active and not is_in_meeting:
+                            # 檢查是否仍在工作時間內
+                            start_minutes = start_time.hour * 60 + start_time.minute
+                            if start_minutes <= current_minutes <= end_minutes:
+                                # 只有在確實因為開會而設為非活躍時才自動恢復
+                                # 這裡可以檢查是否有開會記錄，但為了簡化，我們不自動恢復
+                                pass  # 不自動恢復，讓管理員手動處理
+            
+            if updated_count > 0:
+                db.commit()
+                logger.info(f"已更新 {updated_count} 位醫師的狀態")
+            
+        except Exception as e:
+            logger.error(f"自動更新醫師active狀態失敗: {str(e)}")
+            db.rollback()
     
     @classmethod
     def extract_name_and_area_from_summary(cls, summary: str) -> tuple:
@@ -39,6 +216,51 @@ class DoctorScheduleService:
         except Exception as e:
             logger.error(f"解析summary失敗: {summary}, 錯誤: {str(e)}")
             return summary.strip(), '未分類'
+    
+    @classmethod
+    def is_weekday_tuesday_to_friday(cls, date_str: str) -> bool:
+        """判斷是否為週二到週五"""
+        try:
+            # 將YYYYMMDD格式轉換為datetime對象
+            date_obj = datetime.strptime(date_str, '%Y%m%d')
+            # weekday(): 0=Monday, 1=Tuesday, 2=Wednesday, 3=Thursday, 4=Friday, 5=Saturday, 6=Sunday
+            weekday = date_obj.weekday()
+            # 週二到週五對應1到4
+            return 1 <= weekday <= 4
+        except Exception as e:
+            logger.error(f"判斷日期 {date_str} 星期幾時發生錯誤: {str(e)}")
+            return False
+    
+    @classmethod
+    def add_fan_shouwei_to_or(cls, db: Session, schedule_id: int):
+        """為開刀房新增范守仁醫師"""
+        try:
+            # 檢查是否已經存在范守仁醫師在這個班表中
+            existing_fan = db.query(DayShiftDoctor).filter(
+                and_(
+                    DayShiftDoctor.schedule_id == schedule_id,
+                    DayShiftDoctor.name == '范守仁',
+                    DayShiftDoctor.area_code == '刀房'
+                )
+            ).first()
+            
+            if not existing_fan:
+                # 新增范守仁醫師到開刀房
+                fan_doctor = DayShiftDoctor(
+                    schedule_id=schedule_id,
+                    name='范守仁',
+                    summary='范守仁/B',  # B代表刀房
+                    time='08:00-18:00',  # 預設工作時間
+                    area_code='刀房',
+                    active=True
+                )
+                db.add(fan_doctor)
+                logger.info(f"已自動新增范守仁醫師到班表ID {schedule_id} 的開刀房")
+            else:
+                logger.debug(f"班表ID {schedule_id} 已存在范守仁醫師，跳過新增")
+                
+        except Exception as e:
+            logger.error(f"新增范守仁醫師時發生錯誤: {str(e)}")
     
     @classmethod
     def fetch_external_schedule_data(cls, start_date: str, end_date: str) -> Dict:
@@ -118,6 +340,10 @@ class DoctorScheduleService:
                         )
                         db.add(day_shift_doctor)
                 
+                # 新增邏輯：如果是週二到週五，自動新增范守仁醫師到開刀房
+                if cls.is_weekday_tuesday_to_friday(date):
+                    cls.add_fan_shouwei_to_or(db, schedule.id)
+                
                 saved_count += 1
                 
             except Exception as e:
@@ -180,6 +406,9 @@ class DoctorScheduleService:
     def get_schedules_by_date_range(cls, db: Session, start_date: str, end_date: str) -> List[Dict]:
         """根據日期範圍獲取班表資料"""
         try:
+            # 移除自動更新調用，避免覆蓋前端手動設置的狀態
+            # cls.update_doctors_active_status_by_time(db)
+            
             schedules = db.query(DoctorSchedule).filter(
                 and_(
                     DoctorSchedule.date >= start_date,
@@ -189,18 +418,22 @@ class DoctorScheduleService:
             
             result = []
             for schedule in schedules:
-                # 獲取白班醫師資料
+                # 獲取白班醫師資料 - 返回所有醫師（包括active=false的）
                 day_shifts = []
                 for doctor in schedule.day_shift_doctors:
-                    if doctor.active:  # 只返回啟用的醫師
-                        day_shifts.append({
-                            'id': doctor.id,
-                            'name': doctor.name,
-                            'summary': doctor.summary,
-                            'time': doctor.time,
-                            'area_code': doctor.area_code,
-                            'active': doctor.active
-                        })
+                    # 檢查是否在開會中
+                    is_in_meeting = cls.is_doctor_in_meeting(doctor.meeting_time) if doctor.meeting_time else False
+                    
+                    day_shifts.append({
+                        'id': doctor.id,
+                        'name': doctor.name,
+                        'summary': doctor.summary,
+                        'time': doctor.time,
+                        'area_code': doctor.area_code,
+                        'active': doctor.active,
+                        'meeting_time': doctor.meeting_time,
+                        'is_in_meeting': is_in_meeting
+                    })
                 
                 result.append({
                     'date': schedule.date,

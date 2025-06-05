@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List, Dict, Optional
 from datetime import datetime, timedelta
 import logging
+from pydantic import BaseModel
 
 from ..core.database import get_db
 from ..services.doctor_schedule_service import DoctorScheduleService
@@ -11,6 +12,9 @@ from ..models.user import User
 from ..core.config import settings
 
 logger = logging.getLogger(__name__)
+
+class AreaCodeUpdateRequest(BaseModel):
+    area_code: str
 
 router = APIRouter(prefix="/doctor-schedules", tags=["醫師班表"])
 
@@ -219,7 +223,7 @@ async def get_scheduler_status(
 @router.put("/doctor/{doctor_id}/area-code")
 async def update_doctor_area_code(
     doctor_id: int,
-    new_area_code: str = Query(..., description="新的區域代碼"),
+    new_area_code: AreaCodeUpdateRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -232,7 +236,7 @@ async def update_doctor_area_code(
         if current_user.role not in ['head_nurse', 'admin']:
             raise HTTPException(status_code=403, detail="權限不足，只有控台醫師可以修改區域代碼")
         
-        success = DoctorScheduleService.update_doctor_area_code(db, doctor_id, new_area_code)
+        success = DoctorScheduleService.update_doctor_area_code(db, doctor_id, new_area_code.area_code)
         
         if not success:
             raise HTTPException(status_code=404, detail="找不到指定的醫師資料")
@@ -336,4 +340,69 @@ async def check_api_health():
             "success": False,
             "external_api_status": "error",
             "message": f"外部API連接失敗: {str(e)}"
-        } 
+        }
+
+@router.put("/doctor/{doctor_id}/meeting-time")
+async def set_doctor_meeting_time(
+    doctor_id: int,
+    meeting_time_data: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    設定醫師開會時間
+    只有控台醫師可以修改
+    """
+    try:
+        # 檢查權限
+        if current_user.role not in ['head_nurse', 'admin']:
+            raise HTTPException(status_code=403, detail="權限不足，只有控台醫師可以設定開會時間")
+        
+        meeting_time = meeting_time_data.get('meeting_time', '')
+        
+        success = DoctorScheduleService.set_doctor_meeting_time(db, doctor_id, meeting_time)
+        
+        if not success:
+            raise HTTPException(status_code=404, detail="找不到指定的醫師資料")
+        
+        return {
+            "success": True,
+            "message": "開會時間設定成功"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"設定醫師開會時間失敗: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"設定開會時間失敗: {str(e)}")
+
+@router.delete("/doctor/{doctor_id}/meeting-time")
+async def delete_doctor_meeting_time(
+    doctor_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    刪除醫師開會時間
+    只有控台醫師可以修改
+    """
+    try:
+        # 檢查權限
+        if current_user.role not in ['head_nurse', 'admin']:
+            raise HTTPException(status_code=403, detail="權限不足，只有控台醫師可以刪除開會時間")
+        
+        success = DoctorScheduleService.delete_doctor_meeting_time(db, doctor_id)
+        
+        if not success:
+            raise HTTPException(status_code=404, detail="找不到指定的醫師資料")
+        
+        return {
+            "success": True,
+            "message": "開會時間刪除成功"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"刪除醫師開會時間失敗: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"刪除開會時間失敗: {str(e)}") 

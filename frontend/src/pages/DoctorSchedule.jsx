@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   Box,
   Typography,
@@ -15,6 +15,10 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  Drawer,
+  Select,
+  MenuItem,
+  FormControl,
 } from '@mui/material';
 import {
   Event as EventIcon,
@@ -25,12 +29,17 @@ import {
   PersonPin as PersonPinIcon,
   ChevronLeft as ChevronLeftIcon,
   ChevronRight as ChevronRightIcon,
+  Close as CloseIcon,
+  Edit as EditIcon,
+  Schedule as ScheduleIcon,
+  Delete as DeleteIcon,
 } from '@mui/icons-material';
-import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
+import { LocalizationProvider, DatePicker, TimePicker } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isToday, startOfToday, addMonths, subMonths } from 'date-fns';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isToday, startOfToday, addMonths, subMonths, setHours, setMinutes } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
 import { doctorScheduleService } from '../utils/api';
+import { formatDoctorName, getDoctorMapping } from '../utils/doctorUtils';
 
 // 日曆單元格樣式 - 參考Dashboard設計
 const calendarCellStyle = {
@@ -56,6 +65,7 @@ const AREA_COLOR_MAPPING = {
   '刀房': '#6b9d6b',          // 綠色系  
   '外圍(3F)': '#6b8fb8',      // 藍色系
   '外圍(高階)': '#8a729b',    // 紫色系
+  '外圍(TAE)': '#b8866b',     // 棕色系
   '值班': '#d4935a',          // 橘色系
   '加班': '#c5804a',          // 深橘色系
   '代班': '#7a5d80',          // 深紫色系
@@ -130,6 +140,8 @@ const RenderDoctorCalendarCell = ({ day, onClick }) => {
             backgroundColor = AREA_COLOR_MAPPING['外圍(3F)'];
           } else if (eventText.includes('/D')) {
             backgroundColor = AREA_COLOR_MAPPING['外圍(高階)'];
+          } else if (eventText.includes('/F')) {
+            backgroundColor = AREA_COLOR_MAPPING['外圍(TAE)'];
           }
           
           return (
@@ -193,18 +205,121 @@ const DoctorSchedule = () => {
   // 新增：彈出框相關的state
   const [selectedDayData, setSelectedDayData] = useState(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  
+  // 新增：醫師資料映射
+  const [doctorMapping, setDoctorMapping] = useState({});
+  
+  // 新增：專門存儲今日班表資料，不受月曆切換影響
+  const [todayScheduleData, setTodayScheduleData] = useState(null);
+  
+  // 新增：防止重複請求的標記
+  const [isLoadingToday, setIsLoadingToday] = useState(false);
 
-  // 載入醫師成員列表
-  const loadMembers = useCallback(async () => {
-    try {
-      const response = await doctorScheduleService.getMembers();
-      setMembers(response.data || []);
-      console.log('醫師成員列表:', response.data);
-    } catch (err) {
-      console.error('載入醫師成員失敗:', err);
-      setError('無法載入醫師成員列表');
-    }
+  // 新增：醫師管理抽屜相關狀態
+  const [selectedDoctor, setSelectedDoctor] = useState(null);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [newAreaCode, setNewAreaCode] = useState('');
+  const [isUpdating, setIsUpdating] = useState(false);
+
+  // 新增：開會相關狀態
+  const [showMeetingTimePicker, setShowMeetingTimePicker] = useState(false);
+  const [meetingStartTime, setMeetingStartTime] = useState(null);
+  const [meetingEndTime, setMeetingEndTime] = useState(null);
+  const [doctorMeetingTimes, setDoctorMeetingTimes] = useState({}); // 存儲醫師開會時間
+  const [meetingTimeStep, setMeetingTimeStep] = useState('start'); // 'start' 或 'end'
+
+  // 新增：上下班確認對話框狀態
+  const [showStatusConfirmDialog, setShowStatusConfirmDialog] = useState(false);
+  const [pendingStatusChange, setPendingStatusChange] = useState(null);
+  const [doctorLeaveStatus, setDoctorLeaveStatus] = useState({}); // 追蹤醫師請假狀態
+
+  // 新增：ref用於控制結束時間下拉選單
+  const endTimeSelectRef = useRef(null);
+
+  // 新增：用戶信息（需要從context或props獲取，這裡先假設）
+  const [currentUser, setCurrentUser] = useState({ role: 'admin' }); // 模擬用戶數據
+
+  // 區域代碼選項
+  const areaCodeOptions = [
+    { value: '控台醫師', label: '控台醫師' },
+    { value: '刀房', label: '刀房' },
+    { value: '外圍(3F)', label: '外圍(3F)' },
+    { value: '外圍(高階)', label: '外圍(高階)' },
+    { value: '外圍(TAE)', label: '外圍(TAE)' },
+  ];
+
+  // 初始化醫師資料映射
+  useEffect(() => {
+    const mapping = getDoctorMapping();
+    setDoctorMapping(mapping);
   }, []);
+
+  // 載入醫師成員列表 - 暫時註解掉，因為用戶認為不必要
+  // const loadMembers = useCallback(async () => {
+  //   try {
+  //     const response = await doctorScheduleService.getMembers();
+  //     setMembers(response.data || []);
+  //     console.log('醫師成員列表:', response.data);
+  //   } catch (err) {
+  //     console.error('載入醫師成員失敗:', err);
+  //     setError('無法載入醫師成員列表');
+  //   }
+  // }, []);
+
+  // 優化：載入今日班表資料的函數，避免重複請求
+  const loadTodayData = useCallback(async () => {
+    // 防止重複請求
+    if (isLoadingToday) {
+      return;
+    }
+    
+    try {
+      setIsLoadingToday(true);
+      const today = new Date();
+      const todayString = format(today, 'yyyyMMdd');
+      
+      // 檢查當前顯示的月份是否包含今天
+      const currentMonthStart = format(startOfMonth(selectedDate), 'yyyyMMdd');
+      const currentMonthEnd = format(endOfMonth(selectedDate), 'yyyyMMdd');
+      const todayMonth = format(startOfMonth(today), 'yyyyMMdd');
+      
+      // 如果當前顯示的月份包含今天，就不需要單獨請求了
+      if (currentMonthStart <= todayString && todayString <= currentMonthEnd) {
+        // 從現有的 rawSchedules 中找今天的資料
+        const todaySchedule = rawSchedules.find(schedule => schedule.date === todayString);
+        
+        if (todaySchedule) {
+          setTodayScheduleData(todaySchedule);
+        } else {
+          setTodayScheduleData(null);
+        }
+        return;
+      }
+      
+      // 只有當顯示的月份不包含今天時，才單獨請求今天所在月份的資料
+      const todayMonthStart = format(startOfMonth(today), 'yyyyMMdd');
+      const todayMonthEnd = format(endOfMonth(today), 'yyyyMMdd');
+      
+      const response = await doctorScheduleService.getEventsInDateRange(todayMonthStart, todayMonthEnd);
+      const responseData = response.data || {};
+      
+      if (responseData.schedules && Array.isArray(responseData.schedules)) {
+        const todaySchedule = responseData.schedules.find(schedule => schedule.date === todayString);
+        if (todaySchedule) {
+          setTodayScheduleData(todaySchedule);
+        } else {
+          setTodayScheduleData(null);
+        }
+      } else {
+        setTodayScheduleData(null);
+      }
+    } catch (err) {
+      console.error('載入今日班表資料失敗:', err);
+      setTodayScheduleData(null);
+    } finally {
+      setIsLoadingToday(false);
+    }
+  }, [selectedDate, rawSchedules, isLoadingToday]);
 
   // 載入指定月份的事件
   const loadEvents = useCallback(async (date) => {
@@ -215,19 +330,23 @@ const DoctorSchedule = () => {
       // 格式化日期為 YYYYMMDD
       const startDate = format(startOfMonth(date), 'yyyyMMdd');
       const endDate = format(endOfMonth(date), 'yyyyMMdd');
-      
-      console.log(`載入醫師班表: ${startDate} 到 ${endDate}`);
+      const today = format(new Date(), 'yyyyMMdd');
       
       const response = await doctorScheduleService.getEventsInDateRange(startDate, endDate);
       const responseData = response.data || {};
-      
-      console.log('醫師班表原始數據:', responseData);
       
       // 處理後端返回的數據格式
       const eventsData = [];
       if (responseData.schedules && Array.isArray(responseData.schedules)) {
         // 保存原始的班表資料
         setRawSchedules(responseData.schedules);
+        
+        // 檢查是否包含今天的資料，如果包含則更新今日班表資料
+        const todayScheduleInThisMonth = responseData.schedules.find(schedule => schedule.date === today);
+        
+        if (todayScheduleInThisMonth) {
+          setTodayScheduleData(todayScheduleInThisMonth);
+        }
         
         responseData.schedules.forEach(daySchedule => {
           const dayDate = daySchedule.date; // YYYYMMDD 格式
@@ -279,7 +398,6 @@ const DoctorSchedule = () => {
         setRawSchedules([]);
       }
       
-      console.log('處理後的醫師班表事件:', eventsData);
       setEvents(eventsData);
       
       // 生成日曆數據
@@ -314,7 +432,7 @@ const DoctorSchedule = () => {
       days.forEach(day => {
         const dayString = format(day, 'yyyy-MM-dd');
         
-        // 找到這一天的所有事件
+        // 找到這一天的所有事件，並過濾掉范守仁
         const dayEvents = eventsData.filter(event => {
           // 處理不同的日期格式
           let eventDate = null;
@@ -331,7 +449,12 @@ const DoctorSchedule = () => {
             eventDate = event.start_date;
           }
           
-          return eventDate === dayString;
+          // 過濾掉范守仁的事件（月曆中不顯示）
+          const isDateMatch = eventDate === dayString;
+          const isNotFanShouwei = !event.name || event.name !== '范守仁';
+          const isNotFanShouweiInSummary = !event.summary || !event.summary.includes('范守仁');
+          
+          return isDateMatch && isNotFanShouwei && isNotFanShouweiInSummary;
         });
         
         week.push({
@@ -378,86 +501,629 @@ const DoctorSchedule = () => {
     loadEvents(nextMonth);
   }, [selectedDate, loadEvents]);
 
-  // 設置自動更新 - 每1分鐘
+  // 優化自動更新 - 只更新當前顯示的月份，避免重複請求
   useEffect(() => {
-    const interval = setInterval(() => {
-      console.log('自動更新醫師班表...');
-      loadEvents(selectedDate);
+    const interval = setInterval(async () => {
+      // 只更新當前顯示的月份
+      await loadEvents(selectedDate);
+      
+      // 如果當前顯示的月份不包含今天，才單獨更新今日資料
+      const today = new Date();
+      const todayString = format(today, 'yyyyMMdd');
+      const currentMonthStart = format(startOfMonth(selectedDate), 'yyyyMMdd');
+      const currentMonthEnd = format(endOfMonth(selectedDate), 'yyyyMMdd');
+      
+      if (!(currentMonthStart <= todayString && todayString <= currentMonthEnd)) {
+        await loadTodayData();
+      }
     }, 60000); // 1分鐘 = 60000毫秒
 
     return () => clearInterval(interval);
-  }, [selectedDate, loadEvents]);
+  }, [selectedDate, loadEvents, loadTodayData]);
 
-  // 初始化載入
+  // 優化初始化載入 - 避免重複請求
   useEffect(() => {
     const initialize = async () => {
-      await loadMembers();
+      // 先載入當前選擇的月份
       await loadEvents(selectedDate);
+      
+      // 檢查當前月份是否包含今天，如果不包含才單獨載入今日資料
+      const today = new Date();
+      const todayString = format(today, 'yyyyMMdd');
+      const currentMonthStart = format(startOfMonth(selectedDate), 'yyyyMMdd');
+      const currentMonthEnd = format(endOfMonth(selectedDate), 'yyyyMMdd');
+      
+      if (!(currentMonthStart <= todayString && todayString <= currentMonthEnd)) {
+        await loadTodayData();
+      }
     };
     
     initialize();
-  }, [loadMembers, loadEvents, selectedDate]);
+  }, []); // 只在組件掛載時執行一次
 
-  // 計算今日班表資訊 - 多人分格顯示
-  const todayScheduleInfo = useMemo(() => {
-    const today = format(new Date(), 'yyyyMMdd');
+  // 新增：檢查醫師是否在上班時間
+  const isDoctorWorkingTime = useCallback((timeRange) => {
+    if (!timeRange) return true; // 如果沒有時間範圍，預設為上班時間
     
-    // 從原始 schedules 資料中找到今日的班表
-    const todaySchedule = rawSchedules.find(schedule => schedule.date === today);
+    try {
+      const now = new Date();
+      // 轉換為UTC+8時間
+      const utc8Now = new Date(now.getTime() + (8 * 60 * 60 * 1000));
+      const currentHour = utc8Now.getHours();
+      const currentMinute = utc8Now.getMinutes();
+      const currentTimeInMinutes = currentHour * 60 + currentMinute;
+      
+      // 解析時間範圍，例如 "08:00-18:00"
+      const timeMatch = timeRange.match(/(\d{2}):(\d{2})-(\d{2}):(\d{2})/);
+      if (!timeMatch) return true;
+      
+      const startHour = parseInt(timeMatch[1]);
+      const startMinute = parseInt(timeMatch[2]);
+      const endHour = parseInt(timeMatch[3]);
+      const endMinute = parseInt(timeMatch[4]);
+      
+      const startTimeInMinutes = startHour * 60 + startMinute;
+      const endTimeInMinutes = endHour * 60 + endMinute;
+      
+      return currentTimeInMinutes >= startTimeInMinutes && currentTimeInMinutes <= endTimeInMinutes;
+    } catch (error) {
+      console.error('解析工作時間失敗:', error);
+      return true;
+    }
+  }, []);
+
+  // 新增：檢查醫師是否在開會時間
+  const isDoctorInMeeting = useCallback((doctorId) => {
+    // 安全檢查醫師ID
+    if (!doctorId) {
+      return false;
+    }
     
-    if (!todaySchedule) {
+    const meetingTime = doctorMeetingTimes[doctorId];
+    if (!meetingTime) return false;
+    
+    try {
+      const now = new Date();
+      // 轉換為UTC+8時間
+      const utc8Now = new Date(now.getTime() + (8 * 60 * 60 * 1000));
+      const currentHour = utc8Now.getHours();
+      const currentMinute = utc8Now.getMinutes();
+      const currentTimeInMinutes = currentHour * 60 + currentMinute;
+      
+      const startTimeInMinutes = meetingTime.startHour * 60 + meetingTime.startMinute;
+      const endTimeInMinutes = meetingTime.endHour * 60 + meetingTime.endMinute;
+      
+      return currentTimeInMinutes >= startTimeInMinutes && currentTimeInMinutes <= endTimeInMinutes;
+    } catch (error) {
+      console.error('檢查開會時間失敗:', error);
+      return false;
+    }
+  }, [doctorMeetingTimes]);
+
+  // 新增：獲取醫師開會時間顯示文字
+  const getDoctorMeetingTimeText = useCallback((doctorId) => {
+    // 安全檢查醫師ID
+    if (!doctorId) {
+      return '';
+    }
+    
+    const meetingTime = doctorMeetingTimes[doctorId];
+    if (!meetingTime) return '';
+    
+    const startTime = `${String(meetingTime.startHour).padStart(2, '0')}:${String(meetingTime.startMinute).padStart(2, '0')}`;
+    const endTime = `${String(meetingTime.endHour).padStart(2, '0')}:${String(meetingTime.endMinute).padStart(2, '0')}`;
+    
+    return `（開會：${startTime}-${endTime}）`;
+  }, [doctorMeetingTimes]);
+
+  // 新增：生成時間選項（以半小時為單位）
+  const generateTimeOptions = useCallback((startHour, startMinute, endHour, endMinute) => {
+    const options = [];
+    
+    for (let hour = startHour; hour <= endHour; hour++) {
+      const startMin = (hour === startHour) ? Math.ceil(startMinute / 30) * 30 : 0;
+      const endMin = (hour === endHour) ? Math.floor(endMinute / 30) * 30 : 30;
+      
+      for (let minute = startMin; minute <= endMin; minute += 30) {
+        if (hour === endHour && minute > endMinute) break;
+        if (minute === 60) continue; // 跳過60分鐘，改為下一小時的0分鐘
+        
+        options.push({
+          hour,
+          minute: minute === 60 ? 0 : minute,
+          displayHour: minute === 60 ? hour + 1 : hour,
+          label: `${String(minute === 60 ? hour + 1 : hour).padStart(2, '0')}:${String(minute === 60 ? 0 : minute).padStart(2, '0')}`
+        });
+      }
+    }
+    
+    return options;
+  }, []);
+
+  // 新增：解析醫師工作時間範圍
+  const parseWorkingTime = useCallback((timeRange) => {
+    if (!timeRange) return null;
+    
+    try {
+      const timeMatch = timeRange.match(/(\d{2}):(\d{2})-(\d{2}):(\d{2})/);
+      if (!timeMatch) return null;
+      
       return {
-        todayDutyDoctor: ['無資料'],
-        todayConsoleDoctor: ['無資料'],
-        todayORDoctors: ['無資料'],
-        todayPeripheral3F: ['無資料'],
-        todayPeripheralAdvanced: ['無資料']
+        startHour: parseInt(timeMatch[1]),
+        startMinute: parseInt(timeMatch[2]),
+        endHour: parseInt(timeMatch[3]),
+        endMinute: parseInt(timeMatch[4])
+      };
+    } catch (error) {
+      console.error('解析工作時間失敗:', error);
+      return null;
+    }
+  }, []);
+
+  // 新增：處理開會時間設定
+  const handleSetMeetingTime = useCallback(async () => {
+    if (!selectedDoctor || !meetingStartTime || !meetingEndTime) return;
+    
+    const startTime = new Date(meetingStartTime);
+    const endTime = new Date(meetingEndTime);
+    
+    if (startTime >= endTime) {
+      setError('結束時間必須晚於開始時間');
+      return;
+    }
+    
+    try {
+      setIsUpdating(true);
+      
+      // 格式化開會時間為 HH:MM-HH:MM 格式
+      const meetingTimeStr = `${String(startTime.getHours()).padStart(2, '0')}:${String(startTime.getMinutes()).padStart(2, '0')}-${String(endTime.getHours()).padStart(2, '0')}:${String(endTime.getMinutes()).padStart(2, '0')}`;
+      
+      console.log(`設定醫師 ${selectedDoctor.id} (${selectedDoctor.name}) 的開會時間為: ${meetingTimeStr}`);
+      
+      const response = await doctorScheduleService.setDoctorMeetingTime(selectedDoctor.id, meetingTimeStr);
+      
+      console.log('設定開會時間API回應:', response);
+      
+      if (response.data && response.data.success) {
+        console.log('開會時間設定成功');
+        
+        // 清除錯誤狀態
+        setError(null);
+        
+        // 重置開會時間設定界面
+        setShowMeetingTimePicker(false);
+        setMeetingStartTime(null);
+        setMeetingEndTime(null);
+        setMeetingTimeStep('start');
+        
+        // 立刻重新載入今日資料和當前月份資料
+        console.log('開始重新載入資料...');
+        await Promise.all([
+          loadTodayData(),
+          loadEvents(selectedDate)
+        ]);
+        console.log('資料重新載入完成');
+        
+        // 更新本地的醫師開會時間記錄（顯示用）
+        setDoctorMeetingTimes(prev => ({
+          ...prev,
+          [selectedDoctor.id]: {
+            startHour: startTime.getHours(),
+            startMinute: startTime.getMinutes(),
+            endHour: endTime.getHours(),
+            endMinute: endTime.getMinutes()
+          }
+        }));
+        
+      } else {
+        // API調用成功但業務邏輯失敗
+        const errorMsg = response.data?.message || '設定開會時間失敗';
+        console.error('業務邏輯失敗:', errorMsg);
+        setError(errorMsg);
+      }
+    } catch (err) {
+      console.error('設定開會時間失敗:', err);
+      
+      // 提取錯誤訊息
+      let errorMessage = '設定開會時間失敗';
+      if (err.response?.data?.detail) {
+        errorMessage = err.response.data.detail;
+      } else if (err.response?.data?.message) {
+        errorMessage = err.response.data.message;
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+      
+      setError(errorMessage);
+    } finally {
+      setIsUpdating(false);
+    }
+  }, [selectedDoctor, meetingStartTime, meetingEndTime, loadTodayData, loadEvents, selectedDate]);
+
+  // 新增：處理時間選擇
+  const handleTimeSelect = useCallback((newValue) => {
+    if (meetingTimeStep === 'start') {
+      setMeetingStartTime(newValue);
+      setMeetingTimeStep('end');
+      // 自動設定結束時間為開始時間+1小時
+      if (newValue) {
+        const endTime = new Date(newValue.getTime() + 60 * 60 * 1000); // 加1小時
+        setMeetingEndTime(endTime);
+        
+        // 延遲一下讓結束時間的下拉選單自動開啟
+        setTimeout(() => {
+          if (endTimeSelectRef.current) {
+            const selectElement = endTimeSelectRef.current.querySelector('div[role="button"]');
+            if (selectElement) {
+              selectElement.click();
+            }
+          }
+        }, 100);
+      }
+    } else {
+      setMeetingEndTime(newValue);
+    }
+  }, [meetingTimeStep]);
+
+  // 新增：重置開會時間設定
+  const resetMeetingTimePicker = useCallback(() => {
+    setShowMeetingTimePicker(false);
+    setMeetingStartTime(null);
+    setMeetingEndTime(null);
+    setMeetingTimeStep('start');
+  }, []);
+
+  // 新增：處理醫師點擊事件
+  const handleDoctorClick = useCallback((doctor) => {
+    if (currentUser.role !== 'admin') return; // 只有管理員可以編輯
+    
+    // 值班醫師不可編輯
+    if (doctor.isDuty) {
+      console.log('值班醫師不可編輯');
+      return;
+    }
+    
+    // 檢查醫師資料是否有效
+    if (!doctor || !doctor.id) {
+      console.error('醫師資料無效，缺少ID:', doctor);
+      setError('醫師資料無效，無法進行編輯');
+      return;
+    }
+    
+    console.log('選中醫師:', doctor);
+    setSelectedDoctor(doctor);
+    setNewAreaCode(doctor.area_code || '');
+    setIsDrawerOpen(true);
+  }, [currentUser.role]);
+
+  // 新增：處理區域代碼變更（自動提交）
+  const handleAreaCodeChange = useCallback(async (newAreaCode) => {
+    if (!selectedDoctor || !newAreaCode) return;
+    
+    // 檢查醫師ID是否有效
+    if (!selectedDoctor.id) {
+      console.error('選中的醫師缺少ID:', selectedDoctor);
+      setError('醫師資料無效，無法更新區域代碼');
+      setIsDrawerOpen(false);
+      setSelectedDoctor(null);
+      return;
+    }
+    
+    try {
+      setIsUpdating(true);
+      console.log(`更新醫師 ${selectedDoctor.id} (${selectedDoctor.name}) 的區域代碼為: ${newAreaCode}`);
+      
+      const response = await doctorScheduleService.updateDoctorAreaCode(selectedDoctor.id, newAreaCode);
+      
+      console.log('API回應:', response);
+      
+      // 檢查回應格式 - 後端返回 {success: true, message: "區域代碼更新成功"}
+      if (response.data && response.data.success) {
+        console.log('區域代碼更新成功');
+        
+        // 清除錯誤狀態
+        setError(null);
+        
+        // 關閉抽屜
+        setIsDrawerOpen(false);
+        setSelectedDoctor(null);
+        
+        // 立刻重新載入今日資料和當前月份資料
+        console.log('開始重新載入資料...');
+        await Promise.all([
+          loadTodayData(),
+          loadEvents(selectedDate)
+        ]);
+        console.log('資料重新載入完成');
+        
+      } else {
+        // API調用成功但業務邏輯失敗
+        const errorMsg = response.data?.message || '更新區域代碼失敗';
+        console.error('業務邏輯失敗:', errorMsg);
+        setError(errorMsg);
+        
+        // 即使失敗也關閉抽屜
+        setIsDrawerOpen(false);
+        setSelectedDoctor(null);
+      }
+    } catch (err) {
+      console.error('更新區域代碼失敗:', err);
+      
+      // 提取錯誤訊息
+      let errorMessage = '更新區域代碼失敗';
+      if (err.response?.data?.detail) {
+        errorMessage = err.response.data.detail;
+      } else if (err.response?.data?.message) {
+        errorMessage = err.response.data.message;
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+      
+      setError(errorMessage);
+      
+      // 錯誤時也關閉抽屜
+      setIsDrawerOpen(false);
+      setSelectedDoctor(null);
+      
+      // 即使發生錯誤也嘗試重新載入資料（因為可能實際上已經成功了）
+      try {
+        console.log('錯誤後嘗試重新載入資料...');
+        await Promise.all([
+          loadTodayData(),
+          loadEvents(selectedDate)
+        ]);
+        console.log('錯誤後資料重新載入完成');
+      } catch (reloadErr) {
+        console.error('重新載入資料也失敗:', reloadErr);
+      }
+    } finally {
+      setIsUpdating(false);
+    }
+  }, [selectedDoctor, loadTodayData, loadEvents, selectedDate]);
+
+  // 新增：切換醫師上下班狀態
+  const handleToggleActiveStatus = useCallback(async () => {
+    if (!selectedDoctor) return;
+    
+    // 檢查醫師ID是否有效
+    if (!selectedDoctor.id) {
+      console.error('選中的醫師缺少ID:', selectedDoctor);
+      setError('醫師資料無效，無法切換狀態');
+      return;
+    }
+    
+    // 顯示確認對話框而不是直接執行
+    const actionText = selectedDoctor.active ? '下班' : '上班';
+    setPendingStatusChange({
+      doctor: selectedDoctor,
+      actionText: actionText,
+      isLeave: false
+    });
+    setShowStatusConfirmDialog(true);
+  }, [selectedDoctor]);
+
+  // 新增：處理醫師請假
+  const handleDoctorLeave = useCallback(async () => {
+    if (!selectedDoctor) return;
+    
+    // 檢查醫師ID是否有效
+    if (!selectedDoctor.id) {
+      console.error('選中的醫師缺少ID:', selectedDoctor);
+      setError('醫師資料無效，無法設定請假');
+      return;
+    }
+    
+    // 顯示確認對話框
+    setPendingStatusChange({
+      doctor: selectedDoctor,
+      actionText: '請假',
+      isLeave: true
+    });
+    setShowStatusConfirmDialog(true);
+  }, [selectedDoctor]);
+
+  // 新增：確認上下班狀態切換
+  const confirmStatusChange = useCallback(async () => {
+    if (!pendingStatusChange) return;
+    
+    try {
+      setIsUpdating(true);
+      
+      if (pendingStatusChange.isLeave) {
+        // 處理請假邏輯
+        console.log(`設定醫師 ${pendingStatusChange.doctor.id} (${pendingStatusChange.doctor.name}) 為請假狀態`);
+        
+        // 請假就是將active設為false，並記錄請假狀態
+        const response = await doctorScheduleService.toggleDoctorActiveStatus(pendingStatusChange.doctor.id);
+        
+        console.log('請假API回應:', response);
+        
+        if (response.data && response.data.success) {
+          console.log('醫師請假設定成功');
+          
+          // 設定為請假狀態
+          setDoctorLeaveStatus(prev => ({
+            ...prev,
+            [pendingStatusChange.doctor.id]: true
+          }));
+          
+          // 清除錯誤狀態
+          setError(null);
+          
+          // 重新載入資料
+          await Promise.all([
+            loadTodayData(),
+            loadEvents(selectedDate)
+          ]);
+          
+          // 更新選中的醫師資料
+          setSelectedDoctor(prev => ({
+            ...prev,
+            active: false
+          }));
+          
+        } else {
+          const errorMsg = response.data?.message || '設定請假失敗';
+          console.error('業務邏輯失敗:', errorMsg);
+          setError(errorMsg);
+        }
+      } else {
+        // 原有的上下班邏輯
+        console.log(`切換醫師 ${pendingStatusChange.doctor.id} (${pendingStatusChange.doctor.name}) 的啟用狀態`);
+        
+        const response = await doctorScheduleService.toggleDoctorActiveStatus(pendingStatusChange.doctor.id);
+        
+        console.log('切換狀態API回應:', response);
+        
+        if (response.data && response.data.success) {
+          console.log('醫師狀態切換成功');
+          
+          // 如果是上班，清除請假狀態
+          if (!pendingStatusChange.doctor.active) {
+            setDoctorLeaveStatus(prev => {
+              const newStatus = { ...prev };
+              delete newStatus[pendingStatusChange.doctor.id];
+              return newStatus;
+            });
+          }
+          
+          // 清除錯誤狀態
+          setError(null);
+          
+          // 重新載入資料
+          await Promise.all([
+            loadTodayData(),
+            loadEvents(selectedDate)
+          ]);
+          
+          // 更新選中的醫師資料
+          setSelectedDoctor(prev => ({
+            ...prev,
+            active: !prev.active
+          }));
+          
+        } else {
+          const errorMsg = response.data?.message || '更新醫師狀態失敗';
+          console.error('業務邏輯失敗:', errorMsg);
+          setError(errorMsg);
+        }
+      }
+    } catch (err) {
+      console.error('更新醫師狀態失敗:', err);
+      
+      // 提取錯誤訊息
+      let errorMessage = pendingStatusChange.isLeave ? '設定請假失敗' : '更新醫師狀態失敗';
+      if (err.response?.data?.detail) {
+        errorMessage = err.response.data.detail;
+      } else if (err.response?.data?.message) {
+        errorMessage = err.response.data.message;
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+      
+      setError(errorMessage);
+      
+      // 即使發生錯誤也嘗試重新載入資料
+      try {
+        await Promise.all([
+          loadTodayData(),
+          loadEvents(selectedDate)
+        ]);
+      } catch (reloadErr) {
+        console.error('重新載入資料也失敗:', reloadErr);
+      }
+    } finally {
+      setIsUpdating(false);
+      setShowStatusConfirmDialog(false);
+      setPendingStatusChange(null);
+    }
+  }, [pendingStatusChange, loadTodayData, loadEvents, selectedDate]);
+
+  // 修改：計算今日班表資訊 - 自動檢查工作時間並更新active狀態
+  const todayScheduleInfo = useMemo(() => {
+    // 使用專門的 todayScheduleData 而不是 rawSchedules
+    if (!todayScheduleData) {
+      return {
+        todayDutyDoctor: [{ name: '無資料', active: true, isDuty: true }],
+        todayConsoleDoctor: [{ name: '無資料', active: true }],
+        todayORDoctors: [{ name: '無資料', active: true }],
+        todayPeripheral3F: [{ name: '無資料', active: true }],
+        todayPeripheralAdvanced: [{ name: '無資料', active: true }],
+        todayPeripheralTAE: [{ name: '無資料', active: true }]
       };
     }
     
-    // 提取值班醫師
-    const todayDutyDoctor = todaySchedule.值班 ? [todaySchedule.值班] : ['無'];
+    // 提取值班醫師 - 值班醫師永遠active=true且不受時間限制
+    const todayDutyDoctor = todayScheduleData.值班 ? [{ 
+      name: todayScheduleData.值班, 
+      active: true, 
+      isDuty: true // 標記為值班醫師
+    }] : [{ name: '無', active: true, isDuty: true }];
     
     // 從白班中根據area_code分類醫師
     let todayConsoleDoctor = [];
     let todayORDoctors = [];
     let todayPeripheral3F = [];
     let todayPeripheralAdvanced = [];
+    let todayPeripheralTAE = [];
     
-    if (todaySchedule.白班 && Array.isArray(todaySchedule.白班)) {
-      todaySchedule.白班.forEach(shift => {
-        if (!shift.active) return; // 只顯示啟用的醫師
+    if (todayScheduleData.白班 && Array.isArray(todayScheduleData.白班)) {
+      todayScheduleData.白班.forEach((shift, index) => {
+        // 檢查是否在工作時間內
+        const isWorkingTime = isDoctorWorkingTime(shift.time);
+        const isInMeeting = isDoctorInMeeting(shift.id);
+        
+        // 使用資料庫中的active狀態，不再自動修改
+        const doctorData = {
+          ...shift,
+          isInMeeting: isInMeeting // 添加開會狀態
+        };
         
         const areaCode = shift.area_code;
-        const doctorName = shift.name;
         
         // 根據後端轉換好的area_code分類
         if (areaCode === '控台醫師') {
-          todayConsoleDoctor.push(doctorName);
+          todayConsoleDoctor.push(doctorData);
         } else if (areaCode === '刀房') {
-          todayORDoctors.push(doctorName);
+          todayORDoctors.push(doctorData);
         } else if (areaCode === '外圍(3F)') {
-          todayPeripheral3F.push(doctorName);
+          todayPeripheral3F.push(doctorData);
         } else if (areaCode === '外圍(高階)') {
-          todayPeripheralAdvanced.push(doctorName);
+          todayPeripheralAdvanced.push(doctorData);
+        } else if (areaCode === '外圍(TAE)') {
+          todayPeripheralTAE.push(doctorData);
         }
       });
     }
     
     // 如果沒有資料，填入預設值
-    if (todayConsoleDoctor.length === 0) todayConsoleDoctor = ['無'];
-    if (todayORDoctors.length === 0) todayORDoctors = ['無'];
-    if (todayPeripheral3F.length === 0) todayPeripheral3F = ['無'];
-    if (todayPeripheralAdvanced.length === 0) todayPeripheralAdvanced = ['無'];
+    if (todayConsoleDoctor.length === 0) {
+      todayConsoleDoctor = [{ name: '無', active: true }];
+    }
+    if (todayORDoctors.length === 0) {
+      todayORDoctors = [{ name: '無', active: true }];
+    }
+    if (todayPeripheral3F.length === 0) {
+      todayPeripheral3F = [{ name: '無', active: true }];
+    }
+    if (todayPeripheralAdvanced.length === 0) {
+      todayPeripheralAdvanced = [{ name: '無', active: true }];
+    }
+    if (todayPeripheralTAE.length === 0) {
+      todayPeripheralTAE = [{ name: '無', active: true }];
+    }
     
-    return {
+    const result = {
       todayDutyDoctor,
       todayConsoleDoctor,
       todayORDoctors,
       todayPeripheral3F,
-      todayPeripheralAdvanced
+      todayPeripheralAdvanced,
+      todayPeripheralTAE
     };
-  }, [rawSchedules]);
+    
+    return result;
+  }, [todayScheduleData, isDoctorWorkingTime, isDoctorInMeeting]); // 依賴改為 todayScheduleData 和相關檢查函數
 
   // 計算統計資料
   const statistics = useMemo(() => {
@@ -507,6 +1173,128 @@ const DoctorSchedule = () => {
     setSelectedDayData(null);
   }, []);
 
+  // 新增：自動下班超時醫師 - 移除此功能，改為後端控制
+  // useEffect(() => {
+  //   // 移除自動更新醫師狀態的前端邏輯
+  // }, []);
+
+  // 新增：自動清除錯誤訊息
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => {
+        setError(null);
+      }, 3000); // 3秒後自動清除錯誤訊息
+      
+      return () => clearTimeout(timer);
+    }
+  }, [error]);
+
+  // 新增：獲取醫師狀態顯示文字
+  const getDoctorStatusText = useCallback((doctor) => {
+    if (!doctor) return '';
+    
+    // 只依賴後端返回的is_in_meeting狀態來判斷是否在開會中
+    if (doctor.is_in_meeting) {
+      return '（開會中）';
+    }
+    
+    // 檢查是否為請假狀態
+    if (doctorLeaveStatus[doctor.id]) {
+      return '（請假）';
+    }
+    
+    // 如果不是啟用狀態，則為下班
+    if (!doctor.active) {
+      return '（已下班）';
+    }
+    
+    return '';
+  }, [doctorLeaveStatus]);
+
+  // 新增：獲取醫師開會時間顯示文字（從後端資料）
+  const getDoctorMeetingTimeDisplay = useCallback((doctor) => {
+    if (!doctor || !doctor.meeting_time) return '';
+    
+    // 顯示開會時間，格式如 "（開會：09:00-10:00）"
+    return `（開會：${doctor.meeting_time}）`;
+  }, []);
+
+  // 新增：處理刪除開會時間
+  const handleDeleteMeetingTime = useCallback(async () => {
+    if (!selectedDoctor) return;
+    
+    // 檢查醫師ID是否有效
+    if (!selectedDoctor.id) {
+      console.error('選中的醫師缺少ID:', selectedDoctor);
+      setError('醫師資料無效，無法刪除開會時間');
+      return;
+    }
+    
+    try {
+      setIsUpdating(true);
+      
+      console.log(`刪除醫師 ${selectedDoctor.id} (${selectedDoctor.name}) 的開會時間`);
+      
+      const response = await doctorScheduleService.deleteDoctorMeetingTime(selectedDoctor.id);
+      
+      console.log('刪除開會時間API回應:', response);
+      
+      if (response.data && response.data.success) {
+        console.log('開會時間刪除成功');
+        
+        // 清除錯誤狀態
+        setError(null);
+        
+        // 立刻重新載入今日資料和當前月份資料
+        console.log('開始重新載入資料...');
+        await Promise.all([
+          loadTodayData(),
+          loadEvents(selectedDate)
+        ]);
+        console.log('資料重新載入完成');
+        
+        // 更新選中醫師的開會時間資料
+        setSelectedDoctor(prev => ({
+          ...prev,
+          meeting_time: null
+        }));
+        
+        // 清除本地的醫師開會時間記錄
+        setDoctorMeetingTimes(prev => {
+          const newTimes = { ...prev };
+          delete newTimes[selectedDoctor.id];
+          return newTimes;
+        });
+        
+        // 成功後自動關閉抽屜，避免焦點問題
+        setIsDrawerOpen(false);
+        setSelectedDoctor(null);
+        
+      } else {
+        // API調用成功但業務邏輯失敗
+        const errorMsg = response.data?.message || '刪除開會時間失敗';
+        console.error('業務邏輯失敗:', errorMsg);
+        setError(errorMsg);
+      }
+    } catch (err) {
+      console.error('刪除開會時間失敗:', err);
+      
+      // 提取錯誤訊息
+      let errorMessage = '刪除開會時間失敗';
+      if (err.response?.data?.detail) {
+        errorMessage = err.response.data.detail;
+      } else if (err.response?.data?.message) {
+        errorMessage = err.response.data.message;
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+      
+      setError(errorMessage);
+    } finally {
+      setIsUpdating(false);
+    }
+  }, [selectedDoctor, loadTodayData, loadEvents, selectedDate]);
+
   return (
     <Box sx={{ 
       p: { xs: 0, sm: 2, md: 3 }, // 手機版本移除padding
@@ -516,40 +1304,37 @@ const DoctorSchedule = () => {
       {/* 今日班表資訊 - 多人分格顯示 */}
       <Box sx={{ px: { xs: 2, sm: 0 }, mb: 3 }}>
         <Grid container spacing={1}> {/* 改為spacing={1}縮小間隙 */}
-          {/* 值班醫師 */}
-          {todayScheduleInfo.todayDutyDoctor.map((doctor, index) => (
+          {/* 控台醫師 - 只在有醫師時顯示 */}
+          {todayScheduleInfo.todayConsoleDoctor.some(doctor => doctor.name !== '無' && doctor.name !== '無資料') && 
+            todayScheduleInfo.todayConsoleDoctor.map((doctor, index) => (
             <Grid 
               item 
-              xs={12 / Math.max(todayScheduleInfo.todayDutyDoctor.length, 1)} 
-              sm={2.4}
-              key={`duty-${index}`}
-            >
-              <Card sx={{ boxShadow: 'none', border: '1px solid #e0e0e0' }}>
-                <CardContent>
-                  <Box>
-                    <Typography variant="h6">{doctor}</Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      今日值班醫師
-                    </Typography>
-                  </Box>
-                </CardContent>
-              </Card>
-            </Grid>
-          ))}
-          
-          {/* 控台醫師 */}
-          {todayScheduleInfo.todayConsoleDoctor.map((doctor, index) => (
-            <Grid 
-              item 
-              xs={12 / Math.max(todayScheduleInfo.todayConsoleDoctor.length, 1)} 
-              sm={2.4}
+              xs={12}
               key={`console-${index}`}
             >
-              <Card sx={{ boxShadow: 'none', border: '1px solid #e0e0e0' }}>
-                <CardContent>
+              <Card sx={{ 
+                boxShadow: 'none', 
+                border: '1px solid #e0e0e0',
+                backgroundColor: AREA_COLOR_MAPPING['控台醫師'],
+                color: 'white',
+                opacity: doctor.active ? 1 : 0.5,
+                cursor: currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' ? 'pointer' : 'default',
+                transition: 'all 0.2s ease',
+                '&:hover': currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' ? {
+                  transform: 'scale(1.02)',
+                  boxShadow: '0 4px 8px rgba(0,0,0,0.1)'
+                } : {}
+              }}
+              onClick={() => currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' && handleDoctorClick(doctor)}
+            >
+                <CardContent sx={{ p: { xs: 1, sm: 1.5 }, '&:last-child': { pb: { xs: 1, sm: 1.5 } } }}>
                   <Box>
-                    <Typography variant="h6">{doctor}</Typography>
-                    <Typography variant="body2" color="text.secondary">
+                    <Typography variant="body1" sx={{ fontSize: { xs: '14px', sm: '16px' }, fontWeight: 'medium' }}>
+                    {formatDoctorName(doctor.name, doctorMapping)}
+                    {getDoctorStatusText(doctor)}
+                    {getDoctorMeetingTimeDisplay(doctor)}
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontSize: { xs: '11px', sm: '12px' }, opacity: 0.9 }}>
                       今日控台醫師
                     </Typography>
                   </Box>
@@ -558,20 +1343,38 @@ const DoctorSchedule = () => {
             </Grid>
           ))}
           
-          {/* 刀房醫師 */}
-          {todayScheduleInfo.todayORDoctors.map((doctor, index) => (
+          {/* 手術室醫師 - 只在有醫師時顯示 */}
+          {todayScheduleInfo.todayORDoctors.some(doctor => doctor.name !== '無' && doctor.name !== '無資料') && 
+            todayScheduleInfo.todayORDoctors.map((doctor, index) => (
             <Grid 
               item 
-              xs={12 / Math.max(todayScheduleInfo.todayORDoctors.length, 1)} 
-              sm={2.4}
+              xs={12}
               key={`or-${index}`}
             >
-              <Card sx={{ boxShadow: 'none', border: '1px solid #e0e0e0' }}>
-                <CardContent>
+              <Card sx={{ 
+                boxShadow: 'none', 
+                border: '1px solid #e0e0e0',
+                backgroundColor: AREA_COLOR_MAPPING['刀房'],
+                color: 'white',
+                opacity: doctor.active ? 1 : 0.5,
+                cursor: currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' ? 'pointer' : 'default',
+                transition: 'all 0.2s ease',
+                '&:hover': currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' ? {
+                  transform: 'scale(1.02)',
+                  boxShadow: '0 4px 8px rgba(0,0,0,0.1)'
+                } : {}
+              }}
+              onClick={() => currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' && handleDoctorClick(doctor)}
+            >
+                <CardContent sx={{ p: { xs: 1, sm: 1.5 }, '&:last-child': { pb: { xs: 1, sm: 1.5 } } }}>
                   <Box>
-                    <Typography variant="h6">{doctor}</Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      刀房
+                    <Typography variant="body1" sx={{ fontSize: { xs: '14px', sm: '16px' }, fontWeight: 'medium' }}>
+                    {formatDoctorName(doctor.name, doctorMapping)}
+                    {getDoctorStatusText(doctor)}
+                    {getDoctorMeetingTimeDisplay(doctor)}
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontSize: { xs: '11px', sm: '12px' }, opacity: 0.9 }}>
+                      手術室
                     </Typography>
                   </Box>
                 </CardContent>
@@ -579,19 +1382,37 @@ const DoctorSchedule = () => {
             </Grid>
           ))}
           
-          {/* 外圍(3F)醫師 */}
-          {todayScheduleInfo.todayPeripheral3F.map((doctor, index) => (
+          {/* 外圍(3F)醫師 - 只在有醫師時顯示 */}
+          {todayScheduleInfo.todayPeripheral3F.some(doctor => doctor.name !== '無' && doctor.name !== '無資料') && 
+            todayScheduleInfo.todayPeripheral3F.map((doctor, index) => (
             <Grid 
               item 
-              xs={12 / Math.max(todayScheduleInfo.todayPeripheral3F.length, 1)} 
-              sm={2.4}
+              xs={12}
               key={`3f-${index}`}
             >
-              <Card sx={{ boxShadow: 'none', border: '1px solid #e0e0e0' }}>
-                <CardContent>
+              <Card sx={{ 
+                boxShadow: 'none', 
+                border: '1px solid #e0e0e0',
+                backgroundColor: AREA_COLOR_MAPPING['外圍(3F)'],
+                color: 'white',
+                opacity: doctor.active ? 1 : 0.5,
+                cursor: currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' ? 'pointer' : 'default',
+                transition: 'all 0.2s ease',
+                '&:hover': currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' ? {
+                  transform: 'scale(1.02)',
+                  boxShadow: '0 4px 8px rgba(0,0,0,0.1)'
+                } : {}
+              }}
+              onClick={() => currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' && handleDoctorClick(doctor)}
+            >
+                <CardContent sx={{ p: { xs: 1, sm: 1.5 }, '&:last-child': { pb: { xs: 1, sm: 1.5 } } }}>
                   <Box>
-                    <Typography variant="h6">{doctor}</Typography>
-                    <Typography variant="body2" color="text.secondary">
+                    <Typography variant="body1" sx={{ fontSize: { xs: '14px', sm: '16px' }, fontWeight: 'medium' }}>
+                    {formatDoctorName(doctor.name, doctorMapping)}
+                    {getDoctorStatusText(doctor)}
+                    {getDoctorMeetingTimeDisplay(doctor)}
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontSize: { xs: '11px', sm: '12px' }, opacity: 0.9 }}>
                       外圍(3F)
                     </Typography>
                   </Box>
@@ -600,20 +1421,111 @@ const DoctorSchedule = () => {
             </Grid>
           ))}
           
-          {/* 外圍(高階)醫師 */}
-          {todayScheduleInfo.todayPeripheralAdvanced.map((doctor, index) => (
+          {/* 外圍(高階)醫師 - 只在有醫師時顯示 */}
+          {todayScheduleInfo.todayPeripheralAdvanced.some(doctor => doctor.name !== '無' && doctor.name !== '無資料') && 
+            todayScheduleInfo.todayPeripheralAdvanced.map((doctor, index) => (
             <Grid 
               item 
-              xs={12 / Math.max(todayScheduleInfo.todayPeripheralAdvanced.length, 1)} 
-              sm={2.4}
+              xs={12}
               key={`advanced-${index}`}
             >
-              <Card sx={{ boxShadow: 'none', border: '1px solid #e0e0e0' }}>
-                <CardContent>
+              <Card sx={{ 
+                boxShadow: 'none', 
+                border: '1px solid #e0e0e0',
+                backgroundColor: AREA_COLOR_MAPPING['外圍(高階)'],
+                color: 'white',
+                opacity: doctor.active ? 1 : 0.5,
+                cursor: currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' ? 'pointer' : 'default',
+                transition: 'all 0.2s ease',
+                '&:hover': currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' ? {
+                  transform: 'scale(1.02)',
+                  boxShadow: '0 4px 8px rgba(0,0,0,0.1)'
+                } : {}
+              }}
+              onClick={() => currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' && handleDoctorClick(doctor)}
+            >
+                <CardContent sx={{ p: { xs: 1, sm: 1.5 }, '&:last-child': { pb: { xs: 1, sm: 1.5 } } }}>
                   <Box>
-                    <Typography variant="h6">{doctor}</Typography>
-                    <Typography variant="body2" color="text.secondary">
+                    <Typography variant="body1" sx={{ fontSize: { xs: '14px', sm: '16px' }, fontWeight: 'medium' }}>
+                    {formatDoctorName(doctor.name, doctorMapping)}
+                    {getDoctorStatusText(doctor)}
+                    {getDoctorMeetingTimeDisplay(doctor)}
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontSize: { xs: '11px', sm: '12px' }, opacity: 0.9 }}>
                       外圍(高階)
+                    </Typography>
+                  </Box>
+                </CardContent>
+              </Card>
+            </Grid>
+          ))}
+          
+          {/* 外圍(TAE)醫師 - 只在有醫師時顯示 */}
+          {todayScheduleInfo.todayPeripheralTAE.some(doctor => doctor.name !== '無' && doctor.name !== '無資料') && 
+            todayScheduleInfo.todayPeripheralTAE.map((doctor, index) => (
+            <Grid 
+              item 
+              xs={12}
+              key={`tae-${index}`}
+            >
+              <Card sx={{ 
+                boxShadow: 'none', 
+                border: '1px solid #e0e0e0',
+                backgroundColor: AREA_COLOR_MAPPING['外圍(TAE)'],
+                color: 'white',
+                opacity: doctor.active ? 1 : 0.5,
+                cursor: currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' ? 'pointer' : 'default',
+                transition: 'all 0.2s ease',
+                '&:hover': currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' ? {
+                  transform: 'scale(1.02)',
+                  boxShadow: '0 4px 8px rgba(0,0,0,0.1)'
+                } : {}
+              }}
+              onClick={() => currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' && handleDoctorClick(doctor)}
+            >
+              <CardContent sx={{ p: { xs: 1, sm: 1.5 }, '&:last-child': { pb: { xs: 1, sm: 1.5 } } }}>
+                <Box>
+                  <Typography variant="body1" sx={{ fontSize: { xs: '14px', sm: '16px' }, fontWeight: 'medium' }}>
+                    {formatDoctorName(doctor.name, doctorMapping)}
+                    {getDoctorStatusText(doctor)}
+                    {getDoctorMeetingTimeDisplay(doctor)}
+                  </Typography>
+                  <Typography variant="body2" sx={{ fontSize: { xs: '11px', sm: '12px' }, opacity: 0.9 }}>
+                    外圍(TAE)
+                  </Typography>
+                </Box>
+              </CardContent>
+            </Card>
+            </Grid>
+          ))}
+          
+          {/* 值班醫師 - 只在有醫師時顯示 */}
+          {todayScheduleInfo.todayDutyDoctor.some(doctor => doctor.name !== '無' && doctor.name !== '無資料') && 
+            todayScheduleInfo.todayDutyDoctor.map((doctor, index) => (
+            <Grid 
+              item 
+              xs={12}
+              key={`duty-${index}`}
+            >
+              <Card sx={{ 
+                boxShadow: 'none', 
+                border: '1px solid #e0e0e0',
+                backgroundColor: AREA_COLOR_MAPPING['值班'],
+                color: 'white',
+                opacity: 1, // 值班醫師永遠100%透明度
+                cursor: 'default', // 值班醫師不可點擊
+                transition: 'all 0.2s ease',
+              }}
+              // 值班醫師不響應點擊事件
+            >
+                <CardContent sx={{ p: { xs: 1, sm: 1.5 }, '&:last-child': { pb: { xs: 1, sm: 1.5 } } }}>
+                  <Box>
+                    <Typography variant="body1" sx={{ fontSize: { xs: '14px', sm: '16px' }, fontWeight: 'medium' }}>
+                    {formatDoctorName(doctor.name, doctorMapping)}
+                    {/* 值班醫師不顯示下班或開會狀態 */}
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontSize: { xs: '11px', sm: '12px' }, opacity: 0.9 }}>
+                      今日值班醫師
                     </Typography>
                   </Box>
                 </CardContent>
@@ -775,33 +1687,6 @@ const DoctorSchedule = () => {
         </Card>
       </Box>
 
-      {/* 醫師列表 */}
-      {members.length > 0 && (
-        <Box sx={{ px: { xs: 2, sm: 0 }, mt: 3 }}>
-          <Card sx={{ 
-            borderRadius: { xs: 0, sm: 1 }, // 手機版本無圓角
-            boxShadow: 'none' // 移除陰影
-          }}>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                醫師成員列表
-              </Typography>
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                {members.map((member) => (
-                  <Chip
-                    key={member.id}
-                    label={`${member.name} (${member.employee_id || 'N/A'})`}
-                    variant="outlined"
-                    color={statistics.doctorCounts[member.name] ? 'primary' : 'default'}
-                    size="small"
-                  />
-                ))}
-              </Box>
-            </CardContent>
-          </Card>
-        </Box>
-      )}
-
       {/* 新增：日期詳細資訊彈出框 */}
       <Dialog
         open={isDialogOpen}
@@ -815,13 +1700,25 @@ const DoctorSchedule = () => {
           }
         }}
       >
-        <DialogTitle sx={{ pb: 1 }}>
+        <DialogTitle sx={{ pb: 1, pr: 6, position: 'relative' }}>
           <Typography variant="h6" component="div">
             {selectedDayData?.date && format(selectedDayData.date, 'yyyy年MM月dd日 (EEEE)', { locale: zhTW })}
           </Typography>
           <Typography variant="body2" color="text.secondary">
             班表詳細資訊
           </Typography>
+          <IconButton
+            aria-label="關閉"
+            onClick={handleCloseDialog}
+            sx={{
+              position: 'absolute',
+              right: 8,
+              top: 8,
+              color: (theme) => theme.palette.grey[500],
+            }}
+          >
+            <CloseIcon />
+          </IconButton>
         </DialogTitle>
         
         <DialogContent sx={{ pt: 1 }}>
@@ -847,6 +1744,8 @@ const DoctorSchedule = () => {
                   backgroundColor = AREA_COLOR_MAPPING['外圍(3F)'];
                 } else if (eventText.includes('/D')) {
                   backgroundColor = AREA_COLOR_MAPPING['外圍(高階)'];
+                } else if (eventText.includes('/F')) {
+                  backgroundColor = AREA_COLOR_MAPPING['外圍(TAE)'];
                 }
 
                 return (
@@ -890,10 +1789,367 @@ const DoctorSchedule = () => {
             </Box>
           )}
         </DialogContent>
-        
-        <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={handleCloseDialog} variant="contained" size="small">
-            關閉
+      </Dialog>
+
+      {/* 新增：醫師管理抽屜 */}
+      <Drawer
+        anchor="bottom"
+        open={isDrawerOpen}
+        onClose={() => {
+          setIsDrawerOpen(false);
+          setSelectedDoctor(null);
+          // 清理會議時間選擇器狀態
+          setShowMeetingTimePicker(false);
+          resetMeetingTimePicker();
+        }}
+        disablePortal={false}
+        disableEnforceFocus={false}
+        disableAutoFocus={false}
+        disableRestoreFocus={false}
+        keepMounted={false}
+        PaperProps={{
+          sx: {
+            maxWidth: '600px',
+            margin: '0 auto',
+            padding: 3,
+          },
+          // 確保抽屜內容可以正確接收焦點
+          role: 'dialog',
+          'aria-modal': 'true',
+          'aria-labelledby': 'drawer-title'
+        }}
+      >
+        <Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+            <Typography variant="h6" id="drawer-title" sx={{ textAlign: 'center', flex: 1 }}>
+              麻醉醫師動態更新
+            </Typography>
+            <IconButton
+              onClick={() => {
+                setIsDrawerOpen(false);
+                setSelectedDoctor(null);
+                setShowMeetingTimePicker(false);
+                resetMeetingTimePicker();
+              }}
+              size="small"
+              sx={{ ml: 1 }}
+              aria-label="關閉醫師管理面板"
+            >
+              <CloseIcon />
+            </IconButton>
+          </Box>
+          
+          {selectedDoctor && (
+            <Box>
+              <Typography variant="body1" sx={{ mb: 2 }}>
+                醫師：{formatDoctorName(selectedDoctor.name, doctorMapping)}
+              </Typography>
+              
+              <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
+                上班時間：{selectedDoctor.time}
+              </Typography>
+              
+              {/* 顯示已設定的開會時間 */}
+              {selectedDoctor.meeting_time && (
+                <Box sx={{ mb: 2, p: 2, backgroundColor: 'rgba(25, 118, 210, 0.08)', borderRadius: 1, border: '1px solid rgba(25, 118, 210, 0.23)' }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Box>
+                      <Typography variant="body2" color="text.secondary" sx={{ fontSize: '12px' }}>
+                        已設定開會時間
+                      </Typography>
+                      <Typography variant="body1" sx={{ fontWeight: 'medium' }}>
+                        {selectedDoctor.meeting_time}
+                      </Typography>
+                    </Box>
+                    <IconButton
+                      onClick={handleDeleteMeetingTime}
+                      disabled={isUpdating}
+                      color="error"
+                      size="small"
+                      sx={{
+                        '&:hover': {
+                          backgroundColor: 'rgba(211, 47, 47, 0.08)'
+                        }
+                      }}
+                    >
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </Box>
+                </Box>
+              )}
+              
+              {/* 區域代碼選擇 - 移除label，選擇後自動提交 */}
+              <FormControl fullWidth sx={{ mb: 3 }}>
+                <Select
+                  value={newAreaCode}
+                  onChange={(e) => {
+                    setNewAreaCode(e.target.value);
+                    handleAreaCodeChange(e.target.value);
+                  }}
+                  displayEmpty
+                  disabled={isUpdating}
+                >
+                  <MenuItem value="" disabled>
+                    選擇區域
+                  </MenuItem>
+                  {areaCodeOptions.map((option) => (
+                    <MenuItem key={option.value} value={option.value}>
+                      {option.label}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              
+              {/* 開會時間選擇器 */}
+              {showMeetingTimePicker && (
+                <Box sx={{ mb: 3 }}>
+                  <Typography variant="subtitle1" sx={{ mb: 2 }}>
+                    {meetingTimeStep === 'start' ? '設定開會開始時間' : '設定開會結束時間'}
+                  </Typography>
+                  
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    {/* 自定義時間選擇下拉選單 */}
+                    <FormControl 
+                      fullWidth
+                      ref={meetingTimeStep === 'end' ? endTimeSelectRef : null}
+                    >
+                      <Select
+                        value={(() => {
+                          const time = meetingTimeStep === 'start' ? meetingStartTime : meetingEndTime;
+                          if (!time) return '';
+                          return `${String(time.getHours()).padStart(2, '0')}:${String(time.getMinutes()).padStart(2, '0')}`;
+                        })()}
+                        onChange={(e) => {
+                          const timeStr = e.target.value;
+                          if (!timeStr) return;
+                          
+                          const [hours, minutes] = timeStr.split(':').map(Number);
+                          const now = new Date();
+                          const selectedTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, minutes);
+                          handleTimeSelect(selectedTime);
+                        }}
+                        displayEmpty
+                        data-testid={meetingTimeStep === 'end' ? 'end-time-select' : 'start-time-select'}
+                      >
+                        <MenuItem value="" disabled>
+                          {meetingTimeStep === 'start' ? '選擇開始時間' : '選擇結束時間'}
+                        </MenuItem>
+                        {(() => {
+                          if (!selectedDoctor) return [];
+                          
+                          const workingTime = parseWorkingTime(selectedDoctor.time);
+                          if (!workingTime) return [];
+                          
+                          const options = [];
+                          const startHour = workingTime.startHour;
+                          const startMinute = workingTime.startMinute;
+                          const endHour = workingTime.endHour;
+                          const endMinute = workingTime.endMinute;
+                          
+                          // 生成30分鐘間隔的時間選項
+                          for (let hour = startHour; hour <= endHour; hour++) {
+                            // 決定這個小時內的分鐘範圍
+                            const minMinute = (hour === startHour) ? Math.ceil(startMinute / 30) * 30 : 0;
+                            const maxMinute = (hour === endHour) ? endMinute : 60;
+                            
+                            for (let minute = minMinute; minute < maxMinute; minute += 30) {
+                              const timeInMinutes = hour * 60 + minute;
+                              const startTimeInMinutes = startHour * 60 + startMinute;
+                              const endTimeInMinutes = endHour * 60 + endMinute;
+                              
+                              // 檢查是否在工作時間範圍內
+                              if (timeInMinutes < startTimeInMinutes || timeInMinutes >= endTimeInMinutes) {
+                                continue;
+                              }
+                              
+                              // 如果是選擇結束時間，確保晚於開始時間
+                              if (meetingTimeStep === 'end' && meetingStartTime) {
+                                const meetingStartTimeInMinutes = meetingStartTime.getHours() * 60 + meetingStartTime.getMinutes();
+                                if (timeInMinutes <= meetingStartTimeInMinutes) {
+                                  continue;
+                                }
+                              }
+                              
+                              const timeStr = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+                              options.push(
+                                <MenuItem key={timeStr} value={timeStr}>
+                                  {timeStr}
+                                </MenuItem>
+                              );
+                            }
+                          }
+                          
+                          return options;
+                        })()}
+                      </Select>
+                    </FormControl>
+                    
+                    {/* 顯示已選擇的時間 */}
+                    {meetingStartTime && (
+                      <Typography variant="body2" color="text.secondary">
+                        開始時間：{meetingStartTime.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false })}
+                      </Typography>
+                    )}
+                    {meetingEndTime && (
+                      <Typography variant="body2" color="text.secondary">
+                        結束時間：{meetingEndTime.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false })}
+                      </Typography>
+                    )}
+                    
+                    {/* 按鈕組 */}
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                      {meetingStartTime && meetingEndTime && (
+                        <Button
+                          variant="contained"
+                          onClick={handleSetMeetingTime}
+                          sx={{ 
+                            flex: 1,
+                            boxShadow: 'none',
+                            '&:hover': {
+                              boxShadow: 'none'
+                            }
+                          }}
+                        >
+                          確認
+                        </Button>
+                      )}
+                      
+                      <Button
+                        variant="outlined"
+                        onClick={resetMeetingTimePicker}
+                        sx={{ 
+                          flex: 1,
+                          boxShadow: 'none',
+                          '&:hover': {
+                            boxShadow: 'none'
+                          }
+                        }}
+                      >
+                        取消
+                      </Button>
+                    </Box>
+                  </Box>
+                </Box>
+              )}
+              
+              {/* 按鈕組 - 均分寬度 */}
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                <Button
+                  variant="contained"
+                  color={selectedDoctor.active ? 'primary' : 'warning'}
+                  onClick={handleToggleActiveStatus}
+                  disabled={isUpdating}
+                  sx={{ 
+                    flex: 1,
+                    boxShadow: 'none',
+                    '&:hover': {
+                      boxShadow: 'none'
+                    }
+                  }}
+                >
+                  {selectedDoctor.active ? '下班' : '上班'}
+                </Button>
+                
+                <Button
+                  variant="outlined"
+                  startIcon={<ScheduleIcon />}
+                  onClick={() => {
+                    if (showMeetingTimePicker) {
+                      resetMeetingTimePicker();
+                    } else {
+                      setShowMeetingTimePicker(true);
+                      setMeetingTimeStep('start');
+                      // 設定預設時間
+                      const now = new Date();
+                      const workingTime = parseWorkingTime(selectedDoctor.time);
+                      if (workingTime) {
+                        const startTime = setMinutes(setHours(now, workingTime.startHour), workingTime.startMinute);
+                        setMeetingStartTime(null); // 先不設定預設值，讓用戶自己選擇
+                        setMeetingEndTime(null);
+                      }
+                    }
+                  }}
+                  sx={{ 
+                    flex: 1,
+                    boxShadow: 'none',
+                    '&:hover': {
+                      boxShadow: 'none'
+                    }
+                  }}
+                >
+                  {showMeetingTimePicker ? '取消開會' : '開會'}
+                </Button>
+                
+                <Button
+                  variant="contained"
+                  onClick={handleDoctorLeave}
+                  disabled={isUpdating}
+                  sx={{ 
+                    flex: 1,
+                    backgroundColor: '#d32f2f',
+                    color: 'white',
+                    boxShadow: 'none',
+                    '&:hover': {
+                      backgroundColor: '#b71c1c',
+                      boxShadow: 'none'
+                    },
+                    '&:disabled': {
+                      backgroundColor: '#ffcdd2'
+                    }
+                  }}
+                >
+                  請假
+                </Button>
+              </Box>
+            </Box>
+          )}
+        </Box>
+      </Drawer>
+
+      {/* 新增：上下班確認對話框 */}
+      <Dialog
+        open={showStatusConfirmDialog}
+        onClose={() => {
+          setShowStatusConfirmDialog(false);
+          setPendingStatusChange(null);
+        }}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>確認{pendingStatusChange?.actionText}</DialogTitle>
+        <DialogContent>
+          <Typography>
+            確定要將 {formatDoctorName(pendingStatusChange?.doctor?.name, doctorMapping)} 設為{pendingStatusChange?.actionText}狀態嗎？
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button 
+            onClick={() => {
+              setShowStatusConfirmDialog(false);
+              setPendingStatusChange(null);
+            }}
+            color="inherit"
+            sx={{
+              boxShadow: 'none',
+              '&:hover': {
+                boxShadow: 'none'
+              }
+            }}
+          >
+            取消
+          </Button>
+          <Button 
+            onClick={confirmStatusChange}
+            variant="contained"
+            disabled={isUpdating}
+            sx={{
+              boxShadow: 'none',
+              '&:hover': {
+                boxShadow: 'none'
+              }
+            }}
+          >
+            確認
           </Button>
         </DialogActions>
       </Dialog>

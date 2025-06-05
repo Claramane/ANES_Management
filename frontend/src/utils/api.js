@@ -129,7 +129,7 @@ api.interceptors.response.use(
 
 // 創建一個特殊的API實例，用於緩存資料的請求，不會觸發自動跳轉
 const apiForCachedData = axios.create({
-  baseURL: process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000/api',
+  baseURL: process.env.REACT_APP_API_BASE_URL || 'https://anesmanagementbackend.zeabur.app/api', // 將預設值改為HTTPS
   timeout: 10000,
   withCredentials: true,
 });
@@ -243,7 +243,7 @@ const apiService = {
     getRequests: () => api.get('/shift-swap/'),
     getById: (id) => api.get(`/shift-swap/${id}`),
     getMyRequests: () => api.get('/shift-swap/me'),
-    create: (data) => api.post('/shift-swap', data),
+    create: (data) => api.post('/shift-swap/', data),
     update: (id, data) => api.put(`/shift-swap/${id}`, data),
     accept: (requestId, data) => api.put(`/shift-swap/${requestId}/accept`, data),
     reject: (requestId) => api.put(`/shift-swap/${requestId}/reject`),
@@ -392,12 +392,12 @@ const doctorScheduleService = {
   updateFromExternal: (startDate, endDate) => 
     api.post(`/doctor-schedules/update-from-external?start_date=${startDate}&end_date=${endDate}`),
   
-  // 更新醫師區域代碼 (僅控台醫師)
+  // 更新醫師區域代碼 (僅管理員)
   updateDoctorAreaCode: (doctorId, newAreaCode) => 
-    api.put(`/doctor-schedules/doctor/${doctorId}/area-code?new_area_code=${encodeURIComponent(newAreaCode)}`),
+    api.put(`/doctor-schedules/doctor/${doctorId}/area-code`, { area_code: newAreaCode }),
   
-  // 切換醫師啟用狀態 (僅控台醫師)
-  toggleDoctorActive: (doctorId) => 
+  // 切換醫師啟用狀態 (僅管理員)
+  toggleDoctorActiveStatus: (doctorId) => 
     api.put(`/doctor-schedules/doctor/${doctorId}/toggle-active`),
   
   // 獲取更新日誌
@@ -408,6 +408,20 @@ const doctorScheduleService = {
   getMemberEventsInDateRange: (startDate, endDate, memberId) => {
     console.warn('getMemberEventsInDateRange已棄用');
     return Promise.reject(new Error('此方法已棄用'));
+  },
+  
+  // 設定醫師開會時間
+  setDoctorMeetingTime: async (doctorId, meetingTime) => {
+    const response = await api.put(`/doctor-schedules/doctor/${doctorId}/meeting-time`, {
+      meeting_time: meetingTime
+    });
+    return response;
+  },
+  
+  // 刪除醫師開會時間
+  deleteDoctorMeetingTime: async (doctorId) => {
+    const response = await api.delete(`/doctor-schedules/doctor/${doctorId}/meeting-time`);
+    return response;
   },
 };
 
