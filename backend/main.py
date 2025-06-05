@@ -73,8 +73,9 @@ app = FastAPI(
 )
 
 # 添加 HTTPS 重定向中間件（僅在生產環境中啟用）
-if settings.IS_PRODUCTION:
-    app.add_middleware(HTTPSRedirectMiddleware)
+# 註解掉因為 Zeabur 平台已經處理 HTTPS 終止，會導致重定向循環
+# if settings.IS_PRODUCTION:
+#     app.add_middleware(HTTPSRedirectMiddleware)
 
 # 添加可信主機中間件
 app.add_middleware(
@@ -92,7 +93,7 @@ app.add_middleware(
     session_cookie="session",
     max_age=3600,  # 1小時過期
     same_site="none",  # 跨域環境使用 none
-    https_only=settings.HTTPS_ONLY  # 根據環境變數決定
+    https_only=False  # 在 Zeabur 環境中設為 False，因為代理已處理 HTTPS
 )
 
 # 配置CORS
