@@ -1,0 +1,31 @@
+{
+  "services": [
+    {
+      "name": "frontend",
+      "root": "frontend",
+      "build": {
+        "commands": [
+          "npm ci",
+          "npm run build"
+        ]
+      },
+      "deploy": {
+        "type": "static",
+        "output": "build"
+      }
+    },
+    {
+      "name": "backend",
+      "root": "backend",
+      "build": {
+        "commands": [
+          "pip install -r requirements.txt"
+        ]
+      },
+      "deploy": {
+        "type": "python",
+        "entry": "main.py"
+      }
+    }
+  ]
+} 
