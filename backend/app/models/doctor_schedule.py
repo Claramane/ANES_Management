@@ -28,7 +28,7 @@ class DayShiftDoctor(Base):
     summary = Column(String(100), nullable=False, comment="班表摘要")
     time = Column(String(20), nullable=False, comment="工作時間")
     area_code = Column(String(20), nullable=False, comment="區域代碼")
-    active = Column(Boolean, default=True, nullable=False, comment="是否啟用")
+    status = Column(String(20), default='on_duty', nullable=False, comment="醫師狀態: on_duty=上班, off_duty=下班, off=請假")
     meeting_time = Column(String(20), nullable=True, comment="開會時間，格式如08:00-10:00")
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)

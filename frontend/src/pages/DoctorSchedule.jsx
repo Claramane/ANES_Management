@@ -1,42 +1,49 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Box,
   Typography,
+  Button,
+  Grid,
   Card,
   CardContent,
-  CircularProgress,
-  Alert,
-  Grid,
-  Chip,
-  Paper,
-  Button,
+  AppBar,
+  Toolbar,
   IconButton,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
-  Drawer,
+  FormControl,
+  InputLabel,
   Select,
   MenuItem,
-  FormControl,
+  Alert,
+  Snackbar,
+  Stack,
+  Divider,
+  CircularProgress,
+  Backdrop,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemButton,
+  Tooltip,
+  Fade
 } from '@mui/material';
-import {
-  Event as EventIcon,
-  CalendarMonth as CalendarMonthIcon,
-  Refresh as RefreshIcon,
-  LocalHospital as LocalHospitalIcon,
-  MedicalServices as MedicalServicesIcon,
-  PersonPin as PersonPinIcon,
-  ChevronLeft as ChevronLeftIcon,
-  ChevronRight as ChevronRightIcon,
-  Close as CloseIcon,
-  Edit as EditIcon,
+import { 
+  ArrowBack as ArrowBackIcon,
+  ArrowForward as ArrowForwardIcon,
   Schedule as ScheduleIcon,
-  Delete as DeleteIcon,
+  AccessTime as AccessTimeIcon,
+  Person as PersonIcon,
+  Close as CloseIcon,
+  Home as HomeIcon,
+  Group as GroupIcon,
+  Delete as DeleteIcon
 } from '@mui/icons-material';
-import { LocalizationProvider, DatePicker, TimePicker } from '@mui/x-date-pickers';
+import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isToday, startOfToday, addMonths, subMonths, setHours, setMinutes } from 'date-fns';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isToday, startOfToday, addMonths, subMonths, setHours, setMinutes, startOfWeek, endOfWeek, addDays, isSameMonth } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
 import { doctorScheduleService } from '../utils/api';
 import { formatDoctorName, getDoctorMapping } from '../utils/doctorUtils';
@@ -194,44 +201,59 @@ const RenderDoctorCalendarCell = ({ day, onClick }) => {
 };
 
 const DoctorSchedule = () => {
+  // 狀態管理
   const [selectedDate, setSelectedDate] = useState(startOfToday());
-  const [calendarData, setCalendarData] = useState([]);
-  const [members, setMembers] = useState([]);
   const [events, setEvents] = useState([]);
-  const [rawSchedules, setRawSchedules] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [todayData, setTodayData] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
   
-  // 新增：彈出框相關的state
+  // 對話框狀態
+  const [areaSelectDialog, setAreaSelectDialog] = useState(false);
+  const [meetingTimeDialog, setMeetingTimeDialog] = useState(false);
+  const [deleteMeetingTimeDialog, setDeleteMeetingTimeDialog] = useState(false);
+  const [selectedDoctor, setSelectedDoctor] = useState(null);
+  const [meetingStartTime, setMeetingStartTime] = useState(null);
+  const [meetingEndTime, setMeetingEndTime] = useState(null);
+  
+  // 確認狀態切換的狀態
+  const [confirmDialog, setConfirmDialog] = useState(false);
+  const [pendingStatusChange, setPendingStatusChange] = useState(null);
+  
+  // 醫師相關狀態
+  const [allDoctors, setAllDoctors] = useState([]);
+  const [dutyDoctor, setDutyDoctor] = useState('');
+
+  // 彈出框相關的state
   const [selectedDayData, setSelectedDayData] = useState(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   
-  // 新增：醫師資料映射
+  // 醫師資料映射
   const [doctorMapping, setDoctorMapping] = useState({});
   
-  // 新增：專門存儲今日班表資料，不受月曆切換影響
+  // 專門存儲今日班表資料，不受月曆切換影響
   const [todayScheduleData, setTodayScheduleData] = useState(null);
   
-  // 新增：防止重複請求的標記
+  // 防止重複請求的標記
   const [isLoadingToday, setIsLoadingToday] = useState(false);
 
-  // 新增：醫師管理抽屜相關狀態
-  const [selectedDoctor, setSelectedDoctor] = useState(null);
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const [newAreaCode, setNewAreaCode] = useState('');
-  const [isUpdating, setIsUpdating] = useState(false);
-
-  // 新增：開會相關狀態
+  // 開會相關狀態
   const [showMeetingTimePicker, setShowMeetingTimePicker] = useState(false);
-  const [meetingStartTime, setMeetingStartTime] = useState(null);
-  const [meetingEndTime, setMeetingEndTime] = useState(null);
   const [doctorMeetingTimes, setDoctorMeetingTimes] = useState({}); // 存儲醫師開會時間
   const [meetingTimeStep, setMeetingTimeStep] = useState('start'); // 'start' 或 'end'
 
-  // 新增：上下班確認對話框狀態
+  // 上下班確認對話框狀態
   const [showStatusConfirmDialog, setShowStatusConfirmDialog] = useState(false);
-  const [pendingStatusChange, setPendingStatusChange] = useState(null);
-  const [doctorLeaveStatus, setDoctorLeaveStatus] = useState({}); // 追蹤醫師請假狀態
+
+  // 抽屜和新區域代碼狀態
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [newAreaCode, setNewAreaCode] = useState('');
+
+  // 原始班表資料
+  const [rawSchedules, setRawSchedules] = useState([]);
+  const [error, setError] = useState(null);
 
   // 新增：ref用於控制結束時間下拉選單
   const endTimeSelectRef = useRef(null);
@@ -247,6 +269,10 @@ const DoctorSchedule = () => {
     { value: '外圍(高階)', label: '外圍(高階)' },
     { value: '外圍(TAE)', label: '外圍(TAE)' },
   ];
+
+  // 日期相關計算
+  const currentYear = selectedDate.getFullYear();
+  const currentMonth = selectedDate.getMonth();
 
   // 初始化醫師資料映射
   useEffect(() => {
@@ -281,7 +307,6 @@ const DoctorSchedule = () => {
       // 檢查當前顯示的月份是否包含今天
       const currentMonthStart = format(startOfMonth(selectedDate), 'yyyyMMdd');
       const currentMonthEnd = format(endOfMonth(selectedDate), 'yyyyMMdd');
-      const todayMonth = format(startOfMonth(today), 'yyyyMMdd');
       
       // 如果當前顯示的月份包含今天，就不需要單獨請求了
       if (currentMonthStart <= todayString && todayString <= currentMonthEnd) {
@@ -366,6 +391,11 @@ const DoctorSchedule = () => {
           // 處理白班資訊 - 使用後端轉換好的area_code
           if (daySchedule.白班 && Array.isArray(daySchedule.白班)) {
             daySchedule.白班.forEach(shift => {
+              // 轉換為統一格式
+              const doctorInfo = {
+                doctor: shift,
+                active: shift.status !== 'off' // 只有請假狀態(off)才是不活躍的
+              };
               eventsData.push({
                 title: shift.summary,
                 summary: shift.summary,
@@ -375,7 +405,7 @@ const DoctorSchedule = () => {
                 name: shift.name,
                 area_code: shift.area_code, // 使用後端轉換好的區域代碼
                 id: shift.id,
-                active: shift.active
+                ...doctorInfo
               });
             });
           }
@@ -881,7 +911,7 @@ const DoctorSchedule = () => {
     }
   }, [selectedDoctor, loadTodayData, loadEvents, selectedDate]);
 
-  // 新增：切換醫師上下班狀態
+  // 新增：處理醫師上下班狀態切換
   const handleToggleActiveStatus = useCallback(async () => {
     if (!selectedDoctor) return;
     
@@ -892,17 +922,19 @@ const DoctorSchedule = () => {
       return;
     }
     
-    // 顯示確認對話框而不是直接執行
-    const actionText = selectedDoctor.active ? '下班' : '上班';
+    // 判斷是上班還是下班
+    const actionText = selectedDoctor.status === 'on_duty' ? '下班' : '上班';
+    
+    // 顯示確認對話框
     setPendingStatusChange({
       doctor: selectedDoctor,
       actionText: actionText,
-      isLeave: false
+      isLeave: false // 這不是請假操作
     });
     setShowStatusConfirmDialog(true);
   }, [selectedDoctor]);
 
-  // 新增：處理醫師請假
+  // 新增：處理醫師請假（包含取消請假）
   const handleDoctorLeave = useCallback(async () => {
     if (!selectedDoctor) return;
     
@@ -913,11 +945,15 @@ const DoctorSchedule = () => {
       return;
     }
     
+    // 判斷是請假還是取消請假 - 使用新的status字段
+    const isCurrentlyOnLeave = selectedDoctor.status === 'off';
+    const actionText = isCurrentlyOnLeave ? '取消請假' : '請假';
+    
     // 顯示確認對話框
     setPendingStatusChange({
       doctor: selectedDoctor,
-      actionText: '請假',
-      isLeave: true
+      actionText: actionText,
+      isLeave: !isCurrentlyOnLeave // 如果目前在請假，那麼這次操作是取消請假
     });
     setShowStatusConfirmDialog(true);
   }, [selectedDoctor]);
@@ -928,116 +964,49 @@ const DoctorSchedule = () => {
     
     try {
       setIsUpdating(true);
+      const { doctor, isLeave } = pendingStatusChange;
       
-      if (pendingStatusChange.isLeave) {
-        // 處理請假邏輯
-        console.log(`設定醫師 ${pendingStatusChange.doctor.id} (${pendingStatusChange.doctor.name}) 為請假狀態`);
-        
-        // 請假就是將active設為false，並記錄請假狀態
-        const response = await doctorScheduleService.toggleDoctorActiveStatus(pendingStatusChange.doctor.id);
-        
-        console.log('請假API回應:', response);
-        
-        if (response.data && response.data.success) {
-          console.log('醫師請假設定成功');
-          
-          // 設定為請假狀態
-          setDoctorLeaveStatus(prev => ({
-            ...prev,
-            [pendingStatusChange.doctor.id]: true
-          }));
-          
-          // 清除錯誤狀態
-          setError(null);
-          
-          // 重新載入資料
-          await Promise.all([
-            loadTodayData(),
-            loadEvents(selectedDate)
-          ]);
-          
-          // 更新選中的醫師資料
-          setSelectedDoctor(prev => ({
-            ...prev,
-            active: false
-          }));
-          
-        } else {
-          const errorMsg = response.data?.message || '設定請假失敗';
-          console.error('業務邏輯失敗:', errorMsg);
-          setError(errorMsg);
-        }
-      } else {
-        // 原有的上下班邏輯
-        console.log(`切換醫師 ${pendingStatusChange.doctor.id} (${pendingStatusChange.doctor.name}) 的啟用狀態`);
-        
-        const response = await doctorScheduleService.toggleDoctorActiveStatus(pendingStatusChange.doctor.id);
-        
-        console.log('切換狀態API回應:', response);
-        
-        if (response.data && response.data.success) {
-          console.log('醫師狀態切換成功');
-          
-          // 如果是上班，清除請假狀態
-          if (!pendingStatusChange.doctor.active) {
-            setDoctorLeaveStatus(prev => {
-              const newStatus = { ...prev };
-              delete newStatus[pendingStatusChange.doctor.id];
-              return newStatus;
-            });
-          }
-          
-          // 清除錯誤狀態
-          setError(null);
-          
-          // 重新載入資料
-          await Promise.all([
-            loadTodayData(),
-            loadEvents(selectedDate)
-          ]);
-          
-          // 更新選中的醫師資料
-          setSelectedDoctor(prev => ({
-            ...prev,
-            active: !prev.active
-          }));
-          
-        } else {
-          const errorMsg = response.data?.message || '更新醫師狀態失敗';
-          console.error('業務邏輯失敗:', errorMsg);
-          setError(errorMsg);
-        }
+      // 使用新的API端點
+      const endpoint = isLeave ? 'toggle-leave' : 'toggle-active';
+      const response = await fetch(`/api/doctor-schedules/doctor/${doctor.id}/${endpoint}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
       }
-    } catch (err) {
-      console.error('更新醫師狀態失敗:', err);
+
+      const result = await response.json();
       
-      // 提取錯誤訊息
-      let errorMessage = pendingStatusChange.isLeave ? '設定請假失敗' : '更新醫師狀態失敗';
-      if (err.response?.data?.detail) {
-        errorMessage = err.response.data.detail;
-      } else if (err.response?.data?.message) {
-        errorMessage = err.response.data.message;
-      } else if (err.message) {
-        errorMessage = err.message;
-      }
-      
-      setError(errorMessage);
-      
-      // 即使發生錯誤也嘗試重新載入資料
-      try {
+      if (result.success) {
+        // 更新選中的醫師
+        if (selectedDoctor && selectedDoctor.id === result.data.id) {
+          setSelectedDoctor(prev => ({ ...prev, status: result.data.status }));
+        }
+        
+        // 重新載入資料
         await Promise.all([
           loadTodayData(),
           loadEvents(selectedDate)
         ]);
-      } catch (reloadErr) {
-        console.error('重新載入資料也失敗:', reloadErr);
+        
+      } else {
+        throw new Error(result.message || '狀態切換失敗');
       }
+      
+    } catch (error) {
+      console.error('狀態切換失敗:', error);
+      setError(`狀態切換失敗: ${error.message}`);
     } finally {
       setIsUpdating(false);
       setShowStatusConfirmDialog(false);
       setPendingStatusChange(null);
     }
-  }, [pendingStatusChange, loadTodayData, loadEvents, selectedDate]);
+  }, [pendingStatusChange, selectedDoctor, loadTodayData, loadEvents, selectedDate]);
 
   // 修改：計算今日班表資訊 - 自動檢查工作時間並更新active狀態
   const todayScheduleInfo = useMemo(() => {
@@ -1069,8 +1038,6 @@ const DoctorSchedule = () => {
     
     if (todayScheduleData.白班 && Array.isArray(todayScheduleData.白班)) {
       todayScheduleData.白班.forEach((shift, index) => {
-        // 檢查是否在工作時間內
-        const isWorkingTime = isDoctorWorkingTime(shift.time);
         const isInMeeting = isDoctorInMeeting(shift.id);
         
         // 使用資料庫中的active狀態，不再自動修改
@@ -1123,7 +1090,7 @@ const DoctorSchedule = () => {
     };
     
     return result;
-  }, [todayScheduleData, isDoctorWorkingTime, isDoctorInMeeting]); // 依賴改為 todayScheduleData 和相關檢查函數
+  }, [todayScheduleData, isDoctorInMeeting]); // 依賴改為 todayScheduleData 和相關檢查函數
 
   // 計算統計資料
   const statistics = useMemo(() => {
@@ -1140,7 +1107,7 @@ const DoctorSchedule = () => {
         doctorName = event.doctor_name;
       } else if (event.title || event.summary) {
         const eventText = event.title || event.summary || '';
-        const matchDoctor = eventText.match(/^([^\/值]+)/);
+        const matchDoctor = eventText.match(/^([^/值]+)/);
         if (matchDoctor) {
           doctorName = matchDoctor[1].trim();
         }
@@ -1203,8 +1170,13 @@ const DoctorSchedule = () => {
       return '（請假）';
     }
     
-    // 如果不是啟用狀態，則為下班
-    if (!doctor.active) {
+    // 如果是請假狀態，則為請假
+    if (doctor.status === 'off') {
+      return '（請假）';
+    }
+    
+    // 如果不是上班狀態，則為下班
+    if (doctor.status === 'off_duty') {
       return '（已下班）';
     }
     
@@ -1317,7 +1289,7 @@ const DoctorSchedule = () => {
                 border: '1px solid #e0e0e0',
                 backgroundColor: AREA_COLOR_MAPPING['控台醫師'],
                 color: 'white',
-                opacity: doctor.active ? 1 : 0.5,
+                opacity: doctor.status !== 'off' ? 1 : 0.5,
                 cursor: currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' ? 'pointer' : 'default',
                 transition: 'all 0.2s ease',
                 '&:hover': currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' ? {
@@ -1356,7 +1328,7 @@ const DoctorSchedule = () => {
                 border: '1px solid #e0e0e0',
                 backgroundColor: AREA_COLOR_MAPPING['刀房'],
                 color: 'white',
-                opacity: doctor.active ? 1 : 0.5,
+                opacity: doctor.status !== 'off' ? 1 : 0.5,
                 cursor: currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' ? 'pointer' : 'default',
                 transition: 'all 0.2s ease',
                 '&:hover': currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' ? {
@@ -1395,7 +1367,7 @@ const DoctorSchedule = () => {
                 border: '1px solid #e0e0e0',
                 backgroundColor: AREA_COLOR_MAPPING['外圍(3F)'],
                 color: 'white',
-                opacity: doctor.active ? 1 : 0.5,
+                opacity: doctor.status !== 'off' ? 1 : 0.5,
                 cursor: currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' ? 'pointer' : 'default',
                 transition: 'all 0.2s ease',
                 '&:hover': currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' ? {
@@ -1434,7 +1406,7 @@ const DoctorSchedule = () => {
                 border: '1px solid #e0e0e0',
                 backgroundColor: AREA_COLOR_MAPPING['外圍(高階)'],
                 color: 'white',
-                opacity: doctor.active ? 1 : 0.5,
+                opacity: doctor.status !== 'off' ? 1 : 0.5,
                 cursor: currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' ? 'pointer' : 'default',
                 transition: 'all 0.2s ease',
                 '&:hover': currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' ? {
@@ -1473,7 +1445,7 @@ const DoctorSchedule = () => {
                 border: '1px solid #e0e0e0',
                 backgroundColor: AREA_COLOR_MAPPING['外圍(TAE)'],
                 color: 'white',
-                opacity: doctor.active ? 1 : 0.5,
+                opacity: doctor.status !== 'off' ? 1 : 0.5,
                 cursor: currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' ? 'pointer' : 'default',
                 transition: 'all 0.2s ease',
                 '&:hover': currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' ? {
@@ -2036,7 +2008,7 @@ const DoctorSchedule = () => {
               <Box sx={{ display: 'flex', gap: 1 }}>
                 <Button
                   variant="contained"
-                  color={selectedDoctor.active ? 'primary' : 'warning'}
+                  color={selectedDoctor.status === 'on_duty' ? 'primary' : 'warning'}
                   onClick={handleToggleActiveStatus}
                   disabled={isUpdating}
                   sx={{ 
@@ -2047,7 +2019,28 @@ const DoctorSchedule = () => {
                     }
                   }}
                 >
-                  {selectedDoctor.active ? '下班' : '上班'}
+                  {selectedDoctor.status === 'on_duty' ? '下班' : '上班'}
+                </Button>
+                
+                <Button
+                  variant={selectedDoctor.status === 'off' ? 'outlined' : 'contained'}
+                  color="error"
+                  onClick={handleDoctorLeave}
+                  disabled={isUpdating}
+                  sx={{ 
+                    flex: 1,
+                    boxShadow: 'none',
+                    backgroundColor: selectedDoctor.status === 'off' ? 'transparent' : '#d32f2f',
+                    borderColor: '#d32f2f',
+                    color: selectedDoctor.status === 'off' ? '#d32f2f' : '#fff',
+                    '&:hover': {
+                      boxShadow: 'none',
+                      backgroundColor: selectedDoctor.status === 'off' ? 'rgba(211, 47, 47, 0.04)' : '#c62828',
+                      borderColor: '#d32f2f'
+                    }
+                  }}
+                >
+                  {selectedDoctor.status === 'off' ? '取消請假' : '請假'}
                 </Button>
                 
                 <Button
@@ -2058,47 +2051,18 @@ const DoctorSchedule = () => {
                       resetMeetingTimePicker();
                     } else {
                       setShowMeetingTimePicker(true);
-                      setMeetingTimeStep('start');
-                      // 設定預設時間
-                      const now = new Date();
-                      const workingTime = parseWorkingTime(selectedDoctor.time);
-                      if (workingTime) {
-                        const startTime = setMinutes(setHours(now, workingTime.startHour), workingTime.startMinute);
-                        setMeetingStartTime(null); // 先不設定預設值，讓用戶自己選擇
-                        setMeetingEndTime(null);
-                      }
                     }
                   }}
-                  sx={{ 
-                    flex: 1,
-                    boxShadow: 'none',
-                    '&:hover': {
-                      boxShadow: 'none'
-                    }
-                  }}
-                >
-                  {showMeetingTimePicker ? '取消開會' : '開會'}
-                </Button>
-                
-                <Button
-                  variant="contained"
-                  onClick={handleDoctorLeave}
                   disabled={isUpdating}
                   sx={{ 
                     flex: 1,
-                    backgroundColor: '#d32f2f',
-                    color: 'white',
                     boxShadow: 'none',
                     '&:hover': {
-                      backgroundColor: '#b71c1c',
                       boxShadow: 'none'
-                    },
-                    '&:disabled': {
-                      backgroundColor: '#ffcdd2'
                     }
                   }}
                 >
-                  請假
+                  {showMeetingTimePicker ? '取消' : '會議'}
                 </Button>
               </Box>
             </Box>

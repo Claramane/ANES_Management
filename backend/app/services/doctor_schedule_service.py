@@ -96,9 +96,9 @@ class DoctorScheduleService:
                 doctor.meeting_time = meeting_time
                 doctor.updated_at = datetime.now()
                 
-                # 如果目前在開會時間內，設定為非活躍狀態
-                if meeting_time and cls.is_doctor_in_meeting(meeting_time):
-                    doctor.active = False
+                # 如果目前在開會時間內且是上班狀態，設定為下班狀態
+                if meeting_time and cls.is_doctor_in_meeting(meeting_time) and doctor.status == 'on_duty':
+                    doctor.status = 'off_duty'
                 
                 db.commit()
                 logger.info(f"醫師 {doctor.name} 的開會時間已設定為: {meeting_time}")
@@ -119,9 +119,9 @@ class DoctorScheduleService:
                 doctor.meeting_time = None
                 doctor.updated_at = datetime.now()
                 
-                # 刪除開會時間後，如果在工作時間內，恢復活躍狀態
-                if old_meeting_time and cls.is_doctor_in_working_hours(doctor.time):
-                    doctor.active = True
+                # 刪除開會時間後，如果在工作時間內且不是請假狀態，恢復上班狀態
+                if old_meeting_time and cls.is_doctor_in_working_hours(doctor.time) and doctor.status != 'off':
+                    doctor.status = 'on_duty'
                 
                 db.commit()
                 logger.info(f"醫師 {doctor.name} 的開會時間已刪除，原時間為: {old_meeting_time}")
@@ -134,7 +134,7 @@ class DoctorScheduleService:
     
     @classmethod
     def update_doctors_active_status_by_time(cls, db: Session):
-        """根據工作時間和開會時間在關鍵時刻更新醫師的active狀態"""
+        """根據工作時間和開會時間在關鍵時刻更新醫師的狀態"""
         try:
             # 獲取今天的所有白班醫師
             today = datetime.now().strftime('%Y%m%d')
@@ -162,33 +162,33 @@ class DoctorScheduleService:
                 
                 # 下班時間到了：如果醫師還在上班，自動設為下班
                 end_minutes = end_time.hour * 60 + end_time.minute
-                if abs(current_minutes - end_minutes) <= 1 and doctor.active:
-                    doctor.active = False
+                if abs(current_minutes - end_minutes) <= 1 and doctor.status == 'on_duty':
+                    doctor.status = 'off_duty'
                     doctor.updated_at = datetime.now()
                     updated_count += 1
                     logger.info(f"醫師 {doctor.name} 已自動設為下班狀態（下班時間到）")
                 
-                # 開會時間檢查：開會時設為非活躍，開會結束時恢復活躍（如果在工作時間內且原本就是活躍狀態）
+                # 開會時間檢查：開會時設為下班，開會結束時恢復上班（如果在工作時間內且原本就是上班狀態）
                 if doctor.meeting_time:
                     meeting_start, meeting_end = cls.parse_work_time(doctor.meeting_time)
                     if meeting_start and meeting_end:
                         meeting_start_minutes = meeting_start.hour * 60 + meeting_start.minute
                         meeting_end_minutes = meeting_end.hour * 60 + meeting_end.minute
                         
-                        # 開會開始時間到了：設為非活躍
-                        if abs(current_minutes - meeting_start_minutes) <= 1 and doctor.active:
-                            doctor.active = False
+                        # 開會開始時間到了：設為下班
+                        if abs(current_minutes - meeting_start_minutes) <= 1 and doctor.status == 'on_duty':
+                            doctor.status = 'off_duty'
                             doctor.updated_at = datetime.now()
                             updated_count += 1
-                            logger.info(f"醫師 {doctor.name} 已自動設為非活躍狀態（開會開始）")
+                            logger.info(f"醫師 {doctor.name} 已自動設為下班狀態（開會開始）")
                         
-                        # 開會結束時間到了：如果在工作時間內且開會前是活躍狀態，恢復活躍
-                        # 注意：我們不會自動恢復活躍狀態，因為可能醫師已經請假或下班
-                        if abs(current_minutes - meeting_end_minutes) <= 1 and not doctor.active and not is_in_meeting:
+                        # 開會結束時間到了：如果在工作時間內且開會前是上班狀態，恢復上班
+                        # 注意：我們不會自動恢復上班狀態，因為可能醫師已經請假或下班
+                        if abs(current_minutes - meeting_end_minutes) <= 1 and doctor.status == 'off_duty' and not is_in_meeting:
                             # 檢查是否仍在工作時間內
                             start_minutes = start_time.hour * 60 + start_time.minute
                             if start_minutes <= current_minutes <= end_minutes:
-                                # 只有在確實因為開會而設為非活躍時才自動恢復
+                                # 只有在確實因為開會而設為下班時才自動恢復
                                 # 這裡可以檢查是否有開會記錄，但為了簡化，我們不自動恢復
                                 pass  # 不自動恢復，讓管理員手動處理
             
@@ -197,7 +197,7 @@ class DoctorScheduleService:
                 logger.info(f"已更新 {updated_count} 位醫師的狀態")
             
         except Exception as e:
-            logger.error(f"自動更新醫師active狀態失敗: {str(e)}")
+            logger.error(f"自動更新醫師狀態失敗: {str(e)}")
             db.rollback()
     
     @classmethod
@@ -252,7 +252,7 @@ class DoctorScheduleService:
                     summary='范守仁/B',  # B代表刀房
                     time='08:00-16:00',  # 預設工作時間
                     area_code='刀房',
-                    active=True
+                    status='on_duty'  # 使用新的status字段
                 )
                 db.add(fan_doctor)
                 logger.info(f"已自動新增范守仁醫師到班表ID {schedule_id} 的開刀房")
@@ -336,7 +336,7 @@ class DoctorScheduleService:
                             summary=summary,
                             time=time,
                             area_code=area_code,
-                            active=True
+                            status='on_duty'  # 使用新的status字段
                         )
                         db.add(day_shift_doctor)
                 
@@ -430,7 +430,7 @@ class DoctorScheduleService:
                         'summary': doctor.summary,
                         'time': doctor.time,
                         'area_code': doctor.area_code,
-                        'active': doctor.active,
+                        'status': doctor.status,  # 使用新的status字段
                         'meeting_time': doctor.meeting_time,
                         'is_in_meeting': is_in_meeting
                     })
@@ -473,17 +473,76 @@ class DoctorScheduleService:
             return False
     
     @classmethod
-    def toggle_doctor_active_status(cls, db: Session, doctor_id: int) -> bool:
-        """切換醫師的啟用狀態"""
+    def toggle_doctor_active_status(cls, db: Session, doctor_id: int):
+        """切換醫師的狀態"""
+        # 根據ID查找醫師
+        doctor = db.query(DayShiftDoctor).filter(DayShiftDoctor.id == doctor_id).first()
+        if not doctor:
+            return None
+        
+        # 記錄舊狀態
+        old_status = doctor.status
+        
+        # 切換狀態邏輯：
+        # on_duty -> off_duty
+        # off_duty -> on_duty  
+        # off -> on_duty
+        if doctor.status == 'on_duty':
+            doctor.status = 'off_duty'
+        elif doctor.status == 'off_duty':
+            doctor.status = 'on_duty'
+        elif doctor.status == 'off':
+            doctor.status = 'on_duty'
+        else:
+            # 如果是未知狀態，設為on_duty
+            doctor.status = 'on_duty'
+        
+        # 更新時間戳
+        doctor.updated_at = datetime.utcnow()
+        
         try:
-            doctor = db.query(DayShiftDoctor).filter(DayShiftDoctor.id == doctor_id).first()
-            if doctor:
-                doctor.active = not doctor.active
-                doctor.updated_at = datetime.now()
-                db.commit()
-                return True
-            return False
+            db.commit()
+            db.refresh(doctor)
+            
+            logger.info(f"醫師 {doctor.name} 狀態已從 {old_status} 切換為 {doctor.status}")
+            return doctor
+            
         except Exception as e:
-            logger.error(f"切換醫師狀態失敗: {str(e)}")
             db.rollback()
-            return False 
+            logger.error(f"更新醫師狀態失敗: {str(e)}")
+            raise e
+    
+    @classmethod
+    def toggle_doctor_leave_status(cls, db: Session, doctor_id: int):
+        """切換醫師的請假狀態"""
+        # 根據ID查找醫師
+        doctor = db.query(DayShiftDoctor).filter(DayShiftDoctor.id == doctor_id).first()
+        if not doctor:
+            return None
+        
+        # 記錄舊狀態
+        old_status = doctor.status
+        
+        # 請假狀態切換邏輯：
+        # 如果目前是請假(off)，則恢復為上班(on_duty)
+        # 如果目前不是請假，則設定為請假(off)
+        if doctor.status == 'off':
+            doctor.status = 'on_duty'  # 取消請假，恢復上班
+        else:
+            doctor.status = 'off'      # 請假
+        
+        # 更新時間戳
+        doctor.updated_at = datetime.utcnow()
+        
+        try:
+            db.commit()
+            db.refresh(doctor)
+            
+            action = "取消請假" if old_status == 'off' else "請假"
+            logger.info(f"醫師 {doctor.name} {action}成功，狀態從 {old_status} 變更為 {doctor.status}")
+            return doctor
+            
+        except Exception as e:
+            db.rollback()
+            logger.error(f"更新醫師請假狀態失敗: {str(e)}")
+            raise e 

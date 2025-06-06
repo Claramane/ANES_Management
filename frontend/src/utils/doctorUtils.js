@@ -5,32 +5,27 @@
  * @returns {Object} 醫師姓名到employee_id的映射
  */
 export const getDoctorMapping = () => {
+  // 讀取環境變數並解析醫師資料
+  const doctorDataEnv = process.env.REACT_APP_DOCTOR_EMPLOYEE_MAPPING;
+
+  if (!doctorDataEnv) {
+    console.warn('未設置 REACT_APP_DOCTOR_EMPLOYEE_MAPPING 環境變數');
+    return null;
+  }
+
   try {
-    // 從環境變數讀取醫師資料
-    const doctorDataEnv = process.env.REACT_APP_DOCTOR_EMPLOYEE_MAPPING;
-    
-    if (!doctorDataEnv) {
-      console.log('未設置 REACT_APP_DOCTOR_EMPLOYEE_MAPPING 環境變數');
-      return {};
-    }
-    
-    // 解析JSON格式的醫師資料
     const doctorArray = JSON.parse(doctorDataEnv);
     
-    // 轉換為姓名到employee_id的映射物件
+    // 將陣列轉換為對象映射
     const doctorMapping = {};
     doctorArray.forEach(doctor => {
-      if (doctor.name && doctor.employee_id) {
         doctorMapping[doctor.name] = doctor.employee_id;
-      }
     });
     
-    console.log('成功載入醫師資料映射:', doctorMapping);
     return doctorMapping;
-    
   } catch (error) {
-    console.error('解析醫師資料環境變數失敗:', error);
-    return {};
+    console.error('解析醫師資料失敗:', error);
+    return null;
   }
 };
 

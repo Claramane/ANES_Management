@@ -255,33 +255,51 @@ async def update_doctor_area_code(
 @router.put("/doctor/{doctor_id}/toggle-active")
 async def toggle_doctor_active_status(
     doctor_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    db: Session = Depends(get_db)
 ):
-    """
-    切換醫師的啟用狀態
-    只有控台醫師可以修改
-    """
+    """切換醫師的上下班狀態"""
     try:
-        # 檢查權限
-        if current_user.role not in ['head_nurse', 'admin']:
-            raise HTTPException(status_code=403, detail="權限不足，只有控台醫師可以修改醫師狀態")
-        
-        success = DoctorScheduleService.toggle_doctor_active_status(db, doctor_id)
-        
-        if not success:
-            raise HTTPException(status_code=404, detail="找不到指定的醫師資料")
-        
-        return {
-            "success": True,
-            "message": "醫師狀態切換成功"
-        }
-        
-    except HTTPException:
-        raise
+        result = DoctorScheduleService.toggle_doctor_active_status(db, doctor_id)
+        if result:
+            return {
+                "success": True,
+                "message": f"醫師狀態已更新為 {result.status}",
+                "data": {
+                    "id": result.id,
+                    "name": result.name,
+                    "status": result.status,
+                    "updated_at": result.updated_at.isoformat()
+                }
+            }
+        else:
+            raise HTTPException(status_code=404, detail="找不到指定的醫師")
     except Exception as e:
-        logger.error(f"切換醫師狀態失敗: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"切換醫師狀態失敗: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"更新醫師狀態失敗: {str(e)}")
+
+@router.put("/doctor/{doctor_id}/toggle-leave")
+async def toggle_doctor_leave_status(
+    doctor_id: int,
+    db: Session = Depends(get_db)
+):
+    """切換醫師的請假狀態"""
+    try:
+        result = DoctorScheduleService.toggle_doctor_leave_status(db, doctor_id)
+        if result:
+            action = "取消請假" if result.status == 'on_duty' else "請假"
+            return {
+                "success": True,
+                "message": f"醫師{action}成功",
+                "data": {
+                    "id": result.id,
+                    "name": result.name,
+                    "status": result.status,
+                    "updated_at": result.updated_at.isoformat()
+                }
+            }
+        else:
+            raise HTTPException(status_code=404, detail="找不到指定的醫師")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"更新醫師請假狀態失敗: {str(e)}")
 
 @router.get("/update-logs")
 async def get_update_logs(
