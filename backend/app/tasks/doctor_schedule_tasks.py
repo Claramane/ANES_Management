@@ -50,12 +50,13 @@ class DoctorScheduleTaskManager:
             logger.info("醫師班表定時任務已停止")
     
     async def update_future_four_months_schedules(self):
-        """更新未來四個月醫師班表"""
+        """更新未來四個月醫師班表（從明天開始）"""
         try:
             now = datetime.now()
             
-            # 從今天開始，獲取未來四個月的資料
-            start_date = now.strftime('%Y%m%d')  # 今天開始
+            # 從明天開始，避免覆蓋今天手動管理的資料
+            tomorrow = now + timedelta(days=1)
+            start_date = tomorrow.strftime('%Y%m%d')  # 明天開始
             
             # 計算四個月後的日期
             future_date = now + timedelta(days=120)  # 約四個月 (4 * 30天)
@@ -83,7 +84,7 @@ class DoctorScheduleTaskManager:
             last_day = (next_month_for_calc - timedelta(days=1)).day
             end_date = f"{end_year}{end_month:02d}{last_day:02d}"
             
-            logger.info(f"開始更新未來四個月醫師班表: {start_date} 到 {end_date}")
+            logger.info(f"開始更新未來四個月醫師班表(從明天開始): {start_date} 到 {end_date}")
             
             result = DoctorScheduleService.update_schedules_from_external_api(start_date, end_date)
             

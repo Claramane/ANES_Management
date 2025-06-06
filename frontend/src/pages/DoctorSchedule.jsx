@@ -928,13 +928,15 @@ const DoctorSchedule = () => {
       setIsUpdating(true);
       const { doctor, isLeave } = pendingStatusChange;
       
-      // 使用新的API端點
-      const endpoint = isLeave ? 'toggle-leave' : 'toggle-active';
-      const response = await fetch(`/api/doctor-schedules/doctor/${doctor.id}/${endpoint}`, {
+      // 使用備用API端點（解決部署同步問題）
+      const action = isLeave ? 'toggle-leave' : 'toggle-active';
+      
+      const response = await fetch(`/api/doctor-schedules/doctor/${doctor.id}/update-status`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
+        body: JSON.stringify({ action: action })
       });
 
       if (!response.ok) {
@@ -955,6 +957,9 @@ const DoctorSchedule = () => {
           loadTodayData(),
           loadEvents(selectedDate)
         ]);
+        
+        // 顯示成功訊息
+        console.log('狀態切換成功:', result.message);
         
       } else {
         throw new Error(result.message || '狀態切換失敗');

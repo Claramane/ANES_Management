@@ -285,7 +285,7 @@ class DoctorScheduleService:
     
     @classmethod
     def save_schedule_data(cls, db: Session, schedules_data: List[Dict]) -> int:
-        """將班表資料儲存到資料庫"""
+        """將班表資料儲存到資料庫，保護手動設置的area_code"""
         saved_count = 0
         
         for schedule_item in schedules_data:
@@ -299,11 +299,27 @@ class DoctorScheduleService:
                     DoctorSchedule.date == date
                 ).first()
                 
+                # 如果是今天的資料，跳過更新以保護手動管理
+                today = datetime.now().strftime('%Y%m%d')
+                if date == today:
+                    logger.info(f"跳過今天({date})的班表更新，保護手動管理的資料")
+                    continue
+                
                 if existing_schedule:
                     # 更新現有資料
                     existing_schedule.duty_doctor = schedule_item.get('值班')
                     existing_schedule.schedule_notes = schedule_item.get('排班注記', [])
                     existing_schedule.updated_at = datetime.now()
+                    
+                    # 保存現有醫師的手動設置資料
+                    existing_doctors = {}
+                    for doctor in existing_schedule.day_shift_doctors:
+                        # 用醫師姓名做為key保存手動設置的資料
+                        existing_doctors[doctor.name] = {
+                            'area_code': doctor.area_code,
+                            'status': doctor.status,
+                            'meeting_time': doctor.meeting_time
+                        }
                     
                     # 刪除舊的白班醫師資料
                     db.query(DayShiftDoctor).filter(
@@ -320,6 +336,7 @@ class DoctorScheduleService:
                     )
                     db.add(schedule)
                     db.flush()  # 確保獲得ID
+                    existing_doctors = {}  # 新記錄沒有現有醫師資料
                 
                 # 處理白班醫師
                 white_shifts = schedule_item.get('白班', [])
@@ -328,7 +345,21 @@ class DoctorScheduleService:
                     time = shift.get('time', '')
                     
                     if summary:
-                        name, area_code = cls.extract_name_and_area_from_summary(summary)
+                        name, area_code_from_api = cls.extract_name_and_area_from_summary(summary)
+                        
+                        # 檢查是否有手動設置的資料
+                        if name in existing_doctors:
+                            # 使用手動設置的資料，保護不被覆蓋
+                            preserved_data = existing_doctors[name]
+                            area_code = preserved_data['area_code']
+                            status = preserved_data['status']
+                            meeting_time = preserved_data['meeting_time']
+                            logger.debug(f"保護醫師 {name} 的手動設置：area_code={area_code}, status={status}")
+                        else:
+                            # 使用API資料
+                            area_code = area_code_from_api
+                            status = 'on_duty'  # 新醫師預設狀態
+                            meeting_time = None
                         
                         day_shift_doctor = DayShiftDoctor(
                             schedule_id=schedule.id,
@@ -336,7 +367,8 @@ class DoctorScheduleService:
                             summary=summary,
                             time=time,
                             area_code=area_code,
-                            status='on_duty'  # 使用新的status字段
+                            status=status,
+                            meeting_time=meeting_time
                         )
                         db.add(day_shift_doctor)
                 

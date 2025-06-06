@@ -116,7 +116,7 @@ async def update_future_four_months_schedules(
     current_user: User = Depends(get_current_user)
 ):
     """
-    手動觸發更新未來四個月醫師班表資料
+    手動觸發更新未來四個月醫師班表資料（從明天開始）
     只有管理員可以手動觸發更新
     """
     try:
@@ -124,11 +124,13 @@ async def update_future_four_months_schedules(
         if current_user.role not in ['head_nurse', 'admin']:
             raise HTTPException(status_code=403, detail="權限不足，只有護理長或管理員可以更新班表")
         
-        # 計算未來四個月的日期範圍
+        # 計算未來四個月的日期範圍（從明天開始）
         from datetime import datetime, timedelta
         
         now = datetime.now()
-        start_date = now.strftime('%Y%m%d')  # 今天開始
+        # 從明天開始，避免覆蓋今天手動管理的資料
+        tomorrow = now + timedelta(days=1)
+        start_date = tomorrow.strftime('%Y%m%d')  # 明天開始
         
         # 更精確的計算：加4個月
         current_year = now.year
@@ -153,14 +155,14 @@ async def update_future_four_months_schedules(
         last_day = (next_month_for_calc - timedelta(days=1)).day
         end_date = f"{end_year}{end_month:02d}{last_day:02d}"
         
-        logger.info(f"手動觸發更新未來四個月醫師班表: {start_date} 到 {end_date}")
+        logger.info(f"手動觸發更新未來四個月醫師班表(從明天開始): {start_date} 到 {end_date}")
         
         # 更新班表
         result = DoctorScheduleService.update_schedules_from_external_api(start_date, end_date)
         
         return {
             "success": True,
-            "message": f"成功更新未來四個月班表資料 ({start_date} 到 {end_date})",
+            "message": f"成功更新未來四個月班表資料 (從明天開始: {start_date} 到 {end_date})",
             "date_range": {
                 "start_date": start_date,
                 "end_date": end_date,
@@ -423,4 +425,44 @@ async def delete_doctor_meeting_time(
         raise
     except Exception as e:
         logger.error(f"刪除醫師開會時間失敗: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"刪除開會時間失敗: {str(e)}") 
+        raise HTTPException(status_code=500, detail=f"刪除開會時間失敗: {str(e)}")
+
+@router.put("/doctor/{doctor_id}/update-status")
+async def update_doctor_status_backup(
+    doctor_id: int,
+    status_data: dict,
+    db: Session = Depends(get_db)
+):
+    """
+    更新醫師狀態的備用端點
+    用於解決部署同步問題
+    """
+    try:
+        action = status_data.get('action', '')  # 'toggle-active' or 'toggle-leave'
+        
+        if action == 'toggle-active':
+            result = DoctorScheduleService.toggle_doctor_active_status(db, doctor_id)
+        elif action == 'toggle-leave':
+            result = DoctorScheduleService.toggle_doctor_leave_status(db, doctor_id)
+        else:
+            raise HTTPException(status_code=400, detail="無效的動作類型")
+            
+        if result:
+            action_msg = "取消請假" if (action == 'toggle-leave' and result.status == 'on_duty') else \
+                        "請假" if (action == 'toggle-leave' and result.status == 'off') else \
+                        f"狀態更新為 {result.status}"
+            
+            return {
+                "success": True,
+                "message": f"醫師{action_msg}成功",
+                "data": {
+                    "id": result.id,
+                    "name": result.name,
+                    "status": result.status,
+                    "updated_at": result.updated_at.isoformat()
+                }
+            }
+        else:
+            raise HTTPException(status_code=404, detail="找不到指定的醫師")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"更新醫師狀態失敗: {str(e)}") 
