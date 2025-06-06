@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Box,
   Typography,
@@ -6,44 +6,28 @@ import {
   Grid,
   Card,
   CardContent,
-  AppBar,
-  Toolbar,
-  IconButton,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
   FormControl,
-  InputLabel,
   Select,
   MenuItem,
   Alert,
-  Snackbar,
-  Stack,
-  Divider,
   CircularProgress,
-  Backdrop,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemButton,
-  Tooltip,
-  Fade
+  Drawer,
+  IconButton
 } from '@mui/material';
 import { 
-  ArrowBack as ArrowBackIcon,
-  ArrowForward as ArrowForwardIcon,
   Schedule as ScheduleIcon,
-  AccessTime as AccessTimeIcon,
-  Person as PersonIcon,
   Close as CloseIcon,
-  Home as HomeIcon,
-  Group as GroupIcon,
-  Delete as DeleteIcon
+  Delete as DeleteIcon,
+  ChevronLeft as ChevronLeftIcon,
+  ChevronRight as ChevronRightIcon
 } from '@mui/icons-material';
 import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isToday, startOfToday, addMonths, subMonths, setHours, setMinutes, startOfWeek, endOfWeek, addDays, isSameMonth } from 'date-fns';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isToday, startOfToday, addMonths, subMonths } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
 import { doctorScheduleService } from '../utils/api';
 import { formatDoctorName, getDoctorMapping } from '../utils/doctorUtils';
@@ -204,27 +188,15 @@ const DoctorSchedule = () => {
   // 狀態管理
   const [selectedDate, setSelectedDate] = useState(startOfToday());
   const [events, setEvents] = useState([]);
-  const [todayData, setTodayData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
-  const [successMessage, setSuccessMessage] = useState('');
   
-  // 對話框狀態
-  const [areaSelectDialog, setAreaSelectDialog] = useState(false);
-  const [meetingTimeDialog, setMeetingTimeDialog] = useState(false);
-  const [deleteMeetingTimeDialog, setDeleteMeetingTimeDialog] = useState(false);
   const [selectedDoctor, setSelectedDoctor] = useState(null);
   const [meetingStartTime, setMeetingStartTime] = useState(null);
   const [meetingEndTime, setMeetingEndTime] = useState(null);
   
   // 確認狀態切換的狀態
-  const [confirmDialog, setConfirmDialog] = useState(false);
   const [pendingStatusChange, setPendingStatusChange] = useState(null);
-  
-  // 醫師相關狀態
-  const [allDoctors, setAllDoctors] = useState([]);
-  const [dutyDoctor, setDutyDoctor] = useState('');
 
   // 彈出框相關的state
   const [selectedDayData, setSelectedDayData] = useState(null);
@@ -255,11 +227,14 @@ const DoctorSchedule = () => {
   const [rawSchedules, setRawSchedules] = useState([]);
   const [error, setError] = useState(null);
 
+  // 日曆資料狀態
+  const [calendarData, setCalendarData] = useState([]);
+
   // 新增：ref用於控制結束時間下拉選單
   const endTimeSelectRef = useRef(null);
 
   // 新增：用戶信息（需要從context或props獲取，這裡先假設）
-  const [currentUser, setCurrentUser] = useState({ role: 'admin' }); // 模擬用戶數據
+  const [currentUser] = useState({ role: 'admin' }); // 模擬用戶數據
 
   // 區域代碼選項
   const areaCodeOptions = [
@@ -270,27 +245,15 @@ const DoctorSchedule = () => {
     { value: '外圍(TAE)', label: '外圍(TAE)' },
   ];
 
-  // 日期相關計算
-  const currentYear = selectedDate.getFullYear();
-  const currentMonth = selectedDate.getMonth();
+  // 日期相關計算 - 移除未使用的變數
+  // const currentYear = selectedDate.getFullYear();
+  // const currentMonth = selectedDate.getMonth();
 
   // 初始化醫師資料映射
   useEffect(() => {
     const mapping = getDoctorMapping();
     setDoctorMapping(mapping);
   }, []);
-
-  // 載入醫師成員列表 - 暫時註解掉，因為用戶認為不必要
-  // const loadMembers = useCallback(async () => {
-  //   try {
-  //     const response = await doctorScheduleService.getMembers();
-  //     setMembers(response.data || []);
-  //     console.log('醫師成員列表:', response.data);
-  //   } catch (err) {
-  //     console.error('載入醫師成員失敗:', err);
-  //     setError('無法載入醫師成員列表');
-  //   }
-  // }, []);
 
   // 優化：載入今日班表資料的函數，避免重複請求
   const loadTodayData = useCallback(async () => {
@@ -500,7 +463,6 @@ const DoctorSchedule = () => {
         }
       });
       
-      console.log(`生成了 ${calendar.length} 週的醫師班表日曆數據`);
       setCalendarData(calendar);
       
     } catch (err) {
@@ -1166,11 +1128,6 @@ const DoctorSchedule = () => {
     }
     
     // 檢查是否為請假狀態
-    if (doctorLeaveStatus[doctor.id]) {
-      return '（請假）';
-    }
-    
-    // 如果是請假狀態，則為請假
     if (doctor.status === 'off') {
       return '（請假）';
     }
@@ -1181,7 +1138,7 @@ const DoctorSchedule = () => {
     }
     
     return '';
-  }, [doctorLeaveStatus]);
+  }, []);
 
   // 新增：獲取醫師開會時間顯示文字（從後端資料）
   const getDoctorMeetingTimeDisplay = useCallback((doctor) => {
