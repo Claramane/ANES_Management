@@ -849,7 +849,6 @@ const WeeklySchedule = () => {
       borderRadius: '3px',
       fontWeight: 'bold',
       border: '1px solid',
-      boxShadow: 'none',
       whiteSpace: 'nowrap',
       overflow: 'hidden',
     };

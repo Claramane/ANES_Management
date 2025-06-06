@@ -215,12 +215,14 @@ function Login() {
           護理班表管理系統
         </Typography>
         <Paper
-          elevation={3}
+          elevation={0}
           sx={{
             p: 4,
             width: '100%',
             mt: 2,
             borderRadius: 2,
+            boxShadow: 'none',
+            border: '1px solid #e0e0e0',
           }}
         >
           <Box

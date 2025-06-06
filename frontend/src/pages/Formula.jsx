@@ -54,7 +54,7 @@ const getItemStyle = (isDragging, draggableStyle) => ({
   userSelect: 'none',
   // 拖動中的樣式變化
   opacity: isDragging ? 0.8 : 1,
-  boxShadow: isDragging ? '0 5px 15px rgba(0, 0, 0, 0.15)' : 'none',
+  boxShadow: 'none',
   // 直接使用原始draggableStyle，不額外添加transform變換
   ...draggableStyle,
   // 強制拖動中的元素始終在頂部

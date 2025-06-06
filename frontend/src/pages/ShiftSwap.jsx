@@ -335,7 +335,7 @@ const calendarStyles = `
   .selected {
     background-color: #e8f5e9;
     transform: scale(1.05);
-    box-shadow: 0 0 10px rgba(0,0,0,0.2);
+    box-shadow: none;
     z-index: 10;
   }
   

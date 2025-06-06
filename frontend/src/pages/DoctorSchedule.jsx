@@ -166,12 +166,12 @@ const RenderDoctorCalendarCell = ({ day, onClick }) => {
                 color: textColor,
                 fontWeight: 500,
                 lineHeight: 1.1, // 更緊密的行高
-                boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
+                boxShadow: 'none',
                 transition: 'all 0.2s ease',
                 flexShrink: 0, // 防止顏色條被壓縮
                 '&:hover': {
                   transform: isPastDate ? 'none' : 'scale(1.02)', // 過期日期不放大
-                  boxShadow: isPastDate ? '0 1px 2px rgba(0,0,0,0.1)' : '0 2px 3px rgba(0,0,0,0.15)'
+                  boxShadow: 'none'
                 }
               }}
               title={eventText} // 顯示完整文字作為tooltip
@@ -1322,7 +1322,7 @@ const DoctorSchedule = () => {
                 transition: 'all 0.2s ease',
                 '&:hover': currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' ? {
                   transform: 'scale(1.02)',
-                  boxShadow: '0 4px 8px rgba(0,0,0,0.1)'
+                  boxShadow: 'none'
                 } : {}
               }}
               onClick={() => currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' && handleDoctorClick(doctor)}
@@ -1361,7 +1361,7 @@ const DoctorSchedule = () => {
                 transition: 'all 0.2s ease',
                 '&:hover': currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' ? {
                   transform: 'scale(1.02)',
-                  boxShadow: '0 4px 8px rgba(0,0,0,0.1)'
+                  boxShadow: 'none'
                 } : {}
               }}
               onClick={() => currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' && handleDoctorClick(doctor)}
@@ -1400,7 +1400,7 @@ const DoctorSchedule = () => {
                 transition: 'all 0.2s ease',
                 '&:hover': currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' ? {
                   transform: 'scale(1.02)',
-                  boxShadow: '0 4px 8px rgba(0,0,0,0.1)'
+                  boxShadow: 'none'
                 } : {}
               }}
               onClick={() => currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' && handleDoctorClick(doctor)}
@@ -1439,7 +1439,7 @@ const DoctorSchedule = () => {
                 transition: 'all 0.2s ease',
                 '&:hover': currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' ? {
                   transform: 'scale(1.02)',
-                  boxShadow: '0 4px 8px rgba(0,0,0,0.1)'
+                  boxShadow: 'none'
                 } : {}
               }}
               onClick={() => currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' && handleDoctorClick(doctor)}
@@ -1478,7 +1478,7 @@ const DoctorSchedule = () => {
                 transition: 'all 0.2s ease',
                 '&:hover': currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' ? {
                   transform: 'scale(1.02)',
-                  boxShadow: '0 4px 8px rgba(0,0,0,0.1)'
+                  boxShadow: 'none'
                 } : {}
               }}
               onClick={() => currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' && handleDoctorClick(doctor)}
@@ -1754,7 +1754,7 @@ const DoctorSchedule = () => {
                     sx={{ 
                       backgroundColor: backgroundColor,
                       color: textColor,
-                      boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                      boxShadow: 'none'
                     }}
                   >
                     <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>

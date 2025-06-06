@@ -59,6 +59,99 @@ const theme = createTheme({
       '"Segoe UI Symbol"',
     ].join(','),
   },
+  components: {
+    // 移除所有按鈕的陰影
+    MuiButton: {
+      styleOverrides: {
+        root: {
+          boxShadow: 'none',
+          '&:hover': {
+            boxShadow: 'none',
+          },
+          '&:active': {
+            boxShadow: 'none',
+          },
+          '&:focus': {
+            boxShadow: 'none',
+          },
+        },
+      },
+    },
+    MuiIconButton: {
+      styleOverrides: {
+        root: {
+          boxShadow: 'none',
+          '&:hover': {
+            boxShadow: 'none',
+          },
+          '&:active': {
+            boxShadow: 'none',
+          },
+          '&:focus': {
+            boxShadow: 'none',
+          },
+        },
+      },
+    },
+    // 移除 Paper 組件的陰影
+    MuiPaper: {
+      styleOverrides: {
+        root: {
+          boxShadow: 'none',
+        },
+      },
+    },
+    // 移除 Card 組件的陰影
+    MuiCard: {
+      styleOverrides: {
+        root: {
+          boxShadow: 'none',
+        },
+      },
+    },
+    // 移除 AppBar 的陰影
+    MuiAppBar: {
+      styleOverrides: {
+        root: {
+          boxShadow: 'none',
+        },
+      },
+    },
+    // 移除 Drawer 的陰影
+    MuiDrawer: {
+      styleOverrides: {
+        paper: {
+          boxShadow: 'none',
+        },
+      },
+    },
+    // 移除 Dialog 的陰影
+    MuiDialog: {
+      styleOverrides: {
+        paper: {
+          boxShadow: 'none',
+        },
+      },
+    },
+    // 移除 Menu 的陰影
+    MuiMenu: {
+      styleOverrides: {
+        paper: {
+          boxShadow: 'none',
+          border: '1px solid #e0e0e0',
+        },
+      },
+    },
+    // 移除 Popover 的陰影
+    MuiPopover: {
+      styleOverrides: {
+        paper: {
+          boxShadow: 'none',
+          border: '1px solid #e0e0e0',
+        },
+      },
+    },
+  },
 }, zhTW);
 
 // 需要驗證的路由
