@@ -47,6 +47,25 @@ async def lifespan(app: FastAPI):
     create_tables()
     print("✅ 資料庫表已初始化")
     
+    # 測試資料庫連接和創建表（從原本的 startup_event 移過來）
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+            db_name = engine.url.database
+            logger.info(f"資料庫連接成功，資料庫名稱：{db_name}")
+        
+        # 列出所有 ORM 定義的表名
+        table_names = list(Base.metadata.tables.keys())
+        logger.info(f"預期建立的資料表：{table_names}")
+        
+        # 創建資料庫表
+        Base.metadata.create_all(bind=engine)
+        logger.info("資料表建立流程完成（如表已存在則不會重複建立）")
+        
+    except Exception as e:
+        logger.error(f"資料庫連接失敗: {str(e)}")
+        raise Exception("無法連接到資料庫，請檢查資料庫配置和連接狀態")
+    
     # 啟動定時任務
     scheduler.add_job(
         auto_update_doctor_status,
@@ -57,10 +76,25 @@ async def lifespan(app: FastAPI):
     scheduler.start()
     print("✅ 定時任務已啟動（每分鐘檢查上下班時間點）")
     
+    # 啟動醫師班表定時任務（從原本的 startup_event 移過來）
+    try:
+        doctor_schedule_task_manager.start_scheduler()
+        logger.info("醫師班表定時任務啟動成功")
+    except Exception as e:
+        logger.error(f"啟動醫師班表定時任務失敗: {str(e)}")
+    
     yield
     
     # 關閉時執行
     print("🛑 正在關閉醫師班表管理系統...")
+    
+    # 停止醫師班表定時任務
+    try:
+        doctor_schedule_task_manager.stop_scheduler()
+        logger.info("醫師班表定時任務已停止")
+    except Exception as e:
+        logger.error(f"停止定時任務時發生錯誤: {str(e)}")
+    
     scheduler.shutdown()
     print("✅ 定時任務已停止")
 
@@ -108,41 +142,6 @@ app.add_middleware(
 # 註冊所有路由
 for router in routers:
     app.include_router(router, prefix="/api")
-
-@app.on_event("startup")
-async def startup_event():
-    try:
-        # 測試資料庫連接
-        with engine.connect() as connection:
-            connection.execute(text("SELECT 1"))
-            db_name = engine.url.database
-            logger.info(f"資料庫連接成功，資料庫名稱：{db_name}")
-        # 列出所有 ORM 定義的表名
-        table_names = list(Base.metadata.tables.keys())
-        logger.info(f"預期建立的資料表：{table_names}")
-        # 創建資料庫表
-        Base.metadata.create_all(bind=engine)
-        logger.info("資料表建立流程完成（如表已存在則不會重複建立）")
-        
-        # 啟動醫師班表定時任務
-        try:
-            doctor_schedule_task_manager.start_scheduler()
-            logger.info("醫師班表定時任務啟動成功")
-        except Exception as e:
-            logger.error(f"啟動醫師班表定時任務失敗: {str(e)}")
-            
-    except Exception as e:
-        logger.error(f"資料庫連接失敗: {str(e)}")
-        raise Exception("無法連接到資料庫，請檢查資料庫配置和連接狀態")
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    try:
-        # 停止醫師班表定時任務
-        doctor_schedule_task_manager.stop_scheduler()
-        logger.info("醫師班表定時任務已停止")
-    except Exception as e:
-        logger.error(f"停止定時任務時發生錯誤: {str(e)}")
 
 @app.get("/")
 async def root():
