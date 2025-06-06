@@ -250,7 +250,7 @@ class DoctorScheduleService:
                     schedule_id=schedule_id,
                     name='范守仁',
                     summary='范守仁/B',  # B代表刀房
-                    time='08:00-18:00',  # 預設工作時間
+                    time='08:00-16:00',  # 預設工作時間
                     area_code='刀房',
                     active=True
                 )
