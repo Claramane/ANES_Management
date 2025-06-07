@@ -133,10 +133,23 @@ app.add_middleware(
 # 配置CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.BACKEND_CORS_ORIGINS,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3001"
+    ],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allow_headers=[
+        "Authorization", 
+        "Content-Type", 
+        "Accept",
+        "Origin",
+        "X-Requested-With"
+    ],
+    # 重要：設置 preflight 緩存時間為 24 小時
+    max_age=86400,  # 24小時內瀏覽器不會重複發送 preflight 請求
 )
 
 # 註冊所有路由

@@ -814,7 +814,7 @@ function Dashboard() {
   }
 
   return (
-    <Box sx={{ p: { xs: 0.25, sm: 2, md: 3 } }}>
+    <Box sx={{ p: { xs: 1.5, sm: 2, md: 3 } }}>
       <Typography variant="h4" gutterBottom>
         哈囉！{user?.full_name || user?.username}
       </Typography>

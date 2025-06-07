@@ -5,6 +5,10 @@ const api = axios.create({
   baseURL: process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000/api', // 使用環境變數，如果未設定則使用預設值
   timeout: 10000, // 請求超時時間
   withCredentials: true, // 預設帶上 cookie，支援 session
+  // 設置默認 headers，減少重複配置
+  headers: {
+    'Content-Type': 'application/json',
+  }
 });
 
 // 添加請求攔截器
@@ -18,6 +22,12 @@ api.interceptors.request.use(
         config.headers.Authorization = `Bearer ${state.token}`;
       }
     }
+    
+    // 只為需要的請求設置 Content-Type
+    if (config.method === 'get' && !config.data) {
+      delete config.headers['Content-Type'];
+    }
+    
     return config;
   },
   (error) => {
@@ -129,7 +139,7 @@ api.interceptors.response.use(
 
 // 創建一個特殊的API實例，用於緩存資料的請求，不會觸發自動跳轉
 const apiForCachedData = axios.create({
-  baseURL: process.env.REACT_APP_API_BASE_URL || 'https://anesmanagementbackend.zeabur.app/api', // 將預設值改為HTTPS
+  baseURL: process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000/api', // 使用環境變數，保持一致性
   timeout: 10000,
   withCredentials: true,
 });
@@ -167,6 +177,21 @@ apiForCachedData.interceptors.response.use(
 
 // API服務
 const apiService = {
+  // 批量請求功能，減少 preflight 請求
+  batch: {
+    // 批量執行多個 GET 請求
+    multipleGet: async (endpoints) => {
+      try {
+        const requests = endpoints.map(endpoint => api.get(endpoint));
+        const responses = await Promise.all(requests);
+        return responses.map(response => response.data);
+      } catch (error) {
+        console.error('批量請求失敗:', error);
+        throw error;
+      }
+    },
+  },
+  
   // 用戶相關
   user: {
     getProfile: () => api.get('/users/me'),
@@ -399,6 +424,10 @@ const doctorScheduleService = {
   // 切換醫師啟用狀態 (僅管理員)
   toggleDoctorActiveStatus: (doctorId) => 
     api.put(`/doctor-schedules/doctor/${doctorId}/toggle-active`),
+
+  // 切換醫師請假狀態 (僅管理員)
+  toggleDoctorLeaveStatus: (doctorId) => 
+    api.put(`/doctor-schedules/doctor/${doctorId}/toggle-leave`),
   
   // 獲取更新日誌
   getUpdateLogs: (limit = 50) => 

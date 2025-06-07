@@ -14,14 +14,14 @@ logger = logging.getLogger(__name__)
 class DoctorScheduleService:
     """醫師班表服務"""
     
-    # 區域代碼轉換映射
-    AREA_CODE_MAPPING = {
+    # 位置代碼對應到區域代碼的映射
+    POSITION_TO_AREA_MAPPING = {
         'A': '控台醫師',
-        'B': '刀房',
+        'B': '手術室',
         'C': '外圍(3F)',
         'D': '外圍(高階)',
-        'E': '刀房',
-        'F': '外圍(TAE)'
+        'E': '手術室',
+        'F': '外圍(TAE)',
     }
     
     @classmethod
@@ -209,7 +209,7 @@ class DoctorScheduleService:
                 area_letter = summary.split('/')[1].strip()
                 # 移除括號內容，只保留字母
                 area_letter = area_letter.split('(')[0].strip()
-                area_code = cls.AREA_CODE_MAPPING.get(area_letter, area_letter)
+                area_code = cls.POSITION_TO_AREA_MAPPING.get(area_letter, area_letter)
                 return name, area_code
             else:
                 return summary.strip(), '未分類'
@@ -232,35 +232,34 @@ class DoctorScheduleService:
             return False
     
     @classmethod
-    def add_fan_shouwei_to_or(cls, db: Session, schedule_id: int):
-        """為開刀房新增范守仁醫師"""
+    def add_fan_shouwen_to_or(cls, db: Session, schedule_id: int):
+        """為手術室新增范守仁醫師"""
         try:
-            # 檢查是否已經存在范守仁醫師在這個班表中
-            existing_fan = db.query(DayShiftDoctor).filter(
-                and_(
-                    DayShiftDoctor.schedule_id == schedule_id,
-                    DayShiftDoctor.name == '范守仁',
-                    DayShiftDoctor.area_code == '刀房'
-                )
+            # 檢查是否已經有范守仁在手術室了
+            existing_doctor = db.query(DayShiftDoctor).filter_by(
+                schedule_id=schedule_id,
+                name='范守仁'
+            ).filter(
+                DayShiftDoctor.area_code == '手術室'
             ).first()
             
-            if not existing_fan:
-                # 新增范守仁醫師到開刀房
-                fan_doctor = DayShiftDoctor(
-                    schedule_id=schedule_id,
-                    name='范守仁',
-                    summary='范守仁/B',  # B代表刀房
-                    time='08:00-16:00',  # 預設工作時間
-                    area_code='刀房',
-                    status='on_duty'  # 使用新的status字段
-                )
-                db.add(fan_doctor)
-                logger.info(f"已自動新增范守仁醫師到班表ID {schedule_id} 的開刀房")
-            else:
-                logger.debug(f"班表ID {schedule_id} 已存在范守仁醫師，跳過新增")
-                
+            if existing_doctor:
+                return
+            
+            # 新增范守仁醫師到手術室
+            new_doctor = DayShiftDoctor(
+                schedule_id=schedule_id,
+                name='范守仁',
+                summary='范守仁/B',  # B代表手術室
+                time='08:00-18:00',
+                area_code='手術室',
+                status='on_duty'
+            )
+            db.add(new_doctor)
+            logger.info(f"已自動新增范守仁醫師到班表ID {schedule_id} 的手術室")
+            
         except Exception as e:
-            logger.error(f"新增范守仁醫師時發生錯誤: {str(e)}")
+            logger.error(f"新增范守仁醫師到手術室失敗: {e}")
     
     @classmethod
     def fetch_external_schedule_data(cls, start_date: str, end_date: str) -> Dict:
@@ -372,9 +371,9 @@ class DoctorScheduleService:
                         )
                         db.add(day_shift_doctor)
                 
-                # 新增邏輯：如果是週二到週五，自動新增范守仁醫師到開刀房
+                # 新增邏輯：如果是週二到週五，自動新增范守仁醫師到手術室
                 if cls.is_weekday_tuesday_to_friday(date):
-                    cls.add_fan_shouwei_to_or(db, schedule.id)
+                    cls.add_fan_shouwen_to_or(db, schedule.id)
                 
                 saved_count += 1
                 

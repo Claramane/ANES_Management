@@ -26,12 +26,16 @@ import {
   TableRow,
   Tooltip,
   Typography,
-  Chip
+  Chip,
+  useTheme,
+  useMediaQuery
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import BlockIcon from '@mui/icons-material/Block';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
+import EditIcon from '@mui/icons-material/Edit';
+import VisibilityIcon from '@mui/icons-material/Visibility';
 import { useUserStore } from '../store/userStore';
 
 const UserManagement = () => {
@@ -39,6 +43,10 @@ const UserManagement = () => {
   const [localError, setLocalError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [errors, setErrors] = useState({});
+  
+  // 響應式設計
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   
   // 對話框狀態
   const [openAddDialog, setOpenAddDialog] = useState(false);
@@ -449,26 +457,20 @@ const UserManagement = () => {
     return { years, months };
   };
   
+  // 編輯模式切換函數
+  const handleEditModeToggle = async () => {
+    const newEditMode = !editMode;
+    const mockEvent = { target: { checked: newEditMode } };
+    await handleEditModeChange(mockEvent);
+  };
+  
+  // 顯示停權用戶切換函數
+  const handleShowInactiveToggle = () => {
+    setShowInactiveUsers(!showInactiveUsers);
+  };
+  
   return (
     <Box sx={{ padding: 3 }}>
-      {/* 頁面標題 */}
-      <Box sx={{ 
-        marginBottom: 3, 
-        display: 'flex', 
-        alignItems: 'center' 
-      }}>
-        <Typography 
-          variant="h5" 
-          component="h1" 
-          sx={{ 
-            fontWeight: 'bold',
-            color: '#1976d2'
-          }}
-        >
-          用戶管理
-        </Typography>
-      </Box>
-      
       {isLoading && (
         <Box sx={{ display: 'flex', justifyContent: 'center', my: 2 }}>
           <CircularProgress />
@@ -490,39 +492,44 @@ const UserManagement = () => {
       {!isLoading && !error && !localError && (
         <>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-            <Box sx={{ display: 'flex', gap: 2 }}>
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={editMode}
-                    onChange={handleEditModeChange}
-                    name="editMode"
-                    color="primary"
-                  />
-                }
-                label="編輯"
-              />
+            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+              <Button
+                variant={editMode ? "contained" : "outlined"}
+                color="primary"
+                startIcon={<EditIcon />}
+                onClick={handleEditModeToggle}
+                size={isMobile ? "small" : "medium"}
+              >
+                編輯
+              </Button>
               
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={showInactiveUsers}
-                    onChange={(e) => setShowInactiveUsers(e.target.checked)}
-                    name="showInactiveUsers"
-                    color="secondary"
-                  />
-                }
-                label="顯示停權用戶"
-              />
+              <Button
+                variant={showInactiveUsers ? "contained" : "outlined"}
+                color="secondary"
+                startIcon={<VisibilityIcon />}
+                onClick={handleShowInactiveToggle}
+                size={isMobile ? "small" : "medium"}
+              >
+                {isMobile ? "停權" : "顯示停權用戶"}
+              </Button>
             </Box>
             
             <Button
               variant="contained"
               color="primary"
-              startIcon={<AddIcon />}
               onClick={handleAddUser}
+              {...(isMobile 
+                ? { 
+                    sx: { 
+                      minWidth: 'auto', 
+                      padding: '8px 12px',
+                      '& .MuiButton-startIcon': { margin: 0 }
+                    }
+                  } 
+                : { startIcon: <AddIcon /> }
+              )}
             >
-              添加護理師
+              {isMobile ? <AddIcon /> : '添加護理師'}
             </Button>
           </Box>
           

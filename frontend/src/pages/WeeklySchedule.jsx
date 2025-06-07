@@ -2009,14 +2009,14 @@ const WeeklySchedule = () => {
           </Select>
         </FormControl>
         
-        {/* 手機版生成PDF和班次顯示按鈕 */}
+        {/* 手機版四個按鈕統一容器 */}
         <Box sx={{ 
           display: { xs: 'flex', md: 'none' }, 
           gap: 1, 
           flexWrap: 'wrap',
           order: { xs: 3, md: 0 },
           width: '100%',
-          justifyContent: 'space-between'
+          justifyContent: 'flex-start'
         }}>
           {hasEditPermission && (
             <Button 
@@ -2025,7 +2025,10 @@ const WeeklySchedule = () => {
               onClick={generatePDF}
               disabled={!monthlySchedule.length}
               size="small"
-              sx={{ flex: 1, maxWidth: '48%' }}
+              sx={{ 
+                flex: { xs: '1 1 45%', sm: '0 0 auto' },
+                minWidth: 'auto'
+              }}
             >
               生成 PDF
             </Button>
@@ -2037,12 +2040,47 @@ const WeeklySchedule = () => {
             onClick={toggleShiftDisplay}
             disabled={!monthlySchedule.length || editMode}
             size="small"
-            sx={{ flex: 1, maxWidth: hasEditPermission ? '48%' : '100%' }}
+            sx={{ 
+              flex: { xs: '1 1 45%', sm: '0 0 auto' },
+              minWidth: 'auto'
+            }}
           >
             {showShiftTime ? '顯示班次代碼' : '顯示班次時間'}
           </Button>
+          
+          {hasEditPermission && (
+            <>
+              <Button 
+                variant="contained" 
+                color={editMode ? "success" : "info"}
+                onClick={toggleEditMode}
+                disabled={!monthlySchedule.length || isSaving}
+                size="small"
+                sx={{ 
+                  flex: { xs: '1 1 45%', sm: '0 0 auto' },
+                  minWidth: 'auto'
+                }}
+              >
+                {isSaving ? '儲存中...' : (editMode ? '儲存工作分配' : '編輯工作分配')}
+              </Button>
+              <Button 
+                variant="contained" 
+                color="warning"
+                onClick={resetWorkAssignments}
+                disabled={!monthlySchedule.length || isSaving || editMode}
+                size="small"
+                sx={{ 
+                  flex: { xs: '1 1 45%', sm: '0 0 auto' },
+                  minWidth: 'auto'
+                }}
+              >
+                重置工作分配
+              </Button>
+            </>
+          )}
         </Box>
         
+        {/* 桌面版按鈕 */}
         {hasEditPermission && ( // 僅在有編輯權限時顯示
           <Button 
             variant="contained" 
@@ -2082,7 +2120,11 @@ const WeeklySchedule = () => {
               color={editMode ? "success" : "info"}
               onClick={toggleEditMode}
               disabled={!monthlySchedule.length || isSaving}
-              sx={{ ml: 2, height: 40 }}
+              sx={{ 
+                ml: 2, 
+                height: 40,
+                display: { xs: 'none', md: 'block' }
+              }}
             >
               {isSaving ? '儲存中...' : (editMode ? '儲存工作分配' : '編輯工作分配')}
             </Button>
@@ -2091,7 +2133,11 @@ const WeeklySchedule = () => {
               color="warning"
               onClick={resetWorkAssignments}
               disabled={!monthlySchedule.length || isSaving || editMode}
-              sx={{ ml: 2, height: 40 }}
+              sx={{ 
+                ml: 2, 
+                height: 40,
+                display: { xs: 'none', md: 'block' }
+              }}
             >
               重置工作分配
             </Button>

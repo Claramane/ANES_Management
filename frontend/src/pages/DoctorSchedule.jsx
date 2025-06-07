@@ -53,7 +53,7 @@ const calendarCellStyle = {
 // 區域代碼對應的顏色映射
 const AREA_COLOR_MAPPING = {
   '控台醫師': '#c5706b',      // 紅色系
-  '刀房': '#6b9d6b',          // 綠色系  
+  '手術室': '#6b9d6b',          // 綠色系  
   '外圍(3F)': '#6b8fb8',      // 藍色系
   '外圍(高階)': '#8a729b',    // 紫色系
   '外圍(TAE)': '#b8866b',     // 棕色系
@@ -126,7 +126,7 @@ const RenderDoctorCalendarCell = ({ day, onClick }) => {
           } else if (eventText.includes('/A')) {
             backgroundColor = AREA_COLOR_MAPPING['控台醫師'];
           } else if (eventText.includes('/B') || eventText.includes('/E')) {
-            backgroundColor = AREA_COLOR_MAPPING['刀房'];
+            backgroundColor = AREA_COLOR_MAPPING['手術室'];
           } else if (eventText.includes('/C')) {
             backgroundColor = AREA_COLOR_MAPPING['外圍(3F)'];
           } else if (eventText.includes('/D')) {
@@ -239,7 +239,7 @@ const DoctorSchedule = () => {
   // 區域代碼選項
   const areaCodeOptions = [
     { value: '控台醫師', label: '控台醫師' },
-    { value: '刀房', label: '刀房' },
+    { value: '手術室', label: '手術室' },
     { value: '外圍(3F)', label: '外圍(3F)' },
     { value: '外圍(高階)', label: '外圍(高階)' },
     { value: '外圍(TAE)', label: '外圍(TAE)' },
@@ -1018,7 +1018,7 @@ const DoctorSchedule = () => {
         // 根據後端轉換好的area_code分類
         if (areaCode === '控台醫師') {
           todayConsoleDoctor.push(doctorData);
-        } else if (areaCode === '刀房') {
+        } else if (areaCode === '手術室') {
           todayORDoctors.push(doctorData);
         } else if (areaCode === '外圍(3F)') {
           todayPeripheral3F.push(doctorData);
@@ -1251,7 +1251,7 @@ const DoctorSchedule = () => {
                 border: '1px solid #e0e0e0',
                 backgroundColor: AREA_COLOR_MAPPING['控台醫師'],
                 color: 'white',
-                opacity: doctor.status !== 'off' ? 1 : 0.5,
+                opacity: (doctor.status === 'off' || doctor.status === 'off_duty' || doctor.is_in_meeting) ? 0.5 : 1,
                 cursor: currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' ? 'pointer' : 'default',
                 transition: 'all 0.2s ease',
                 '&:hover': currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' ? {
@@ -1288,9 +1288,9 @@ const DoctorSchedule = () => {
               <Card sx={{ 
                 boxShadow: 'none', 
                 border: '1px solid #e0e0e0',
-                backgroundColor: AREA_COLOR_MAPPING['刀房'],
+                backgroundColor: AREA_COLOR_MAPPING['手術室'],
                 color: 'white',
-                opacity: doctor.status !== 'off' ? 1 : 0.5,
+                opacity: (doctor.status === 'off' || doctor.status === 'off_duty' || doctor.is_in_meeting) ? 0.5 : 1,
                 cursor: currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' ? 'pointer' : 'default',
                 transition: 'all 0.2s ease',
                 '&:hover': currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' ? {
@@ -1329,7 +1329,7 @@ const DoctorSchedule = () => {
                 border: '1px solid #e0e0e0',
                 backgroundColor: AREA_COLOR_MAPPING['外圍(3F)'],
                 color: 'white',
-                opacity: doctor.status !== 'off' ? 1 : 0.5,
+                opacity: (doctor.status === 'off' || doctor.status === 'off_duty' || doctor.is_in_meeting) ? 0.5 : 1,
                 cursor: currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' ? 'pointer' : 'default',
                 transition: 'all 0.2s ease',
                 '&:hover': currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' ? {
@@ -1368,7 +1368,7 @@ const DoctorSchedule = () => {
                 border: '1px solid #e0e0e0',
                 backgroundColor: AREA_COLOR_MAPPING['外圍(高階)'],
                 color: 'white',
-                opacity: doctor.status !== 'off' ? 1 : 0.5,
+                opacity: (doctor.status === 'off' || doctor.status === 'off_duty' || doctor.is_in_meeting) ? 0.5 : 1,
                 cursor: currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' ? 'pointer' : 'default',
                 transition: 'all 0.2s ease',
                 '&:hover': currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' ? {
@@ -1407,7 +1407,7 @@ const DoctorSchedule = () => {
                 border: '1px solid #e0e0e0',
                 backgroundColor: AREA_COLOR_MAPPING['外圍(TAE)'],
                 color: 'white',
-                opacity: doctor.status !== 'off' ? 1 : 0.5,
+                opacity: (doctor.status === 'off' || doctor.status === 'off_duty' || doctor.is_in_meeting) ? 0.5 : 1,
                 cursor: currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' ? 'pointer' : 'default',
                 transition: 'all 0.2s ease',
                 '&:hover': currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' ? {
@@ -1658,62 +1658,92 @@ const DoctorSchedule = () => {
         <DialogContent sx={{ pt: 1 }}>
           {selectedDayData?.events && selectedDayData.events.length > 0 ? (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              {selectedDayData.events.map((event, index) => {
-                // 決定背景顏色
-                let backgroundColor = '#9e9e9e'; // 預設灰色
-                let textColor = 'white';
-                const eventText = event.summary || event.title || '';
-                
-                if (eventText.includes('值班')) {
-                  backgroundColor = AREA_COLOR_MAPPING['值班'];
-                } else if (eventText.includes('加班')) {
-                  backgroundColor = AREA_COLOR_MAPPING['加班'];
-                } else if (eventText.includes('代班')) {
-                  backgroundColor = AREA_COLOR_MAPPING['代班'];
-                } else if (eventText.includes('/A')) {
-                  backgroundColor = AREA_COLOR_MAPPING['控台醫師'];
-                } else if (eventText.includes('/B') || eventText.includes('/E')) {
-                  backgroundColor = AREA_COLOR_MAPPING['刀房'];
-                } else if (eventText.includes('/C')) {
-                  backgroundColor = AREA_COLOR_MAPPING['外圍(3F)'];
-                } else if (eventText.includes('/D')) {
-                  backgroundColor = AREA_COLOR_MAPPING['外圍(高階)'];
-                } else if (eventText.includes('/F')) {
-                  backgroundColor = AREA_COLOR_MAPPING['外圍(TAE)'];
-                }
+              {selectedDayData.events
+                .sort((a, b) => {
+                  // 解析summary中斜線後面的英文字母進行排序
+                  const getPositionCode = (event) => {
+                    const eventText = event.summary || event.title || '';
+                    
+                    // 值班醫師排在最前面
+                    if (eventText.includes('值班')) {
+                      return 'Z-值班'; // 用Z開頭確保值班排在最前
+                    }
+                    
+                    // 提取斜線後面的字母（如 "張醫師/A" 中的 "A"）
+                    if (eventText.includes('/')) {
+                      const parts = eventText.split('/');
+                      if (parts.length > 1) {
+                        const positionCode = parts[1].trim().charAt(0); // 只取第一個字符
+                        return positionCode;
+                      }
+                    }
+                    
+                    // 沒有斜線的排到最後
+                    return 'ZZ';
+                  };
+                  
+                  const codeA = getPositionCode(a);
+                  const codeB = getPositionCode(b);
+                  
+                  // 按字母順序排序（A、B、C、D、E、F）
+                  return codeA.localeCompare(codeB);
+                })
+                .map((event, index) => {
+                  // 決定背景顏色
+                  let backgroundColor = '#9e9e9e'; // 預設灰色
+                  let textColor = 'white';
+                  const eventText = event.summary || event.title || '';
+                  
+                  if (eventText.includes('值班')) {
+                    backgroundColor = AREA_COLOR_MAPPING['值班'];
+                  } else if (eventText.includes('加班')) {
+                    backgroundColor = AREA_COLOR_MAPPING['加班'];
+                  } else if (eventText.includes('代班')) {
+                    backgroundColor = AREA_COLOR_MAPPING['代班'];
+                  } else if (eventText.includes('/A')) {
+                    backgroundColor = AREA_COLOR_MAPPING['控台醫師'];
+                  } else if (eventText.includes('/B') || eventText.includes('/E')) {
+                    backgroundColor = AREA_COLOR_MAPPING['手術室'];
+                  } else if (eventText.includes('/C')) {
+                    backgroundColor = AREA_COLOR_MAPPING['外圍(3F)'];
+                  } else if (eventText.includes('/D')) {
+                    backgroundColor = AREA_COLOR_MAPPING['外圍(高階)'];
+                  } else if (eventText.includes('/F')) {
+                    backgroundColor = AREA_COLOR_MAPPING['外圍(TAE)'];
+                  }
 
-                return (
-                  <Card 
-                    key={index} 
-                    sx={{ 
-                      backgroundColor: backgroundColor,
-                      color: textColor,
-                      boxShadow: 'none'
-                    }}
-                  >
-                    <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-                      <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                        {eventText}
-                      </Typography>
-                      {event.time && (
-                        <Typography variant="body2" sx={{ mt: 0.5, opacity: 0.9 }}>
-                          時間：{event.time}
+                  return (
+                    <Card 
+                      key={index} 
+                      sx={{ 
+                        backgroundColor: backgroundColor,
+                        color: textColor,
+                        boxShadow: 'none'
+                      }}
+                    >
+                      <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+                        <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                          {eventText}
                         </Typography>
-                      )}
-                      {event.area_code && (
-                        <Typography variant="body2" sx={{ mt: 0.5, opacity: 0.9 }}>
-                          區域：{event.area_code}
-                        </Typography>
-                      )}
-                      {event.name && (
-                        <Typography variant="body2" sx={{ mt: 0.5, opacity: 0.9 }}>
-                          醫師：{event.name}
-                        </Typography>
-                      )}
-                    </CardContent>
-                  </Card>
-                );
-              })}
+                        {event.time && (
+                          <Typography variant="body2" sx={{ mt: 0.5, opacity: 0.9 }}>
+                            時間：{event.time}
+                          </Typography>
+                        )}
+                        {event.area_code && (
+                          <Typography variant="body2" sx={{ mt: 0.5, opacity: 0.9 }}>
+                            區域：{event.area_code}
+                          </Typography>
+                        )}
+                        {event.name && (
+                          <Typography variant="body2" sx={{ mt: 0.5, opacity: 0.9 }}>
+                            醫師：{event.name}
+                          </Typography>
+                        )}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
             </Box>
           ) : (
             <Box sx={{ textAlign: 'center', py: 3 }}>

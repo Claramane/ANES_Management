@@ -52,7 +52,7 @@ def init_db():
                 {"name": "班表相關", "description": "與班表有關的公告"},
                 {"name": "人事相關", "description": "與人事有關的公告"},
                 {"name": "政令宣導", "description": "政策與法規宣導"},
-                {"name": "開刀房規則", "description": "開刀房相關規定"},
+                {"name": "手術室規則", "description": "手術室相關規定"},
                 {"name": "閒聊", "description": "日常交流"},
                 {"name": "教育訓練", "description": "教育訓練相關公告"}
             ]

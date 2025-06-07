@@ -167,7 +167,8 @@ const OvertimeRow = memo(({
   canEdit, 
   markings, 
   onMarkStaff, 
-  isCompliant 
+  isCompliant,
+  showUnmarkedStaff = true // 新增參數，預設顯示所有人員
 }) => {
   // 預先計算常用樣式
   const chipStyle = useMemo(() => ({ 
@@ -179,6 +180,20 @@ const OvertimeRow = memo(({
   const handleMarkStaffCallback = useCallback((staffId) => {
     return () => onMarkStaff(dayData.date, staffId);
   }, [dayData.date, onMarkStaff]);
+  
+  // 根據showUnmarkedStaff狀態過濾人員列表
+  const filteredStaffList = useMemo(() => {
+    if (showUnmarkedStaff) {
+      // 顯示所有人員
+      return dayData.staffList;
+    } else {
+      // 只顯示有加班標記的人員
+      return dayData.staffList.filter(staff => {
+        const mark = markings[dayData.date]?.[staff.id];
+        return mark && mark.trim() !== '';
+      });
+    }
+  }, [dayData.staffList, showUnmarkedStaff, markings, dayData.date]);
   
   return (
     <TableRow 
@@ -206,12 +221,17 @@ const OvertimeRow = memo(({
         </Box>
       </TableCell>
       <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>
-        {dayData.staffList.length}人
+        {showUnmarkedStaff ? dayData.staffList.length : filteredStaffList.length}人
+        {!showUnmarkedStaff && dayData.staffList.length > filteredStaffList.length && (
+          <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+            (共{dayData.staffList.length}人)
+          </Typography>
+        )}
       </TableCell>
       <TableCell>
-        {dayData.staffList.length > 0 ? (
+        {filteredStaffList.length > 0 ? (
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-            {dayData.staffList.map((staff) => {
+            {filteredStaffList.map((staff) => {
               const mark = markings[dayData.date]?.[staff.id] || '';
               const chipLabel = mark ? `${staff.name}${mark}` : staff.name;
               const isLeader = staff.identity === '麻醉科Leader';
@@ -236,7 +256,7 @@ const OvertimeRow = memo(({
           </Box>
         ) : (
           <Typography variant="body2" color="text.secondary">
-            無加班人員
+            {showUnmarkedStaff ? '無加班人員' : '無已安排加班人員'}
           </Typography>
         )}
       </TableCell>
@@ -247,6 +267,7 @@ const OvertimeRow = memo(({
   return (
     prevProps.isCompliant === nextProps.isCompliant &&
     prevProps.canEdit === nextProps.canEdit &&
+    prevProps.showUnmarkedStaff === nextProps.showUnmarkedStaff &&
     prevProps.dayData.date === nextProps.dayData.date &&
     JSON.stringify(prevProps.markings[prevProps.dayData.date]) === 
     JSON.stringify(nextProps.markings[nextProps.dayData.date])
@@ -385,6 +406,9 @@ const OvertimeStaff = () => {
   // 重設加班表相關狀態
   const [isResetting, setIsResetting] = useState(false);
   const [openResetConfirmDialog, setOpenResetConfirmDialog] = useState(false);
+
+  // 新增：控制是否顯示未加班人員的狀態
+  const [showUnmarkedStaff, setShowUnmarkedStaff] = useState(false);
 
   // 權限檢查 - 只有護理長和admin可以編輯
   const canEdit = useMemo(() => {
@@ -1971,35 +1995,45 @@ const OvertimeStaff = () => {
         
         {canEdit && hasSchedule && (
           <>
-            <Button 
-              variant="contained" 
-              color="warning"  
-              onClick={generateRandomOvertimeStaff}
-              disabled={isGeneratingRandom || Object.keys(overtimeData).length === 0}
-              startIcon={isGeneratingRandom ? <CircularProgress size={20} color="inherit" /> : <ShuffleIcon />}
-            >
-              {isGeneratingRandom ? '生成中...' : '隨機生成'}
-            </Button>
-            
-            <Button 
-              variant="contained" 
-              color="primary" 
-              onClick={saveOvertimeRecords}
-              disabled={isSaving || !(hasSchedule && Object.keys(overtimeData).length > 0)}
-              startIcon={isSaving ? <CircularProgress size={20} color="inherit" /> : <SaveIcon />}
-            >
-              {isSaving ? '保存中...' : '保存加班記錄'}
-            </Button>
-            
-            <Button 
-              variant="contained" 
-              color="error" 
-              onClick={resetOvertimeSchedule}
-              disabled={isResetting}
-              startIcon={isResetting ? <CircularProgress size={20} color="inherit" /> : <RestartAltIcon />}
-            >
-              {isResetting ? '重設中...' : '重設加班表'}
-            </Button>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center' }}>
+              <Button 
+                variant="contained" 
+                color="warning"  
+                onClick={generateRandomOvertimeStaff}
+                disabled={isGeneratingRandom || Object.keys(overtimeData).length === 0}
+                startIcon={isGeneratingRandom ? <CircularProgress size={20} color="inherit" /> : <ShuffleIcon />}
+              >
+                {isGeneratingRandom ? '生成中...' : '隨機生成'}
+              </Button>
+              
+              <Button 
+                variant="contained" 
+                color="primary" 
+                onClick={saveOvertimeRecords}
+                disabled={isSaving || !(hasSchedule && Object.keys(overtimeData).length > 0)}
+                startIcon={isSaving ? <CircularProgress size={20} color="inherit" /> : <SaveIcon />}
+              >
+                {isSaving ? '保存中...' : '保存加班記錄'}
+              </Button>
+              
+              <Button 
+                variant="contained" 
+                color="error" 
+                onClick={resetOvertimeSchedule}
+                disabled={isResetting}
+                startIcon={isResetting ? <CircularProgress size={20} color="inherit" /> : <RestartAltIcon />}
+              >
+                {isResetting ? '重設中...' : '重設加班表'}
+              </Button>
+              
+              <Button 
+                variant="outlined" 
+                color="info"
+                onClick={() => setShowUnmarkedStaff(!showUnmarkedStaff)}
+              >
+                {showUnmarkedStaff ? '隱藏未加班人員' : '顯示未加班人員'}
+              </Button>
+            </Box>
             
             <TextField
               label="分數限制 (±)"
@@ -2013,7 +2047,7 @@ const OvertimeStaff = () => {
                 }
               }}
               inputProps={{ min: 0.1, max: 5.0, step: 0.1 }}
-              sx={{ width: 150, ml: 'auto' }}
+              sx={{ width: 150, mt: 1 }}
               disabled={!canEdit}
             />
           </>
@@ -2022,7 +2056,8 @@ const OvertimeStaff = () => {
       
       {canEdit && hasSchedule && (
         <Alert severity="info" sx={{ mb: 2 }}>
-          點擊護理師姓名可標記排序 (A → B → C → D → E → F → 取消)，每個平日需要六位加班人員(A-F)，週六需要一位加班人員(A)，週日不需要加班人員
+          點擊護理師姓名可標記排序 (A → B → C → D → E → F → 取消)，每個平日需要六位加班人員(A-F)，週六需要一位加班人員(A)，週日不需要加班人員。
+          預設只顯示已安排加班的人員，可使用「顯示未加班人員」按鈕切換顯示模式。
         </Alert>
       )}
       
@@ -2082,6 +2117,7 @@ const OvertimeStaff = () => {
                     markings={markings}
                     onMarkStaff={handleMarkStaff}
                     isCompliant={complianceMap[dayData.date]}
+                    showUnmarkedStaff={showUnmarkedStaff}
                   />
                 ))}
             </TableBody>

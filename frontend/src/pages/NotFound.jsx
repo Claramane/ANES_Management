@@ -25,7 +25,7 @@ function NotFound() {
           找不到頁面
         </Typography>
         <Typography variant="body1" color="text.secondary" paragraph sx={{ maxWidth: '500px', mb: 4 }}>
-          很抱歉，您嘗試訪問的頁面不存在或已被移除。請確認 URL 是否正確，或返回首頁。
+          很抱歉，您嘗試訪問的頁面不存在或已被移除。請確認 URL 是否正確，或返回首頁，或是聯繫管理員。
         </Typography>
         <Button
           variant="contained"
