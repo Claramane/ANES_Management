@@ -188,9 +188,20 @@ const OvertimeRow = memo(({
       return dayData.staffList;
     } else {
       // 只顯示有加班標記的人員
-      return dayData.staffList.filter(staff => {
+      const markedStaff = dayData.staffList.filter(staff => {
         const mark = markings[dayData.date]?.[staff.id];
         return mark && mark.trim() !== '';
+      });
+      
+      // 按照加班標記A-F順序排序
+      return markedStaff.sort((a, b) => {
+        const markA = markings[dayData.date]?.[a.id] || '';
+        const markB = markings[dayData.date]?.[b.id] || '';
+        
+        // 定義排序順序：A=1, B=2, C=3, D=4, E=5, F=6
+        const orderMap = { 'A': 1, 'B': 2, 'C': 3, 'D': 4, 'E': 5, 'F': 6 };
+        
+        return (orderMap[markA] || 999) - (orderMap[markB] || 999);
       });
     }
   }, [dayData.staffList, showUnmarkedStaff, markings, dayData.date]);
