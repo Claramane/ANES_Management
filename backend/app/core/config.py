@@ -17,7 +17,7 @@
 import os
 import secrets
 from typing import List, Union, Optional
-from pydantic import AnyHttpUrl, validator, field_validator, Field
+from pydantic import AnyHttpUrl, validator, field_validator
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
@@ -36,8 +36,8 @@ class Settings(BaseSettings):
     FRONTEND_ORIGIN: str = "http://localhost:3000"
     WEBAUTHN_RP_ID: str = "localhost"
 
-    # CORS設置 - 使用 Field 來指定環境變數名稱
-    backend_cors_origins: str = Field(default="", alias="BACKEND_CORS_ORIGINS")
+    # CORS設置
+    BACKEND_CORS_ORIGINS: List[str] = []
 
     WEBAUTHN_EXPECTED_ORIGIN: str = "http://localhost:3000"
     
@@ -45,18 +45,18 @@ class Settings(BaseSettings):
     IS_PRODUCTION: bool = False
     HTTPS_ONLY: bool = False
 
-    @property
-    def BACKEND_CORS_ORIGINS(self) -> List[str]:
-        """獲取 CORS 允許的來源列表"""
-        cors_origins = self.backend_cors_origins
-        if not cors_origins or cors_origins.strip() == "":
+    @field_validator("BACKEND_CORS_ORIGINS", mode="before")
+    def assemble_cors_origins(cls, v: Union[str, List[str]], info) -> List[str]:
+        if not v or v == []:
             # 若未指定則用 FRONTEND_ORIGIN
-            return [self.FRONTEND_ORIGIN]
+            frontend = info.data.get("FRONTEND_ORIGIN", "http://localhost:3000")
+            return [frontend]
+        if isinstance(v, str) and not v.startswith("["):
+            return [i.strip() for i in v.split(",")]
+        elif isinstance(v, (list, str)):
+            return v
+        raise ValueError(v)
         
-        # 處理逗號分隔的字符串
-        origins = [origin.strip() for origin in cors_origins.split(",") if origin.strip()]
-        return origins if origins else [self.FRONTEND_ORIGIN]
-
     @field_validator("DEBUG", mode="before")
     def parse_debug(cls, v: Union[str, bool]) -> bool:
         if isinstance(v, str):

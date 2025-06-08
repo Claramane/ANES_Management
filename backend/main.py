@@ -131,10 +131,9 @@ app.add_middleware(
 )
 
 # 配置CORS
-logger.info(f"CORS允許來源: {settings.BACKEND_CORS_ORIGINS}")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.BACKEND_CORS_ORIGINS,
+    allow_origins=[settings.FRONTEND_ORIGIN] if settings.FRONTEND_ORIGIN else ["http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allow_headers=[
