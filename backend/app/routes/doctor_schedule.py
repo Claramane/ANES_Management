@@ -396,7 +396,7 @@ async def set_doctor_meeting_time(
         logger.error(f"設定醫師開會時間失敗: {str(e)}")
         raise HTTPException(status_code=500, detail=f"設定開會時間失敗: {str(e)}")
 
-@router.post("/doctor/{doctor_id}/meeting-time/delete")
+@router.post("/doctor/{doctor_id}/meeting-time/remove")
 async def delete_doctor_meeting_time(
     doctor_id: int,
     db: Session = Depends(get_db),
@@ -427,7 +427,7 @@ async def delete_doctor_meeting_time(
         logger.error(f"刪除醫師開會時間失敗: {str(e)}")
         raise HTTPException(status_code=500, detail=f"刪除開會時間失敗: {str(e)}")
 
-@router.post("/doctor/{doctor_id}/update-status")
+@router.post("/doctor/{doctor_id}/set-status")
 async def update_doctor_status_backup(
     doctor_id: int,
     status_data: dict,

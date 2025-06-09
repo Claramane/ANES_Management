@@ -945,7 +945,7 @@ const DoctorSchedule = () => {
       // 使用備用API端點（解決部署同步問題）
       const action = isLeave ? 'toggle-leave' : 'toggle-active';
       
-      const response = await fetch(`/api/doctor-schedules/doctor/${doctor.id}/update-status`, {
+      const response = await fetch(`/api/doctor-schedules/doctor/${doctor.id}/set-status`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1183,7 +1183,7 @@ const DoctorSchedule = () => {
       
       console.log(`刪除醫師 ${selectedDoctor.id} (${selectedDoctor.name}) 的開會時間`);
       
-      const response = await fetch(`/api/doctor-schedules/doctor/${selectedDoctor.id}/meeting-time/delete`, {
+      const response = await fetch(`/api/doctor-schedules/doctor/${selectedDoctor.id}/meeting-time/remove`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
