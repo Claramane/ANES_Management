@@ -1505,7 +1505,7 @@ const DoctorSchedule = () => {
                 border: '1px solid #e0e0e0',
                 backgroundColor: '#9e9e9e', // 統一灰色背景
                 color: 'white',
-                opacity: 0.8, // 稍微降低透明度
+                opacity: 0.35, // 稍微降低透明度
                 cursor: currentUser.role === 'admin' ? 'pointer' : 'default',
                 transition: 'all 0.2s ease',
                 '&:hover': currentUser.role === 'admin' ? {
