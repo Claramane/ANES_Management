@@ -945,13 +945,42 @@ const DoctorSchedule = () => {
       // 使用備用API端點（解決部署同步問題）
       const action = isLeave ? 'toggle-leave' : 'toggle-active';
       
-      const response = await fetch(`/api/doctor-schedules/doctor/${doctor.id}/set-status`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ action: action })
-      });
+      // 首先嘗試原來的端點
+      let response;
+      let endpoint = `/api/doctor-schedules/doctor/${doctor.id}/set-status`;
+      
+      try {
+        response = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ action: action })
+        });
+        
+        // 如果返回405，嘗試備用端點
+        if (response.status === 405) {
+          console.log('原端點返回405，嘗試備用端點...');
+          endpoint = `/api/doctor-schedules/update-doctor-status/${doctor.id}`;
+          response = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ action: action })
+          });
+        }
+      } catch (error) {
+        console.log('原端點請求失敗，嘗試備用端點...', error);
+        endpoint = `/api/doctor-schedules/update-doctor-status/${doctor.id}`;
+        response = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ action: action })
+        });
+      }
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));

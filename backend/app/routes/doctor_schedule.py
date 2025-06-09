@@ -465,4 +465,72 @@ async def update_doctor_status_backup(
         else:
             raise HTTPException(status_code=404, detail="找不到指定的醫師")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"更新醫師狀態失敗: {str(e)}") 
+        raise HTTPException(status_code=500, detail=f"更新醫師狀態失敗: {str(e)}")
+
+# 備用路由，使用不同的路徑模式
+@router.post("/update-doctor-status/{doctor_id}")
+async def update_doctor_status_alternative(
+    doctor_id: int,
+    status_data: dict,
+    db: Session = Depends(get_db)
+):
+    """
+    備用的醫師狀態更新端點
+    使用不同的路徑模式以避免平台代理問題
+    """
+    try:
+        action = status_data.get('action', '')  # 'toggle-active' or 'toggle-leave'
+        
+        if action == 'toggle-active':
+            result = DoctorScheduleService.toggle_doctor_active_status(db, doctor_id)
+        elif action == 'toggle-leave':
+            result = DoctorScheduleService.toggle_doctor_leave_status(db, doctor_id)
+        else:
+            raise HTTPException(status_code=400, detail="無效的動作類型")
+            
+        if result:
+            action_msg = "取消請假" if (action == 'toggle-leave' and result.status == 'on_duty') else \
+                        "請假" if (action == 'toggle-leave' and result.status == 'off') else \
+                        f"狀態更新為 {result.status}"
+            
+            return {
+                "success": True,
+                "message": f"醫師{action_msg}成功",
+                "data": {
+                    "id": result.id,
+                    "name": result.name,
+                    "status": result.status,
+                    "updated_at": result.updated_at.isoformat()
+                }
+            }
+        else:
+            raise HTTPException(status_code=404, detail="找不到指定的醫師")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"更新醫師狀態失敗: {str(e)}")
+
+# 添加測試端點
+@router.post("/test-endpoint")
+async def test_endpoint():
+    """
+    測試端點，用於驗證路由是否正常工作
+    """
+    return {"success": True, "message": "路由正常工作", "timestamp": datetime.now().isoformat()}
+
+@router.get("/debug/routes")
+async def debug_routes():
+    """
+    調試端點：列出所有醫師班表相關的路由
+    """
+    return {
+        "success": True,
+        "message": "醫師班表路由調試信息",
+        "available_endpoints": [
+            "POST /api/doctor-schedules/doctor/{doctor_id}/set-status",
+            "POST /api/doctor-schedules/doctor/{doctor_id}/toggle-active", 
+            "POST /api/doctor-schedules/doctor/{doctor_id}/toggle-leave",
+            "POST /api/doctor-schedules/doctor/{doctor_id}/area-code",
+            "POST /api/doctor-schedules/doctor/{doctor_id}/meeting-time",
+            "POST /api/doctor-schedules/test-endpoint",
+            "GET /api/doctor-schedules/debug/routes"
+        ]
+    } 

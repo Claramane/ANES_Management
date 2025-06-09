@@ -141,7 +141,9 @@ app.add_middleware(
         "Content-Type", 
         "Accept",
         "Origin",
-        "X-Requested-With"
+        "X-Requested-With",
+        "Access-Control-Request-Method",
+        "Access-Control-Request-Headers"
     ],
     # 重要：設置 preflight 緩存時間為 24 小時
     max_age=86400,  # 24小時內瀏覽器不會重複發送 preflight 請求
@@ -150,6 +152,26 @@ app.add_middleware(
 # 註冊所有路由
 for router in routers:
     app.include_router(router, prefix="/api")
+
+# 添加調試中間件（僅在生產環境用於調試）
+@app.middleware("http")
+async def debug_requests(request, call_next):
+    # 只記錄問題路徑的請求
+    if "/doctor-schedules/doctor/" in str(request.url) and "/set-status" in str(request.url):
+        logger.info(f"收到請求: {request.method} {request.url}")
+        logger.info(f"請求頭: {dict(request.headers)}")
+        
+        # 記錄可用路由（只在第一次記錄）
+        if not hasattr(debug_requests, '_routes_logged'):
+            debug_requests._routes_logged = True
+            available_routes = []
+            for route in app.routes:
+                if hasattr(route, 'path'):
+                    available_routes.append(f"{route.methods if hasattr(route, 'methods') else 'N/A'} {route.path}")
+            logger.info(f"可用路由: {available_routes[:20]}")  # 只記錄前20個避免日誌過多
+    
+    response = await call_next(request)
+    return response
 
 @app.get("/")
 async def root():
