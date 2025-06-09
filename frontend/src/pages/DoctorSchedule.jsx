@@ -16,14 +16,17 @@ import {
   Alert,
   CircularProgress,
   Drawer,
-  IconButton
+  IconButton,
+  Chip,
+  TextField
 } from '@mui/material';
 import { 
   Schedule as ScheduleIcon,
   Close as CloseIcon,
   Delete as DeleteIcon,
   ChevronLeft as ChevronLeftIcon,
-  ChevronRight as ChevronRightIcon
+  ChevronRight as ChevronRightIcon,
+  Download as DownloadIcon
 } from '@mui/icons-material';
 import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
@@ -31,6 +34,8 @@ import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isToday, s
 import { zhTW } from 'date-fns/locale';
 import { doctorScheduleService } from '../utils/api';
 import { formatDoctorName, getDoctorMapping } from '../utils/doctorUtils';
+import { useAuthStore } from '../store/authStore';
+import api from '../utils/api'; // 引入API實例
 
 // 日曆單元格樣式 - 參考Dashboard設計
 const calendarCellStyle = {
@@ -672,20 +677,11 @@ const DoctorSchedule = () => {
       
       console.log(`設定醫師 ${selectedDoctor.id} (${selectedDoctor.name}) 的開會時間為: ${meetingTimeStr}`);
       
-      const response = await fetch(`/api/doctor-schedules/doctor/${selectedDoctor.id}/meeting-time`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ meeting_time: meetingTimeStr })
+      const response = await api.post(`/doctor-schedules/doctor/${selectedDoctor.id}/meeting-time`, {
+        meeting_time: meetingTimeStr
       });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
-      }
-      
-      const result = await response.json();
+      const result = response.data;
       
       if (result.success) {
         console.log('開會時間設定成功');
@@ -812,20 +808,11 @@ const DoctorSchedule = () => {
       setIsUpdating(true);
       console.log(`更新醫師 ${selectedDoctor.id} (${selectedDoctor.name}) 的區域代碼為: ${newAreaCode}`);
       
-      const response = await fetch(`/api/doctor-schedules/doctor/${selectedDoctor.id}/area-code`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ area_code: newAreaCode })
+      const response = await api.post(`/doctor-schedules/doctor/${selectedDoctor.id}/area-code`, {
+        area_code: newAreaCode
       });
       
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
-      }
-
-      const result = await response.json();
+      const result = response.data;
       
       // 檢查回應格式 - 後端返回 {success: true, message: "區域代碼更新成功"}
       if (result.success) {
@@ -947,47 +934,22 @@ const DoctorSchedule = () => {
       
       // 首先嘗試原來的端點
       let response;
-      let endpoint = `/api/doctor-schedules/doctor/${doctor.id}/set-status`;
+      let endpoint = `/doctor-schedules/doctor/${doctor.id}/set-status`;
       
       try {
-        response = await fetch(endpoint, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ action: action })
-        });
-        
-        // 如果返回405，嘗試備用端點
-        if (response.status === 405) {
-          console.log('原端點返回405，嘗試備用端點...');
-          endpoint = `/api/doctor-schedules/update-doctor-status/${doctor.id}`;
-          response = await fetch(endpoint, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ action: action })
-          });
-        }
+        response = await api.post(endpoint, { action: action });
       } catch (error) {
-        console.log('原端點請求失敗，嘗試備用端點...', error);
-        endpoint = `/api/doctor-schedules/update-doctor-status/${doctor.id}`;
-        response = await fetch(endpoint, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ action: action })
-        });
+        // 如果返回405或其他錯誤，嘗試備用端點
+        if (error.response?.status === 405 || error.message.includes('405')) {
+          console.log('原端點返回405，嘗試備用端點...');
+          endpoint = `/doctor-schedules/update-doctor-status/${doctor.id}`;
+          response = await api.post(endpoint, { action: action });
+        } else {
+          throw error;
+        }
       }
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
-      }
-
-      const result = await response.json();
+      const result = response.data;
       
       if (result.success) {
         // 更新選中的醫師

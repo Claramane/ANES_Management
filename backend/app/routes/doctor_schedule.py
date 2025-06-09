@@ -257,7 +257,8 @@ async def update_doctor_area_code(
 @router.post("/doctor/{doctor_id}/toggle-active")
 async def toggle_doctor_active_status(
     doctor_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """切換醫師的上下班狀態"""
     try:
@@ -281,7 +282,8 @@ async def toggle_doctor_active_status(
 @router.post("/doctor/{doctor_id}/toggle-leave")
 async def toggle_doctor_leave_status(
     doctor_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """切換醫師的請假狀態"""
     try:
@@ -431,7 +433,8 @@ async def delete_doctor_meeting_time(
 async def update_doctor_status_backup(
     doctor_id: int,
     status_data: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
     更新醫師狀態的備用端點
@@ -472,7 +475,8 @@ async def update_doctor_status_backup(
 async def update_doctor_status_alternative(
     doctor_id: int,
     status_data: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
     備用的醫師狀態更新端點

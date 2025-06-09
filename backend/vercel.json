@@ -1,0 +1,43 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "main.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/doctor-schedules/doctor/(\\d+)/(set-status|toggle-active|toggle-leave|area-code|meeting-time)/?",
+      "dest": "/main.py",
+      "methods": ["POST"]
+    },
+    {
+      "src": "/api/(.*)",
+      "dest": "/main.py"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/main.py"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        },
+        {
+          "key": "Access-Control-Allow-Methods",
+          "value": "GET, POST, PUT, DELETE, OPTIONS"
+        },
+        {
+          "key": "Access-Control-Allow-Headers",
+          "value": "Content-Type, Authorization, Accept, Origin, X-Requested-With"
+        }
+      ]
+    }
+  ]
+} 
