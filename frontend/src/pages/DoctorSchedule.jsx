@@ -989,7 +989,8 @@ const DoctorSchedule = () => {
         todayORDoctors: [{ name: '無資料', active: true }],
         todayPeripheral3F: [{ name: '無資料', active: true }],
         todayPeripheralAdvanced: [{ name: '無資料', active: true }],
-        todayPeripheralTAE: [{ name: '無資料', active: true }]
+        todayPeripheralTAE: [{ name: '無資料', active: true }],
+        offDutyDoctors: [] // 新增已下班醫師列表
       };
     }
     
@@ -1000,12 +1001,13 @@ const DoctorSchedule = () => {
       isDuty: true // 標記為值班醫師
     }] : [{ name: '無', active: true, isDuty: true }];
     
-    // 從白班中根據area_code分類醫師
+    // 從白班中根據area_code分類醫師，並分離已下班醫師
     let todayConsoleDoctor = [];
     let todayORDoctors = [];
     let todayPeripheral3F = [];
     let todayPeripheralAdvanced = [];
     let todayPeripheralTAE = [];
+    let offDutyDoctors = []; // 新增：收集所有已下班的醫師
     
     if (todayScheduleData.白班 && Array.isArray(todayScheduleData.白班)) {
       todayScheduleData.白班.forEach((shift, index) => {
@@ -1017,19 +1019,31 @@ const DoctorSchedule = () => {
           isInMeeting: isInMeeting // 添加開會狀態
         };
         
-        const areaCode = shift.area_code;
+        // 檢查是否為已下班狀態
+        const isOffDuty = shift.status === 'off_duty' || shift.status === 'off';
         
-        // 根據後端轉換好的area_code分類
-        if (areaCode === '控台醫師') {
-          todayConsoleDoctor.push(doctorData);
-        } else if (areaCode === '手術室') {
-          todayORDoctors.push(doctorData);
-        } else if (areaCode === '外圍(3F)') {
-          todayPeripheral3F.push(doctorData);
-        } else if (areaCode === '外圍(高階)') {
-          todayPeripheralAdvanced.push(doctorData);
-        } else if (areaCode === '外圍(TAE)') {
-          todayPeripheralTAE.push(doctorData);
+        if (isOffDuty) {
+          // 如果是已下班，加入已下班醫師列表
+          offDutyDoctors.push({
+            ...doctorData,
+            originalAreaCode: shift.area_code // 保留原始區域代碼用於顯示
+          });
+        } else {
+          // 如果是正常上班，按原來的邏輯分類
+          const areaCode = shift.area_code;
+          
+          // 根據後端轉換好的area_code分類
+          if (areaCode === '控台醫師') {
+            todayConsoleDoctor.push(doctorData);
+          } else if (areaCode === '手術室') {
+            todayORDoctors.push(doctorData);
+          } else if (areaCode === '外圍(3F)') {
+            todayPeripheral3F.push(doctorData);
+          } else if (areaCode === '外圍(高階)') {
+            todayPeripheralAdvanced.push(doctorData);
+          } else if (areaCode === '外圍(TAE)') {
+            todayPeripheralTAE.push(doctorData);
+          }
         }
       });
     }
@@ -1057,7 +1071,8 @@ const DoctorSchedule = () => {
       todayORDoctors,
       todayPeripheral3F,
       todayPeripheralAdvanced,
-      todayPeripheralTAE
+      todayPeripheralTAE,
+      offDutyDoctors // 新增已下班醫師列表
     };
     
     return result;
@@ -1470,6 +1485,45 @@ const DoctorSchedule = () => {
                     </Typography>
                     <Typography variant="body2" sx={{ fontSize: { xs: '11px', sm: '12px' }, opacity: 0.9 }}>
                       今日值班醫師
+                    </Typography>
+                  </Box>
+                </CardContent>
+              </Card>
+            </Grid>
+          ))}
+          
+          {/* 已下班醫師 - 統一灰色底，顯示在值班醫師下方 */}
+          {todayScheduleInfo.offDutyDoctors && todayScheduleInfo.offDutyDoctors.length > 0 && 
+            todayScheduleInfo.offDutyDoctors.map((doctor, index) => (
+            <Grid 
+              item 
+              xs={12}
+              key={`off-duty-${index}`}
+            >
+              <Card sx={{ 
+                boxShadow: 'none', 
+                border: '1px solid #e0e0e0',
+                backgroundColor: '#9e9e9e', // 統一灰色背景
+                color: 'white',
+                opacity: 0.8, // 稍微降低透明度
+                cursor: currentUser.role === 'admin' ? 'pointer' : 'default',
+                transition: 'all 0.2s ease',
+                '&:hover': currentUser.role === 'admin' ? {
+                  transform: 'scale(1.02)',
+                  boxShadow: 'none'
+                } : {}
+              }}
+              onClick={() => currentUser.role === 'admin' && handleDoctorClick(doctor)}
+            >
+                <CardContent sx={{ p: { xs: 1, sm: 1.5 }, '&:last-child': { pb: { xs: 1, sm: 1.5 } } }}>
+                  <Box>
+                    <Typography variant="body1" sx={{ fontSize: { xs: '14px', sm: '16px' }, fontWeight: 'medium' }}>
+                    {formatDoctorName(doctor.name, doctorMapping)}
+                    {getDoctorStatusText(doctor)}
+                    {getDoctorMeetingTimeDisplay(doctor)}
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontSize: { xs: '11px', sm: '12px' }, opacity: 0.9 }}>
+                      已下班 - {doctor.originalAreaCode || '未分類'}
                     </Typography>
                   </Box>
                 </CardContent>
