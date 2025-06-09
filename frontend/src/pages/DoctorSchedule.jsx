@@ -32,10 +32,9 @@ import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isToday, startOfToday, addMonths, subMonths } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
-import { doctorScheduleService } from '../utils/api';
+import { doctorScheduleService, api } from '../utils/api'; // 修正導入語句，使用named import導入api實例
 import { formatDoctorName, getDoctorMapping } from '../utils/doctorUtils';
 import { useAuthStore } from '../store/authStore';
-import api from '../utils/api'; // 引入API實例
 
 // 日曆單元格樣式 - 參考Dashboard設計
 const calendarCellStyle = {
