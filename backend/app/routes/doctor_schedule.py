@@ -222,7 +222,7 @@ async def get_scheduler_status(
         logger.error(f"獲取定時任務狀態失敗: {str(e)}")
         raise HTTPException(status_code=500, detail=f"獲取狀態失敗: {str(e)}")
 
-@router.put("/doctor/{doctor_id}/area-code")
+@router.post("/doctor/{doctor_id}/area-code")
 async def update_doctor_area_code(
     doctor_id: int,
     new_area_code: AreaCodeUpdateRequest,
@@ -254,7 +254,7 @@ async def update_doctor_area_code(
         logger.error(f"更新區域代碼失敗: {str(e)}")
         raise HTTPException(status_code=500, detail=f"更新區域代碼失敗: {str(e)}")
 
-@router.put("/doctor/{doctor_id}/toggle-active")
+@router.post("/doctor/{doctor_id}/toggle-active")
 async def toggle_doctor_active_status(
     doctor_id: int,
     db: Session = Depends(get_db)
@@ -278,7 +278,7 @@ async def toggle_doctor_active_status(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"更新醫師狀態失敗: {str(e)}")
 
-@router.put("/doctor/{doctor_id}/toggle-leave")
+@router.post("/doctor/{doctor_id}/toggle-leave")
 async def toggle_doctor_leave_status(
     doctor_id: int,
     db: Session = Depends(get_db)
@@ -362,7 +362,7 @@ async def check_api_health():
             "message": f"外部API連接失敗: {str(e)}"
         }
 
-@router.put("/doctor/{doctor_id}/meeting-time")
+@router.post("/doctor/{doctor_id}/meeting-time")
 async def set_doctor_meeting_time(
     doctor_id: int,
     meeting_time_data: dict,
@@ -396,7 +396,7 @@ async def set_doctor_meeting_time(
         logger.error(f"設定醫師開會時間失敗: {str(e)}")
         raise HTTPException(status_code=500, detail=f"設定開會時間失敗: {str(e)}")
 
-@router.delete("/doctor/{doctor_id}/meeting-time")
+@router.post("/doctor/{doctor_id}/meeting-time/delete")
 async def delete_doctor_meeting_time(
     doctor_id: int,
     db: Session = Depends(get_db),
@@ -427,7 +427,7 @@ async def delete_doctor_meeting_time(
         logger.error(f"刪除醫師開會時間失敗: {str(e)}")
         raise HTTPException(status_code=500, detail=f"刪除開會時間失敗: {str(e)}")
 
-@router.put("/doctor/{doctor_id}/update-status")
+@router.post("/doctor/{doctor_id}/update-status")
 async def update_doctor_status_backup(
     doctor_id: int,
     status_data: dict,

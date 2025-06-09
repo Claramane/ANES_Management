@@ -672,11 +672,22 @@ const DoctorSchedule = () => {
       
       console.log(`設定醫師 ${selectedDoctor.id} (${selectedDoctor.name}) 的開會時間為: ${meetingTimeStr}`);
       
-      const response = await doctorScheduleService.setDoctorMeetingTime(selectedDoctor.id, meetingTimeStr);
+      const response = await fetch(`/api/doctor-schedules/doctor/${selectedDoctor.id}/meeting-time`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ meeting_time: meetingTimeStr })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+      }
       
-      console.log('設定開會時間API回應:', response);
+      const result = await response.json();
       
-      if (response.data && response.data.success) {
+      if (result.success) {
         console.log('開會時間設定成功');
         
         // 清除錯誤狀態
@@ -709,7 +720,7 @@ const DoctorSchedule = () => {
         
       } else {
         // API調用成功但業務邏輯失敗
-        const errorMsg = response.data?.message || '設定開會時間失敗';
+        const errorMsg = result.message || '設定開會時間失敗';
         console.error('業務邏輯失敗:', errorMsg);
         setError(errorMsg);
       }
@@ -718,11 +729,7 @@ const DoctorSchedule = () => {
       
       // 提取錯誤訊息
       let errorMessage = '設定開會時間失敗';
-      if (err.response?.data?.detail) {
-        errorMessage = err.response.data.detail;
-      } else if (err.response?.data?.message) {
-        errorMessage = err.response.data.message;
-      } else if (err.message) {
+      if (err.message) {
         errorMessage = err.message;
       }
       
@@ -805,12 +812,23 @@ const DoctorSchedule = () => {
       setIsUpdating(true);
       console.log(`更新醫師 ${selectedDoctor.id} (${selectedDoctor.name}) 的區域代碼為: ${newAreaCode}`);
       
-      const response = await doctorScheduleService.updateDoctorAreaCode(selectedDoctor.id, newAreaCode);
+      const response = await fetch(`/api/doctor-schedules/doctor/${selectedDoctor.id}/area-code`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ area_code: newAreaCode })
+      });
       
-      console.log('API回應:', response);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
       
       // 檢查回應格式 - 後端返回 {success: true, message: "區域代碼更新成功"}
-      if (response.data && response.data.success) {
+      if (result.success) {
         console.log('區域代碼更新成功');
         
         // 清除錯誤狀態
@@ -830,7 +848,7 @@ const DoctorSchedule = () => {
         
       } else {
         // API調用成功但業務邏輯失敗
-        const errorMsg = response.data?.message || '更新區域代碼失敗';
+        const errorMsg = result.message || '更新區域代碼失敗';
         console.error('業務邏輯失敗:', errorMsg);
         setError(errorMsg);
         
@@ -843,11 +861,7 @@ const DoctorSchedule = () => {
       
       // 提取錯誤訊息
       let errorMessage = '更新區域代碼失敗';
-      if (err.response?.data?.detail) {
-        errorMessage = err.response.data.detail;
-      } else if (err.response?.data?.message) {
-        errorMessage = err.response.data.message;
-      } else if (err.message) {
+      if (err.message) {
         errorMessage = err.message;
       }
       
@@ -932,7 +946,7 @@ const DoctorSchedule = () => {
       const action = isLeave ? 'toggle-leave' : 'toggle-active';
       
       const response = await fetch(`/api/doctor-schedules/doctor/${doctor.id}/update-status`, {
-        method: 'PUT',
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -1169,11 +1183,21 @@ const DoctorSchedule = () => {
       
       console.log(`刪除醫師 ${selectedDoctor.id} (${selectedDoctor.name}) 的開會時間`);
       
-      const response = await doctorScheduleService.deleteDoctorMeetingTime(selectedDoctor.id);
+      const response = await fetch(`/api/doctor-schedules/doctor/${selectedDoctor.id}/meeting-time/delete`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
       
-      console.log('刪除開會時間API回應:', response);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
       
-      if (response.data && response.data.success) {
+      if (result.success) {
         console.log('開會時間刪除成功');
         
         // 清除錯誤狀態
@@ -1206,7 +1230,7 @@ const DoctorSchedule = () => {
         
       } else {
         // API調用成功但業務邏輯失敗
-        const errorMsg = response.data?.message || '刪除開會時間失敗';
+        const errorMsg = result.message || '刪除開會時間失敗';
         console.error('業務邏輯失敗:', errorMsg);
         setError(errorMsg);
       }
@@ -1215,11 +1239,7 @@ const DoctorSchedule = () => {
       
       // 提取錯誤訊息
       let errorMessage = '刪除開會時間失敗';
-      if (err.response?.data?.detail) {
-        errorMessage = err.response.data.detail;
-      } else if (err.response?.data?.message) {
-        errorMessage = err.response.data.message;
-      } else if (err.message) {
+      if (err.message) {
         errorMessage = err.message;
       }
       
