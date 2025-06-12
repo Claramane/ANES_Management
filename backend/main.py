@@ -9,34 +9,14 @@ import uvicorn
 from starlette.middleware.sessions import SessionMiddleware
 from sqlalchemy import text
 from contextlib import asynccontextmanager
-import asyncio
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.interval import IntervalTrigger
 
 from app.core.config import settings
 from app.core.database import engine, Base, create_tables
 from app.routes import routers
 from app.tasks.doctor_schedule_tasks import doctor_schedule_task_manager
-from app.services.doctor_schedule_service import DoctorScheduleService
-from app.core.database import get_db
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# 創建排程器
-scheduler = AsyncIOScheduler()
-
-async def auto_update_doctor_status():
-    """在關鍵時刻（上下班時間點）更新醫師active狀態的任務"""
-    try:
-        db = next(get_db())
-        DoctorScheduleService.update_doctors_active_status_by_time(db)
-        # 移除print以減少日誌噪音，只在實際更新時會有日誌輸出
-    except Exception as e:
-        print(f"❌ 自動更新醫師狀態失敗: {str(e)}")
-    finally:
-        if 'db' in locals():
-            db.close()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -47,7 +27,7 @@ async def lifespan(app: FastAPI):
     create_tables()
     print("✅ 資料庫表已初始化")
     
-    # 測試資料庫連接和創建表（從原本的 startup_event 移過來）
+    # 測試資料庫連接和創建表
     try:
         with engine.connect() as connection:
             connection.execute(text("SELECT 1"))
@@ -66,20 +46,10 @@ async def lifespan(app: FastAPI):
         logger.error(f"資料庫連接失敗: {str(e)}")
         raise Exception("無法連接到資料庫，請檢查資料庫配置和連接狀態")
     
-    # 啟動定時任務
-    scheduler.add_job(
-        auto_update_doctor_status,
-        trigger=IntervalTrigger(minutes=1),  # 改為每分鐘檢查一次，以精確捕捉上下班時間點
-        id='update_doctor_status',
-        replace_existing=True
-    )
-    scheduler.start()
-    print("✅ 定時任務已啟動（每分鐘檢查上下班時間點）")
-    
-    # 啟動醫師班表定時任務（從原本的 startup_event 移過來）
+    # 啟動醫師班表定時任務管理器（包含自動下班檢測）
     try:
         doctor_schedule_task_manager.start_scheduler()
-        logger.info("醫師班表定時任務啟動成功")
+        logger.info("醫師班表定時任務啟動成功（包含自動下班檢測）")
     except Exception as e:
         logger.error(f"啟動醫師班表定時任務失敗: {str(e)}")
     
@@ -95,8 +65,7 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"停止定時任務時發生錯誤: {str(e)}")
     
-    scheduler.shutdown()
-    print("✅ 定時任務已停止")
+    print("✅ 系統已安全關閉")
 
 app = FastAPI(
     title=settings.APP_NAME,

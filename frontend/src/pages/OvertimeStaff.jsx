@@ -2002,6 +2002,18 @@ const OvertimeStaff = () => {
               </IconButton>
             </Tooltip>
           )}
+          
+          {/* 顯示未加班人員按鈕 - 對所有使用者開放 */}
+          {hasSchedule && (
+            <Button 
+              variant="outlined" 
+              color="info"
+              onClick={() => setShowUnmarkedStaff(!showUnmarkedStaff)}
+              sx={{ ml: 1 }}
+            >
+              {showUnmarkedStaff ? '隱藏未加班人員' : '顯示未加班人員'}
+            </Button>
+          )}
         </Box>
         
         {canEdit && hasSchedule && (
@@ -2036,14 +2048,6 @@ const OvertimeStaff = () => {
               >
                 {isResetting ? '重設中...' : '重設加班表'}
               </Button>
-              
-              <Button 
-                variant="outlined" 
-                color="info"
-                onClick={() => setShowUnmarkedStaff(!showUnmarkedStaff)}
-              >
-                {showUnmarkedStaff ? '隱藏未加班人員' : '顯示未加班人員'}
-              </Button>
             </Box>
             
             <TextField
@@ -2068,6 +2072,12 @@ const OvertimeStaff = () => {
       {canEdit && hasSchedule && (
         <Alert severity="info" sx={{ mb: 2 }}>
           點擊護理師姓名可標記排序 (A → B → C → D → E → F → 取消)，每個平日需要六位加班人員(A-F)，週六需要一位加班人員(A)，週日不需要加班人員。
+          預設只顯示已安排加班的人員，可使用「顯示未加班人員」按鈕切換顯示模式。
+        </Alert>
+      )}
+      
+      {!canEdit && hasSchedule && (
+        <Alert severity="info" sx={{ mb: 2 }}>
           預設只顯示已安排加班的人員，可使用「顯示未加班人員」按鈕切換顯示模式。
         </Alert>
       )}

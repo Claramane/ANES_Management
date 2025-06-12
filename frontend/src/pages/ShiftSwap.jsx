@@ -1272,7 +1272,7 @@ const ShiftSwap = () => {
   // 根據班表生成日曆數據
   const generateCalendarData = (date, scheduleData, assignmentData, overtimeData) => {
     try {
-      console.log("===== 開始生成日曆數據 =====");
+      console.log("===== 開始生成ShiftSwap月曆數據 =====");
       
       const startDate = startOfMonth(date);
       const endDate = endOfMonth(date);
@@ -1283,7 +1283,8 @@ const ShiftSwap = () => {
       let week = [];
       
       // 填充月份開始前的空白單元格
-      const firstDay = getDay(startDate);
+      // 調整 getDay 結果：週一=0, 週二=1, ..., 週日=6
+      const firstDay = (getDay(startDate) + 6) % 7;
       for (let i = 0; i < firstDay; i++) {
         week.push({ date: null });
       }
@@ -1384,6 +1385,7 @@ const ShiftSwap = () => {
         let mission = '';
         let overtime = '';
         let overtimeShift = '';
+        let hasOvertime = false;
         
         try {
           // 從班表數據中獲取當天的班別
@@ -1430,6 +1432,7 @@ const ShiftSwap = () => {
               // 獲取加班班種
               overtimeShift = dayOvertime.overtime_shift || '';
               overtime = `加班${overtimeShift ? `(${overtimeShift})` : ''}`;
+              hasOvertime = true;
               console.log(`找到 ${dateString} 的加班記錄:`, {
                 加班班種: overtimeShift,
                 原始數據: dayOvertime
@@ -1446,11 +1449,13 @@ const ShiftSwap = () => {
           shift, 
           mission, 
           overtime,
-          overtimeShift
+          overtimeShift,
+          isOvertimeDay: hasOvertime
         });
         
         // 如果是一週的最後一天或是月份的最後一天
-        if (getDay(day) === 6 || format(day, 'yyyy-MM-dd') === format(endDate, 'yyyy-MM-dd')) {
+        // 調整判斷條件：週日對應6
+        if ((getDay(day) + 6) % 7 === 6 || format(day, 'yyyy-MM-dd') === format(endDate, 'yyyy-MM-dd')) {
           calendar.push([...week]);
           week = [];
         }

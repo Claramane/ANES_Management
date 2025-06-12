@@ -379,7 +379,8 @@ function Dashboard() {
       let week = [];
       
       // 填充月份開始前的空白單元格
-      const firstDay = getDay(startDate);
+      // 調整 getDay 結果：週一=0, 週二=1, ..., 週日=6
+      const firstDay = (getDay(startDate) + 6) % 7;
       for (let i = 0; i < firstDay; i++) {
         week.push({ date: null });
       }
@@ -472,7 +473,8 @@ function Dashboard() {
         });
         
         // 如果是一週的最後一天或是月份的最後一天
-        if (getDay(day) === 6 || format(day, 'yyyy-MM-dd') === format(endDate, 'yyyy-MM-dd')) {
+        // 調整判斷條件：週日對應6
+        if ((getDay(day) + 6) % 7 === 6 || format(day, 'yyyy-MM-dd') === format(endDate, 'yyyy-MM-dd')) {
           calendar.push([...week]);
           week = [];
         }

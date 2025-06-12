@@ -5,6 +5,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
 from ..services.doctor_schedule_service import DoctorScheduleService
+from ..core.database import get_db
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,16 @@ class DoctorScheduleTaskManager:
                 max_instances=1  # 確保同時只有一個實例在運行
             )
             
+            # 每5分鐘檢查一次醫師自動下班狀態
+            self.scheduler.add_job(
+                func=self.check_doctors_auto_off_duty,
+                trigger=IntervalTrigger(minutes=5),
+                id='check_doctors_auto_off_duty',
+                name='檢查醫師自動下班狀態',
+                replace_existing=True,
+                max_instances=1  # 確保同時只有一個實例在運行
+            )
+            
             # 系統啟動時立即執行一次更新（可選）
             self.scheduler.add_job(
                 func=self.update_future_four_months_schedules,
@@ -39,8 +50,18 @@ class DoctorScheduleTaskManager:
                 replace_existing=True
             )
             
+            # 系統啟動時立即執行一次自動下班檢測
+            self.scheduler.add_job(
+                func=self.check_doctors_auto_off_duty,
+                trigger='date',  # 一次性任務
+                run_date=datetime.now() + timedelta(seconds=10),  # 10秒後執行
+                id='initial_check_auto_off_duty',
+                name='初始檢查醫師自動下班狀態',
+                replace_existing=True
+            )
+            
             self.scheduler.start()
-            logger.info("醫師班表定時任務已啟動 - 每10分鐘更新未來四個月班表")
+            logger.info("醫師班表定時任務已啟動 - 每10分鐘更新未來四個月班表，每5分鐘檢查自動下班狀態")
     
     def stop_scheduler(self):
         """停止排程器"""
@@ -48,6 +69,22 @@ class DoctorScheduleTaskManager:
             self.scheduler.shutdown()
             self.scheduler = None
             logger.info("醫師班表定時任務已停止")
+    
+    async def check_doctors_auto_off_duty(self):
+        """檢查醫師自動下班狀態"""
+        try:
+            logger.debug("開始執行醫師自動下班檢測")
+            
+            # 獲取資料庫連接
+            db = next(get_db())
+            try:
+                # 執行自動下班檢測
+                DoctorScheduleService.update_doctors_active_status_by_time(db)
+            finally:
+                db.close()
+                
+        except Exception as e:
+            logger.error(f"執行醫師自動下班檢測時發生錯誤: {str(e)}")
     
     async def update_future_four_months_schedules(self):
         """更新未來四個月醫師班表（從明天開始）"""

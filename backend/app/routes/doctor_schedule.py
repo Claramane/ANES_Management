@@ -512,6 +512,35 @@ async def update_doctor_status_alternative(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"更新醫師狀態失敗: {str(e)}")
 
+@router.post("/check-auto-off-duty")
+async def check_auto_off_duty(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    手動觸發醫師自動下班檢測
+    只有管理員可以手動觸發
+    """
+    try:
+        # 檢查權限（只有護理長或管理員可以觸發）
+        if current_user.role not in ['head_nurse', 'admin']:
+            raise HTTPException(status_code=403, detail="權限不足，只有護理長或管理員可以觸發自動下班檢測")
+        
+        # 執行自動下班檢測
+        DoctorScheduleService.update_doctors_active_status_by_time(db)
+        
+        return {
+            "success": True,
+            "message": "自動下班檢測已執行完成",
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"手動觸發自動下班檢測失敗: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"執行失敗: {str(e)}")
+
 # 添加測試端點
 @router.post("/test-endpoint")
 async def test_endpoint():
@@ -534,6 +563,8 @@ async def debug_routes():
             "POST /api/doctor-schedules/doctor/{doctor_id}/toggle-leave",
             "POST /api/doctor-schedules/doctor/{doctor_id}/area-code",
             "POST /api/doctor-schedules/doctor/{doctor_id}/meeting-time",
+            "POST /api/doctor-schedules/doctor/{doctor_id}/meeting-time/remove",
+            "POST /api/doctor-schedules/check-auto-off-duty",
             "POST /api/doctor-schedules/test-endpoint",
             "GET /api/doctor-schedules/debug/routes"
         ]

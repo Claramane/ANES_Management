@@ -237,8 +237,9 @@ const DoctorSchedule = () => {
   // 新增：ref用於控制結束時間下拉選單
   const endTimeSelectRef = useRef(null);
 
-  // 新增：用戶信息（需要從context或props獲取，這裡先假設）
-  const [currentUser] = useState({ role: 'admin' }); // 模擬用戶數據
+  // 使用真正的認證系統獲取使用者資訊
+  const { user } = useAuthStore();
+  const currentUser = user || { role: 'user' }; // 預設為一般使用者
 
   // 區域代碼選項
   const areaCodeOptions = [
@@ -420,7 +421,8 @@ const DoctorSchedule = () => {
       let week = [];
       
       // 填充月份開始前的空白單元格
-      const firstDay = getDay(startDate);
+      // 調整 getDay 結果：週一=0, 週二=1, ..., 週日=6
+      const firstDay = (getDay(startDate) + 6) % 7;
       for (let i = 0; i < firstDay; i++) {
         week.push({ date: null });
       }
@@ -461,7 +463,8 @@ const DoctorSchedule = () => {
         });
         
         // 每週結束時將週資料加入日曆
-        if (getDay(day) === 6 || format(day, 'yyyy-MM-dd') === format(endDate, 'yyyy-MM-dd')) {
+        // 調整判斷條件：週日對應6
+        if ((getDay(day) + 6) % 7 === 6 || format(day, 'yyyy-MM-dd') === format(endDate, 'yyyy-MM-dd')) {
           calendar.push([...week]);
           week = [];
         }
@@ -473,7 +476,7 @@ const DoctorSchedule = () => {
       console.error('生成日曆數據時出錯:', err);
       setCalendarData([]);
     }
-  }, []);
+  }, [selectedDate, rawSchedules, loadEvents]);
 
   // 處理日期變更
   const handleDateChange = useCallback((newDate) => {
@@ -1450,7 +1453,7 @@ const DoctorSchedule = () => {
                     {getDoctorMeetingTimeDisplay(doctor)}
                   </Typography>
                   <Typography variant="body2" sx={{ fontSize: { xs: '11px', sm: '12px' }, opacity: 0.9 }}>
-                    外圍(TAE)
+                    {doctor.originalAreaCode || '未分類'}
                   </Typography>
                 </Box>
               </CardContent>
@@ -1523,7 +1526,7 @@ const DoctorSchedule = () => {
                     {getDoctorMeetingTimeDisplay(doctor)}
                     </Typography>
                     <Typography variant="body2" sx={{ fontSize: { xs: '11px', sm: '12px' }, opacity: 0.9 }}>
-                      已下班 - {doctor.originalAreaCode || '未分類'}
+                      {doctor.originalAreaCode || '未分類'}
                     </Typography>
                   </Box>
                 </CardContent>
