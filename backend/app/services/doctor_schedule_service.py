@@ -149,8 +149,9 @@ class DoctorScheduleService:
             current_time = datetime.now().time()
             current_datetime = datetime.now()
             updated_count = 0
+            meeting_cleared_count = 0
             
-            logger.info(f"開始檢查醫師自動下班狀態，當前時間: {current_time}")
+            logger.info(f"開始檢查醫師自動狀態更新，當前時間: {current_time}")
             
             # 檢查每個醫師的狀態
             for doctor in today_schedule.day_shift_doctors:
@@ -162,41 +163,86 @@ class DoctorScheduleService:
                     logger.warning(f"醫師 {doctor.name} 的工作時間格式無效: {doctor.time}")
                     continue
                 
+                # 檢查是否在工作時間內
+                is_in_working_hours = cls._is_in_work_time(current_time, start_time, end_time)
+                
+                # 檢查是否已經過了下班時間
+                is_past_work_time = cls._is_past_work_time(current_time, end_time)
+                
                 # 檢查是否在開會中
                 is_in_meeting = cls.is_doctor_in_meeting(doctor.meeting_time) if doctor.meeting_time else False
                 
-                # 檢查是否已經過了下班時間
-                if cls._is_past_work_time(current_time, end_time):
-                    # 如果醫師還在上班狀態，自動設為下班
-                    if doctor.status == 'on_duty':
-                        doctor.status = 'off_duty'
-                        doctor.updated_at = current_datetime
-                        updated_count += 1
-                        logger.info(f"醫師 {doctor.name} 已自動設為下班狀態（工作時間: {doctor.time}，當前時間: {current_time}）")
+                # 1. 處理下班時間檢測 - 如果醫師還在上班狀態但已過下班時間，自動設為下班
+                if is_past_work_time and doctor.status == 'on_duty':
+                    doctor.status = 'off_duty'
+                    doctor.updated_at = current_datetime
+                    updated_count += 1
+                    logger.info(f"醫師 {doctor.name} 已自動設為下班狀態（工作時間: {doctor.time}，當前時間: {current_time}）")
                 
-                # 檢查開會狀態
+                # 2. 處理開會狀態
                 if doctor.meeting_time:
                     meeting_start, meeting_end = cls.parse_work_time(doctor.meeting_time)
                     if meeting_start and meeting_end:
-                        # 如果在開會時間內且還是上班狀態，設為下班
+                        
+                        # 2a. 如果在開會時間內且還是上班狀態，設為下班
                         if is_in_meeting and doctor.status == 'on_duty':
                             doctor.status = 'off_duty'
                             doctor.updated_at = current_datetime
                             updated_count += 1
                             logger.info(f"醫師 {doctor.name} 已自動設為下班狀態（開會中: {doctor.meeting_time}）")
                         
-                        # 如果開會結束且在工作時間內，可以考慮恢復上班狀態
-                        # 但為了安全起見，我們不自動恢復，讓管理員手動處理
+                        # 2b. 如果開會結束且在工作時間內且不是請假狀態，自動恢復上班狀態並刪除開會行程
+                        elif not is_in_meeting and is_in_working_hours and doctor.status != 'off':
+                            # 記錄原開會時間（在刪除前）
+                            original_meeting_time = doctor.meeting_time
+                            
+                            # 檢查是否應該恢復上班狀態
+                            if doctor.status == 'off_duty':
+                                doctor.status = 'on_duty'
+                                updated_count += 1
+                                logger.info(f"醫師 {doctor.name} 開會結束，已自動恢復上班狀態（開會時間: {original_meeting_time}）")
+                            
+                            # 刪除過期的開會行程
+                            doctor.meeting_time = None
+                            doctor.updated_at = current_datetime
+                            meeting_cleared_count += 1
+                            logger.info(f"醫師 {doctor.name} 的過期開會行程已自動刪除（原開會時間: {original_meeting_time}）")
+                        
+                        # 2c. 如果開會結束但已過下班時間，只刪除開會行程，保持下班狀態
+                        elif not is_in_meeting and is_past_work_time:
+                            # 記錄原開會時間（在刪除前）
+                            original_meeting_time = doctor.meeting_time
+                            
+                            doctor.meeting_time = None
+                            doctor.updated_at = current_datetime
+                            meeting_cleared_count += 1
+                            logger.info(f"醫師 {doctor.name} 的過期開會行程已自動刪除（已過下班時間，原開會時間: {original_meeting_time}）")
             
-            if updated_count > 0:
+            if updated_count > 0 or meeting_cleared_count > 0:
                 db.commit()
-                logger.info(f"自動下班檢測完成，已更新 {updated_count} 位醫師的狀態")
+                logger.info(f"自動狀態更新完成，已更新 {updated_count} 位醫師的狀態，清除 {meeting_cleared_count} 個過期開會行程")
             else:
-                logger.info("自動下班檢測完成，無需更新醫師狀態")
+                logger.info("自動狀態更新完成，無需更新醫師狀態")
             
         except Exception as e:
             logger.error(f"自動更新醫師狀態失敗: {str(e)}")
             db.rollback()
+    
+    @classmethod
+    def _is_in_work_time(cls, current_time, start_time, end_time) -> bool:
+        """檢查當前時間是否在工作時間內"""
+        try:
+            # 處理跨午夜的情況
+            if start_time > end_time:
+                # 跨午夜情況，如 22:00-06:00
+                return current_time >= start_time or current_time <= end_time
+            else:
+                # 正常情況，如 08:00-18:00
+                return start_time <= current_time <= end_time
+                
+        except Exception as e:
+            logger.error(f"檢查工作時間失敗: current_time={current_time}, start_time={start_time}, end_time={end_time}, 錯誤: {str(e)}")
+            return False
     
     @classmethod
     def _is_past_work_time(cls, current_time, end_time) -> bool:
