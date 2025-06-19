@@ -194,7 +194,7 @@ class DoctorScheduleService:
                     meeting_start, meeting_end = cls.parse_work_time(doctor.meeting_time)
                     if meeting_start and meeting_end:
                         
-                        # 2a. 如果在開會時間內且還是上班狀態，設為下班
+                        # 2a. 如果在開會時間內且還是上班狀態，設為下班但保留meeting_time
                         if is_in_meeting and doctor.status == 'on_duty':
                             doctor.status = 'off_duty'
                             doctor.updated_at = current_datetime
@@ -341,7 +341,7 @@ class DoctorScheduleService:
                 schedule_id=schedule_id,
                 name='范守仁',
                 summary='范守仁/B',  # B代表手術室
-                time='08:00-18:00',
+                time='08:00-16:00',
                 area_code='手術室',
                 status='on_duty'
             )
@@ -527,8 +527,8 @@ class DoctorScheduleService:
     def get_schedules_by_date_range(cls, db: Session, start_date: str, end_date: str) -> List[Dict]:
         """根據日期範圍獲取班表資料"""
         try:
-            # 移除自動更新調用，避免覆蓋前端手動設置的狀態
-            # cls.update_doctors_active_status_by_time(db)
+            # 恢復自動更新調用，確保開會狀態能正確顯示
+            cls.update_doctors_active_status_by_time(db)
             
             schedules = db.query(DoctorSchedule).filter(
                 and_(
@@ -545,21 +545,33 @@ class DoctorScheduleService:
                     # 檢查是否在開會中
                     is_in_meeting = cls.is_doctor_in_meeting(doctor.meeting_time) if doctor.meeting_time else False
                     
-                    # 重新解析summary以確保area_code是最新的（處理模糊匹配）
-                    if doctor.summary:
+                    # 修復：優先使用手動設定的area_code，只有當area_code為空或與summary不符時才重新解析
+                    display_area_code = doctor.area_code
+                    
+                    # 只有在以下情況才重新解析summary：
+                    # 1. area_code為空
+                    # 2. area_code與summary中的原始區域字串相同（表示尚未手動修改過）
+                    if doctor.summary and not doctor.area_code:
+                        # 如果沒有area_code，從summary解析
                         _, resolved_area_code = cls.extract_name_and_area_from_summary(doctor.summary)
-                        # 如果解析出的area_code與原始區域字串不同，說明發生了模糊匹配，使用解析出的結果
+                        display_area_code = resolved_area_code
+                    elif doctor.summary and doctor.area_code:
+                        # 如果有area_code，檢查是否是原始的（未手動修改的）
                         original_area_part = doctor.summary.split('/')[1].strip() if '/' in doctor.summary else ''
-                        display_area_code = resolved_area_code if resolved_area_code != original_area_part else doctor.area_code
-                    else:
-                        display_area_code = doctor.area_code
+                        if doctor.area_code == original_area_part:
+                            # 如果area_code與原始區域字串相同，說明可能需要模糊匹配處理
+                            _, resolved_area_code = cls.extract_name_and_area_from_summary(doctor.summary)
+                            display_area_code = resolved_area_code
+                        else:
+                            # 如果area_code與原始字串不同，說明已經手動修改過，保持不變
+                            display_area_code = doctor.area_code
                     
                     day_shifts.append({
                         'id': doctor.id,
                         'name': doctor.name,
                         'summary': doctor.summary,
                         'time': doctor.time,
-                        'area_code': display_area_code,  # 使用處理過的area_code
+                        'area_code': display_area_code,  # 使用修復後的area_code邏輯
                         'status': doctor.status,  # 使用新的status字段
                         'meeting_time': doctor.meeting_time,
                         'is_in_meeting': is_in_meeting

@@ -245,6 +245,11 @@ const DoctorSchedule = () => {
   const { user } = useAuthStore();
   const currentUser = user || { role: 'user' }; // 預設為一般使用者
 
+  // 新增：檢查是否有編輯權限的輔助函數
+  const hasEditPermission = useCallback(() => {
+    return currentUser.role === 'admin' || currentUser.role === 'head_nurse';
+  }, [currentUser.role]);
+
   // 區域代碼選項
   const areaCodeOptions = [
     { value: '控台醫師', label: '控台醫師' },
@@ -776,7 +781,7 @@ const DoctorSchedule = () => {
 
   // 新增：處理醫師點擊事件
   const handleDoctorClick = useCallback((doctor) => {
-    if (currentUser.role !== 'admin') return; // 只有管理員可以編輯
+    if (!hasEditPermission()) return; // 使用新的權限檢查函數
     
     // 值班醫師不可編輯
     if (doctor.isDuty) {
@@ -795,7 +800,7 @@ const DoctorSchedule = () => {
     setSelectedDoctor(doctor);
     setNewAreaCode(doctor.area_code || '');
     setIsDrawerOpen(true);
-  }, [currentUser.role]);
+  }, [hasEditPermission]);
 
   // 新增：處理區域代碼變更（自動提交）
   const handleAreaCodeChange = useCallback(async (newAreaCode) => {
@@ -812,17 +817,23 @@ const DoctorSchedule = () => {
     
     try {
       setIsUpdating(true);
-      console.log(`更新醫師 ${selectedDoctor.id} (${selectedDoctor.name}) 的區域代碼為: ${newAreaCode}`);
+      console.log(`開始更新醫師區域代碼:`, {
+        doctorId: selectedDoctor.id,
+        doctorName: selectedDoctor.name,
+        currentAreaCode: selectedDoctor.area_code,
+        newAreaCode: newAreaCode
+      });
       
       const response = await api.post(`/doctor-schedules/doctor/${selectedDoctor.id}/area-code`, {
         area_code: newAreaCode
       });
       
       const result = response.data;
+      console.log('後端回應:', result);
       
       // 檢查回應格式 - 後端返回 {success: true, message: "區域代碼更新成功"}
       if (result.success) {
-        console.log('區域代碼更新成功');
+        console.log('區域代碼更新成功，開始重新載入資料...');
         
         // 清除錯誤狀態
         setError(null);
@@ -832,7 +843,7 @@ const DoctorSchedule = () => {
         setSelectedDoctor(null);
         
         // 立刻重新載入今日資料和當前月份資料
-        console.log('開始重新載入資料...');
+        console.log('載入資料前的todayScheduleData:', todayScheduleData);
         await Promise.all([
           loadTodayData(),
           loadEvents(selectedDate)
@@ -851,10 +862,17 @@ const DoctorSchedule = () => {
       }
     } catch (err) {
       console.error('更新區域代碼失敗:', err);
+      console.error('錯誤詳情:', {
+        message: err.message,
+        response: err.response?.data,
+        status: err.response?.status
+      });
       
       // 提取錯誤訊息
       let errorMessage = '更新區域代碼失敗';
-      if (err.message) {
+      if (err.response?.data?.detail) {
+        errorMessage = err.response.data.detail;
+      } else if (err.message) {
         errorMessage = err.message;
       }
       
@@ -878,7 +896,7 @@ const DoctorSchedule = () => {
     } finally {
       setIsUpdating(false);
     }
-  }, [selectedDoctor, loadTodayData, loadEvents, selectedDate]);
+  }, [selectedDoctor, loadTodayData, loadEvents, selectedDate, todayScheduleData]);
 
   // 新增：處理醫師上下班狀態切換
   const handleToggleActiveStatus = useCallback(async () => {
@@ -992,10 +1010,9 @@ const DoctorSchedule = () => {
 
   // 修改：計算今日班表資訊 - 自動檢查工作時間並更新active狀態
   const todayScheduleInfo = useMemo(() => {
-    // 使用專門的 todayScheduleData 而不是 rawSchedules
     if (!todayScheduleData) {
       return {
-        todayDutyDoctor: [{ name: '無資料', active: true, isDuty: true }],
+        todayDutyDoctor: [{ name: '無', active: true, isDuty: true }],
         todayConsoleDoctor: [{ name: '無資料', active: true }],
         todayORDoctors: [{ name: '無資料', active: true }],
         todayPeripheral3F: [{ name: '無資料', active: true }],
@@ -1022,12 +1039,10 @@ const DoctorSchedule = () => {
     
     if (todayScheduleData.白班 && Array.isArray(todayScheduleData.白班)) {
       todayScheduleData.白班.forEach((shift, index) => {
-        const isInMeeting = isDoctorInMeeting(shift.id);
-        
-        // 使用資料庫中的active狀態，不再自動修改
+        // 直接使用後端返回的 is_in_meeting 狀態，不再使用前端的檢查邏輯
         const doctorData = {
           ...shift,
-          isInMeeting: isInMeeting // 添加開會狀態
+          // 移除前端的 isInMeeting 計算，直接使用後端的 is_in_meeting
         };
         
         // 檢查是否為已下班狀態
@@ -1087,7 +1102,7 @@ const DoctorSchedule = () => {
     };
     
     return result;
-  }, [todayScheduleData, isDoctorInMeeting]); // 依賴改為 todayScheduleData 和相關檢查函數
+  }, [todayScheduleData]); // 移除 isDoctorInMeeting 依賴，只依賴 todayScheduleData
 
   // 計算統計資料
   const statistics = useMemo(() => {
@@ -1265,6 +1280,21 @@ const DoctorSchedule = () => {
     }
   }, [selectedDoctor, loadTodayData, loadEvents, selectedDate]);
 
+  // 新增：定期刷新今日資料的效果
+  useEffect(() => {
+    // 設定每分鐘刷新一次今日資料，確保開會狀態能即時更新
+    const refreshInterval = setInterval(() => {
+      if (!isLoadingToday) {
+        console.log('定期刷新今日班表資料...');
+        loadTodayData();
+      }
+    }, 60000); // 每60秒刷新一次
+
+    return () => {
+      clearInterval(refreshInterval);
+    };
+  }, [isLoadingToday, loadTodayData]);
+
   return (
     <Box sx={{ 
       p: { xs: 0, sm: 2, md: 3 }, // 手機版本移除padding
@@ -1288,14 +1318,14 @@ const DoctorSchedule = () => {
                 backgroundColor: AREA_COLOR_MAPPING['控台醫師'],
                 color: 'white',
                 opacity: (doctor.status === 'off' || doctor.status === 'off_duty' || doctor.is_in_meeting) ? 0.5 : 1,
-                cursor: currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' ? 'pointer' : 'default',
+                cursor: hasEditPermission() && doctor.name !== '無' && doctor.name !== '無資料' ? 'pointer' : 'default',
                 transition: 'all 0.2s ease',
-                '&:hover': currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' ? {
+                '&:hover': hasEditPermission() && doctor.name !== '無' && doctor.name !== '無資料' ? {
                   transform: 'scale(1.02)',
                   boxShadow: 'none'
                 } : {}
               }}
-              onClick={() => currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' && handleDoctorClick(doctor)}
+              onClick={() => hasEditPermission() && doctor.name !== '無' && doctor.name !== '無資料' && handleDoctorClick(doctor)}
             >
                 <CardContent sx={{ p: { xs: 1, sm: 1.5 }, '&:last-child': { pb: { xs: 1, sm: 1.5 } } }}>
                   <Box>
@@ -1327,14 +1357,14 @@ const DoctorSchedule = () => {
                 backgroundColor: AREA_COLOR_MAPPING['手術室'],
                 color: 'white',
                 opacity: (doctor.status === 'off' || doctor.status === 'off_duty' || doctor.is_in_meeting) ? 0.5 : 1,
-                cursor: currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' ? 'pointer' : 'default',
+                cursor: hasEditPermission() && doctor.name !== '無' && doctor.name !== '無資料' ? 'pointer' : 'default',
                 transition: 'all 0.2s ease',
-                '&:hover': currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' ? {
+                '&:hover': hasEditPermission() && doctor.name !== '無' && doctor.name !== '無資料' ? {
                   transform: 'scale(1.02)',
                   boxShadow: 'none'
                 } : {}
               }}
-              onClick={() => currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' && handleDoctorClick(doctor)}
+              onClick={() => hasEditPermission() && doctor.name !== '無' && doctor.name !== '無資料' && handleDoctorClick(doctor)}
             >
                 <CardContent sx={{ p: { xs: 1, sm: 1.5 }, '&:last-child': { pb: { xs: 1, sm: 1.5 } } }}>
                   <Box>
@@ -1366,14 +1396,14 @@ const DoctorSchedule = () => {
                 backgroundColor: AREA_COLOR_MAPPING['外圍(3F)'],
                 color: 'white',
                 opacity: (doctor.status === 'off' || doctor.status === 'off_duty' || doctor.is_in_meeting) ? 0.5 : 1,
-                cursor: currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' ? 'pointer' : 'default',
+                cursor: hasEditPermission() && doctor.name !== '無' && doctor.name !== '無資料' ? 'pointer' : 'default',
                 transition: 'all 0.2s ease',
-                '&:hover': currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' ? {
+                '&:hover': hasEditPermission() && doctor.name !== '無' && doctor.name !== '無資料' ? {
                   transform: 'scale(1.02)',
                   boxShadow: 'none'
                 } : {}
               }}
-              onClick={() => currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' && handleDoctorClick(doctor)}
+              onClick={() => hasEditPermission() && doctor.name !== '無' && doctor.name !== '無資料' && handleDoctorClick(doctor)}
             >
                 <CardContent sx={{ p: { xs: 1, sm: 1.5 }, '&:last-child': { pb: { xs: 1, sm: 1.5 } } }}>
                   <Box>
@@ -1405,14 +1435,14 @@ const DoctorSchedule = () => {
                 backgroundColor: AREA_COLOR_MAPPING['外圍(高階)'],
                 color: 'white',
                 opacity: (doctor.status === 'off' || doctor.status === 'off_duty' || doctor.is_in_meeting) ? 0.5 : 1,
-                cursor: currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' ? 'pointer' : 'default',
+                cursor: hasEditPermission() && doctor.name !== '無' && doctor.name !== '無資料' ? 'pointer' : 'default',
                 transition: 'all 0.2s ease',
-                '&:hover': currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' ? {
+                '&:hover': hasEditPermission() && doctor.name !== '無' && doctor.name !== '無資料' ? {
                   transform: 'scale(1.02)',
                   boxShadow: 'none'
                 } : {}
               }}
-              onClick={() => currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' && handleDoctorClick(doctor)}
+              onClick={() => hasEditPermission() && doctor.name !== '無' && doctor.name !== '無資料' && handleDoctorClick(doctor)}
             >
                 <CardContent sx={{ p: { xs: 1, sm: 1.5 }, '&:last-child': { pb: { xs: 1, sm: 1.5 } } }}>
                   <Box>
@@ -1444,14 +1474,14 @@ const DoctorSchedule = () => {
                 backgroundColor: AREA_COLOR_MAPPING['外圍(TAE)'],
                 color: 'white',
                 opacity: (doctor.status === 'off' || doctor.status === 'off_duty' || doctor.is_in_meeting) ? 0.5 : 1,
-                cursor: currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' ? 'pointer' : 'default',
+                cursor: hasEditPermission() && doctor.name !== '無' && doctor.name !== '無資料' ? 'pointer' : 'default',
                 transition: 'all 0.2s ease',
-                '&:hover': currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' ? {
+                '&:hover': hasEditPermission() && doctor.name !== '無' && doctor.name !== '無資料' ? {
                   transform: 'scale(1.02)',
                   boxShadow: 'none'
                 } : {}
               }}
-              onClick={() => currentUser.role === 'admin' && doctor.name !== '無' && doctor.name !== '無資料' && handleDoctorClick(doctor)}
+              onClick={() => hasEditPermission() && doctor.name !== '無' && doctor.name !== '無資料' && handleDoctorClick(doctor)}
             >
               <CardContent sx={{ p: { xs: 1, sm: 1.5 }, '&:last-child': { pb: { xs: 1, sm: 1.5 } } }}>
                 <Box>
@@ -1517,14 +1547,14 @@ const DoctorSchedule = () => {
                 backgroundColor: '#9e9e9e', // 統一灰色背景
                 color: 'white',
                 opacity: 0.35, // 稍微降低透明度
-                cursor: currentUser.role === 'admin' ? 'pointer' : 'default',
+                cursor: hasEditPermission() ? 'pointer' : 'default',
                 transition: 'all 0.2s ease',
-                '&:hover': currentUser.role === 'admin' ? {
+                '&:hover': hasEditPermission() ? {
                   transform: 'scale(1.02)',
                   boxShadow: 'none'
                 } : {}
               }}
-              onClick={() => currentUser.role === 'admin' && handleDoctorClick(doctor)}
+              onClick={() => hasEditPermission() && handleDoctorClick(doctor)}
             >
                 <CardContent sx={{ p: { xs: 1, sm: 1.5 }, '&:last-child': { pb: { xs: 1, sm: 1.5 } } }}>
                   <Box>
