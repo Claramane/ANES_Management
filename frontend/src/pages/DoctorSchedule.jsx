@@ -133,10 +133,14 @@ const RenderDoctorCalendarCell = ({ day, onClick }) => {
             backgroundColor = AREA_COLOR_MAPPING['手術室'];
           } else if (eventText.includes('/C')) {
             backgroundColor = AREA_COLOR_MAPPING['外圍(3F)'];
-          } else if (eventText.includes('/D')) {
+          } else if (eventText.includes('/D') && !eventText.match(/\/D\s+\w/)) {
+            // 精確匹配：只有 "/D" 後面沒有空格+字母的才算外圍(高階)
             backgroundColor = AREA_COLOR_MAPPING['外圍(高階)'];
           } else if (eventText.includes('/F')) {
             backgroundColor = AREA_COLOR_MAPPING['外圍(TAE)'];
+          } else if (eventText.match(/\/D\s+\w/)) {
+            // 模糊匹配："/D" 後面有空格+字母的歸類為手術室
+            backgroundColor = AREA_COLOR_MAPPING['手術室'];
           }
           
           return (
@@ -968,6 +972,10 @@ const DoctorSchedule = () => {
         // 顯示成功訊息
         console.log('狀態切換成功:', result.message);
         
+        // 狀態切換成功後關閉抽屜
+        setIsDrawerOpen(false);
+        setSelectedDoctor(null);
+        
       } else {
         throw new Error(result.message || '狀態切換失敗');
       }
@@ -1773,10 +1781,14 @@ const DoctorSchedule = () => {
                     backgroundColor = AREA_COLOR_MAPPING['手術室'];
                   } else if (eventText.includes('/C')) {
                     backgroundColor = AREA_COLOR_MAPPING['外圍(3F)'];
-                  } else if (eventText.includes('/D')) {
+                  } else if (eventText.includes('/D') && !eventText.match(/\/D\s+\w/)) {
+                    // 精確匹配：只有 "/D" 後面沒有空格+字母的才算外圍(高階)
                     backgroundColor = AREA_COLOR_MAPPING['外圍(高階)'];
                   } else if (eventText.includes('/F')) {
                     backgroundColor = AREA_COLOR_MAPPING['外圍(TAE)'];
+                  } else if (eventText.match(/\/D\s+\w/)) {
+                    // 模糊匹配："/D" 後面有空格+字母的歸類為手術室
+                    backgroundColor = AREA_COLOR_MAPPING['手術室'];
                   }
 
                   return (

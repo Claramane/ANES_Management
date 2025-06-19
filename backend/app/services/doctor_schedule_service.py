@@ -24,6 +24,16 @@ class DoctorScheduleService:
         'F': '外圍(TAE)',
     }
     
+    # 新增：模糊匹配的區域代碼映射
+    FUZZY_AREA_MAPPING = {
+        'A': '控台醫師',
+        'B': '手術室', 
+        'C': '外圍(3F)',
+        'D': '手術室',  # D的變體歸類到手術室
+        'E': '手術室',
+        'F': '外圍(TAE)',
+    }
+    
     @classmethod
     def parse_work_time(cls, time_str: str) -> tuple:
         """解析工作時間字串，返回開始和結束時間"""
@@ -270,11 +280,27 @@ class DoctorScheduleService:
         try:
             if '/' in summary:
                 name = summary.split('/')[0].strip()
-                area_letter = summary.split('/')[1].strip()
-                # 移除括號內容，只保留字母
-                area_letter = area_letter.split('(')[0].strip()
-                area_code = cls.POSITION_TO_AREA_MAPPING.get(area_letter, area_letter)
-                return name, area_code
+                area_part = summary.split('/')[1].strip()
+                
+                # 先嘗試精確匹配（移除括號內容）
+                area_letter = area_part.split('(')[0].strip()
+                
+                # 檢查是否為精確匹配
+                if area_letter in cls.POSITION_TO_AREA_MAPPING:
+                    area_code = cls.POSITION_TO_AREA_MAPPING[area_letter]
+                    return name, area_code
+                
+                # 如果精確匹配失敗，嘗試模糊匹配
+                # 提取第一個字母進行模糊匹配
+                first_letter = area_part[0].upper() if area_part else ''
+                
+                if first_letter in cls.FUZZY_AREA_MAPPING:
+                    area_code = cls.FUZZY_AREA_MAPPING[first_letter]
+                    logger.info(f"模糊匹配: {summary} -> {first_letter} -> {area_code}")
+                    return name, area_code
+                
+                # 如果都匹配不到，返回原始區域字串
+                return name, area_part
             else:
                 return summary.strip(), '未分類'
         except Exception as e:
@@ -519,12 +545,21 @@ class DoctorScheduleService:
                     # 檢查是否在開會中
                     is_in_meeting = cls.is_doctor_in_meeting(doctor.meeting_time) if doctor.meeting_time else False
                     
+                    # 重新解析summary以確保area_code是最新的（處理模糊匹配）
+                    if doctor.summary:
+                        _, resolved_area_code = cls.extract_name_and_area_from_summary(doctor.summary)
+                        # 如果解析出的area_code與原始區域字串不同，說明發生了模糊匹配，使用解析出的結果
+                        original_area_part = doctor.summary.split('/')[1].strip() if '/' in doctor.summary else ''
+                        display_area_code = resolved_area_code if resolved_area_code != original_area_part else doctor.area_code
+                    else:
+                        display_area_code = doctor.area_code
+                    
                     day_shifts.append({
                         'id': doctor.id,
                         'name': doctor.name,
                         'summary': doctor.summary,
                         'time': doctor.time,
-                        'area_code': doctor.area_code,
+                        'area_code': display_area_code,  # 使用處理過的area_code
                         'status': doctor.status,  # 使用新的status字段
                         'meeting_time': doctor.meeting_time,
                         'is_in_meeting': is_in_meeting
