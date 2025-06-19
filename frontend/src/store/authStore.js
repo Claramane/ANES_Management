@@ -261,12 +261,19 @@ export const useAuthStore = create(
         try {
           // 開始註冊流程
           const startResponse = await api.post('/webauthn/register/start');
-          const optionsFromServer = startResponse.data.publicKey;
+          const responseData = startResponse.data;
+          const optionsFromServer = responseData.publicKey;
 
           if (!optionsFromServer || typeof optionsFromServer !== 'object') {
             console.error('Invalid optionsFromServer:', optionsFromServer);
             throw new Error('從伺服器獲取註冊選項失敗');
           }
+
+          // 暫存challenge和user_id（作為session的備選方案）
+          const challengeB64 = responseData.challenge_b64;
+          const userId = responseData.user_id;
+          
+          console.log('暫存challenge用於備選方案:', challengeB64?.slice(0, 10) + '...');
 
           // 轉換 challenge 和 user.id 為 ArrayBuffer
           const publicKeyCredentialCreationOptions = {
@@ -304,8 +311,8 @@ export const useAuthStore = create(
           console.log('base64UrlToArrayBuffer(arrayBufferToBase64Url(credential.rawId)) Uint8Array', new Uint8Array(rawIdDecoded));
           console.log('rawId bytes equal?', new Uint8Array(credential.rawId).every((v, i) => v === new Uint8Array(rawIdDecoded)[i]));
 
-          // 完成註冊流程
-          await api.post('/webauthn/register/finish', {
+          // 完成註冊流程，包含備選的challenge
+          const finishPayload = {
             id: credential.id,
             raw_id: arrayBufferToBase64Url(credential.rawId),
             response: {
@@ -313,7 +320,15 @@ export const useAuthStore = create(
               attestation_object: arrayBufferToBase64Url(credential.response.attestationObject),
             },
             type: credential.type
-          });
+          };
+          
+          // 如果有challenge，添加備選參數
+          if (challengeB64 && userId) {
+            finishPayload.challenge_b64 = challengeB64;
+            finishPayload.user_id = userId;
+          }
+
+          await api.post('/webauthn/register/finish', finishPayload);
 
           set({ isLoading: false });
           return true;

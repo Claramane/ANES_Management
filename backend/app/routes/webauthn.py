@@ -86,6 +86,12 @@ async def register_start(
     current_user: User = Depends(get_current_user)
 ):
     """開始WebAuthn註冊流程"""
+    # 調試信息
+    print(f"DEBUG START: Request cookies: {dict(request.cookies)}")
+    print(f"DEBUG START: Session before: {dict(request.session)}")
+    print(f"DEBUG START: User Agent: {request.headers.get('user-agent', 'Unknown')}")
+    print(f"DEBUG START: Origin: {request.headers.get('origin', 'Unknown')}")
+    
     options = generate_registration_options(
         rp_id=RP_ID,
         rp_name=RP_NAME,
@@ -97,7 +103,11 @@ async def register_start(
     challenge_b64 = bytes_to_base64url(options.challenge)
     request.session["webauthn_challenge"] = challenge_b64
     
-    return {
+    # 調試：確認session已保存
+    print(f"DEBUG START: Session after saving challenge: {dict(request.session)}")
+    print(f"DEBUG START: Saved challenge: {challenge_b64[:10]}...")
+    
+    response_data = {
         "publicKey": {
             "rp": {
                 "name": options.rp.name,
@@ -121,13 +131,20 @@ async def register_start(
                 "requireResidentKey": False,
             },
             "attestation": "none",
-        }
+        },
+        # 添加challenge到響應中，讓前端可以暫存
+        "challenge_b64": challenge_b64,
+        "user_id": current_user.id  # 用於驗證
     }
+    
+    return response_data
 
 @router.post("/register/finish")
 async def register_finish(
     request: Request,
     credential: WebAuthnRegistrationCredential,
+    challenge_b64: str = None,  # 添加可選的challenge參數
+    user_id: int = None,  # 添加可選的user_id參數用於驗證
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -140,10 +157,26 @@ async def register_finish(
         print(f"DEBUG FINISH: Session ID: {getattr(request.session, '_session_id', 'No ID')}")
         print(f"DEBUG FINISH: User Agent: {request.headers.get('user-agent', 'Unknown')}")
         print(f"DEBUG FINISH: Origin: {request.headers.get('origin', 'Unknown')}")
+        print(f"DEBUG FINISH: Challenge from frontend: {challenge_b64[:10] if challenge_b64 else 'None'}...")
+        print(f"DEBUG FINISH: User ID from frontend: {user_id}")
         
-        # 從 session 中獲取 challenge
-        challenge_b64 = request.session.get("webauthn_challenge")
-        if not challenge_b64:
+        # 首先嘗試從session中獲取challenge
+        session_challenge = request.session.get("webauthn_challenge")
+        
+        # 如果session中沒有challenge，嘗試使用前端傳來的challenge
+        if not session_challenge and challenge_b64:
+            # 驗證用戶身份
+            if user_id != current_user.id:
+                raise HTTPException(
+                    status_code=400,
+                    detail="用戶身份驗證失敗"
+                )
+            print(f"DEBUG FINISH: Using challenge from frontend")
+            challenge_b64_to_use = challenge_b64
+        elif session_challenge:
+            print(f"DEBUG FINISH: Using challenge from session")
+            challenge_b64_to_use = session_challenge
+        else:
             debug_info = {
                 'session_keys': list(request.session.keys()),
                 'session_id': getattr(request.session, '_session_id', 'No session ID'),
@@ -151,17 +184,19 @@ async def register_finish(
                 'user_agent': request.headers.get('user-agent', 'Unknown'),
                 'cookies': dict(request.cookies),
                 'origin': request.headers.get('origin', 'Unknown'),
-                'host': request.headers.get('host', 'Unknown')
+                'host': request.headers.get('host', 'Unknown'),
+                'frontend_challenge': bool(challenge_b64),
+                'frontend_user_id': user_id
             }
-            error_msg = f"Passkey registration failed: No challenge in session. Debug info: {debug_info}"
+            error_msg = f"No challenge in session. Debug info: {debug_info}"
             print(f"ERROR: {error_msg}")
             raise HTTPException(
                 status_code=400,
                 detail=f"Passkey registration failed: {error_msg}"
             )
             
-        print(f"DEBUG: Found challenge: {challenge_b64[:10]}...")
-        expected_challenge = base64url_to_bytes(challenge_b64)
+        print(f"DEBUG: Using challenge: {challenge_b64_to_use[:10]}...")
+        expected_challenge = base64url_to_bytes(challenge_b64_to_use)
 
         # 將 raw_id 轉成 bytes
         raw_id_bytes = base64url_to_bytes(credential.raw_id)
@@ -184,7 +219,9 @@ async def register_finish(
             expected_origin=settings.WEBAUTHN_EXPECTED_ORIGIN,
             expected_rp_id=RP_ID,
         )
-        del request.session["webauthn_challenge"]
+        # 清理session中的challenge（如果存在）
+        if "webauthn_challenge" in request.session:
+            del request.session["webauthn_challenge"]
         
         # 生成設備指紋
         user_agent = request.headers.get("user-agent", "Unknown Device")

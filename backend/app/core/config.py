@@ -1,18 +1,37 @@
 # 本設定檔所有欄位皆可用環境變數（.env）覆蓋
 # 建議務必在.env中設置SECRET_KEY，避免每次啟動隨機產生
-# 例如：
+# 
+# 開發環境範例：
 # APP_NAME=恩主公麻醉科班表管理系統
-# SECRET_KEY=your-very-secret-key
+# SECRET_KEY=your-very-secret-key-for-development
 # ALGORITHM=HS256
-# ACCESS_TOKEN_EXPIRE_MINUTES=525600
-# DEBUG=false
+# ACCESS_TOKEN_EXPIRE_MINUTES=480
+# DEBUG=true
 # DATABASE_URL=postgresql://anes_user:anes_password@localhost/anes_db
 # FRONTEND_ORIGIN=http://localhost:3000
 # WEBAUTHN_RP_ID=localhost
 # BACKEND_CORS_ORIGINS=http://localhost:3000
 # WEBAUTHN_EXPECTED_ORIGIN=http://localhost:3000
+# IS_PRODUCTION=false
+# HTTPS_ONLY=false
 # ADMIN_USERNAME=admin
 # ADMIN_PASSWORD=changeme
+#
+# 生產環境範例：
+# APP_NAME=恩主公麻醉科班表管理系統
+# SECRET_KEY=your-super-secure-production-secret-key-minimum-32-chars
+# ALGORITHM=HS256
+# ACCESS_TOKEN_EXPIRE_MINUTES=480
+# DEBUG=false
+# DATABASE_URL=postgresql://production_user:production_password@production_host/production_db
+# FRONTEND_ORIGIN=https://your-frontend-domain.zeabur.app
+# WEBAUTHN_RP_ID=your-frontend-domain.zeabur.app
+# BACKEND_CORS_ORIGINS=https://your-frontend-domain.zeabur.app
+# WEBAUTHN_EXPECTED_ORIGIN=https://your-frontend-domain.zeabur.app
+# IS_PRODUCTION=true
+# HTTPS_ONLY=true
+# ADMIN_USERNAME=admin
+# ADMIN_PASSWORD=secure-production-password
 
 import os
 import secrets

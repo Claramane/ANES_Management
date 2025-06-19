@@ -95,15 +95,16 @@ app.add_middleware(
     secret_key=settings.SECRET_KEY,
     session_cookie="session",
     max_age=3600,  # 1小時過期
-    same_site="none",  # 跨域環境使用 none
-    https_only=False  # 在 Zeabur 環境中設為 False，因為代理已處理 HTTPS
+    same_site="none" if settings.IS_PRODUCTION else "lax",  # 生產環境使用none，開發環境使用lax
+    https_only=settings.HTTPS_ONLY  # 生產環境應該為True
 )
 
 # 配置CORS
+cors_origins = ["http://localhost:3000", "http://127.0.0.1:3000"] if not settings.IS_PRODUCTION else settings.BACKEND_CORS_ORIGINS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.FRONTEND_ORIGIN] if settings.FRONTEND_ORIGIN else ["http://localhost:3000"],
-    allow_credentials=True,
+    allow_origins=cors_origins,  # 根據環境動態設置
+    allow_credentials=True,  # 確保允許攜帶credentials
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allow_headers=[
         "Authorization", 
@@ -112,10 +113,12 @@ app.add_middleware(
         "Origin",
         "X-Requested-With",
         "Access-Control-Request-Method",
-        "Access-Control-Request-Headers"
+        "Access-Control-Request-Headers",
+        "Cookie"  # 添加Cookie header
     ],
     # 重要：設置 preflight 緩存時間為 24 小時
     max_age=86400,  # 24小時內瀏覽器不會重複發送 preflight 請求
+    expose_headers=["Set-Cookie"]  # 確保Set-Cookie header被暴露
 )
 
 # 註冊所有路由
