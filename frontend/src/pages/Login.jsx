@@ -207,11 +207,16 @@ function Login() {
     setFormError('');
 
     try {
+      console.log('開始訪客登入...');
       const success = await loginAsGuest();
       if (success) {
+        console.log('訪客登入成功，跳轉到週班表...');
         // 設置登入方式標記
         localStorage.setItem('loginMethod', 'guest');
-        navigate('/dashboard');
+        navigate('/weekly-schedule');
+      } else {
+        console.log('訪客登入失敗');
+        setFormError('訪客登入失敗，請稍後再試');
       }
     } catch (error) {
       console.error('訪客登入失敗:', error);

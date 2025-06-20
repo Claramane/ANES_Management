@@ -190,9 +190,9 @@ const GuestRestrictedRoute = ({ children, allowedForGuest = false }) => {
     return <Navigate to="/login" replace />;
   }
   
-  // 如果是訪客模式且該頁面不允許訪客訪問，跳轉到dashboard
+  // 如果是訪客模式且該頁面不允許訪客訪問，跳轉到週班表
   if (user?.role === 'guest' && !allowedForGuest) {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to="/weekly-schedule" replace />;
   }
   
   return children;
@@ -209,8 +209,8 @@ function App() {
     // 執行初始化認證檢查
     initializeAuth();
     
-    // 如果通過初始化檢查且有token，則嘗試獲取最新用戶資料
-    if (checkAuthStatus() && token) {
+    // 如果通過初始化檢查且有token，且不是訪客模式，則嘗試獲取最新用戶資料
+    if (checkAuthStatus() && token && user?.role !== 'guest') {
       api.get('/users/me')
         .then(res => {
           // 確保用戶資料是最新的
@@ -227,7 +227,7 @@ function App() {
           }
         });
     }
-  }, [initializeAuth, checkAuthStatus, token, setAuth, logout]);
+  }, [initializeAuth, checkAuthStatus, token, user, setAuth, logout]);
   
   // 定期檢查認證狀態（每5分鐘）
   useEffect(() => {
@@ -255,7 +255,12 @@ function App() {
               <Layout />
             </ProtectedRoute>
           }>
-            <Route index element={<Navigate to="/dashboard" replace />} />
+            <Route index element={
+              <Navigate 
+                to={user?.role === 'guest' ? '/weekly-schedule' : '/dashboard'} 
+                replace 
+              />
+            } />
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="weekly-schedule" element={
               <GuestRestrictedRoute allowedForGuest={true}>
