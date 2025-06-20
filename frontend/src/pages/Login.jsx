@@ -28,11 +28,14 @@ function Login() {
   const [isGuestLoading, setIsGuestLoading] = useState(false);
 
   useEffect(() => {
-    // 檢查是否已有有效的認證狀態，如果有則跳轉到儀表板
+    // 檢查是否已有有效的認證狀態，如果有則跳轉到相應頁面
     // 只在組件首次掛載時檢查，避免在登入過程中重複觸發
     const timeoutId = setTimeout(() => {
       if (checkAuthStatus()) {
-        navigate('/dashboard');
+        // 根據用戶角色決定跳轉路徑
+        const { user } = useAuthStore.getState();
+        const redirectPath = user?.role === 'guest' ? '/weekly-schedule' : '/dashboard';
+        navigate(redirectPath);
       }
     }, 100); // 短暫延遲，確保組件已完全渲染
 
