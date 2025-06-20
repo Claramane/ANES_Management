@@ -242,13 +242,14 @@ const DoctorSchedule = () => {
   const endTimeSelectRef = useRef(null);
 
   // 使用真正的認證系統獲取使用者資訊
-  const { user } = useAuthStore();
+  const { user, isGuestMode } = useAuthStore();
   const currentUser = user || { role: 'user' }; // 預設為一般使用者
+  const isGuest = isGuestMode();
 
   // 新增：檢查是否有編輯權限的輔助函數
   const hasEditPermission = useCallback(() => {
-    return currentUser.role === 'admin' || currentUser.role === 'head_nurse';
-  }, [currentUser.role]);
+    return !isGuest && (currentUser.role === 'admin' || currentUser.role === 'head_nurse');
+  }, [currentUser.role, isGuest]);
 
   // 區域代碼選項
   const areaCodeOptions = [

@@ -105,7 +105,8 @@ const WeeklySchedule = () => {
   } = useScheduleStore();
 
   const { nurseUsers, fetchUsers } = useUserStore();
-  const { user } = useAuthStore();
+  const { user, isGuestMode } = useAuthStore();
+  const isGuest = isGuestMode();
   
   const [currentWeek, setCurrentWeek] = useState(1);
   const [success, setSuccess] = useState(null);
@@ -120,7 +121,7 @@ const WeeklySchedule = () => {
   const [tempDate, setTempDate] = useState(null);
   
   // 檢查是否有編輯權限
-  const hasEditPermission = user?.role === 'head_nurse' || user?.role === 'admin';
+  const hasEditPermission = !isGuest && (user?.role === 'head_nurse' || user?.role === 'admin');
   
   // 確保選擇的日期是有效的
   const selectedDate = useMemo(() => {

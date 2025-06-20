@@ -145,7 +145,9 @@ const MonthlySchedule = () => {
   } = useScheduleStore();
 
   const { nurseUsers, fetchUsers } = useUserStore();
-  const { user } = useAuthStore();
+  const { user, isGuestMode } = useAuthStore();
+  const isGuest = isGuestMode();
+  
   const [success, setSuccess] = useState(null);
   const [error, setError] = useState(null);
   const [scheduleData, setScheduleData] = useState([]);
@@ -194,8 +196,8 @@ const MonthlySchedule = () => {
   
   // 檢查是否有編輯權限
   const hasEditPermission = useMemo(() => {
-    return user?.role === 'head_nurse' || user?.role === 'admin';
-  }, [user]);
+    return !isGuest && (user?.role === 'head_nurse' || user?.role === 'admin');
+  }, [user, isGuest]);
   
   // 確保選擇的日期是有效的
   const selectedDate = useMemo(() => {

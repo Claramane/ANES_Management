@@ -375,7 +375,8 @@ const OvertimeStaff = () => {
   } = useScheduleStore();
 
   const { nurseUsers, fetchUsers } = useUserStore();
-  const { user } = useAuthStore();
+  const { user, isGuestMode } = useAuthStore();
+  const isGuest = isGuestMode();
   
   // 使用新的 API 緩存機制
   const { fetchWithCache, clearCache } = useApiCache();
@@ -423,8 +424,8 @@ const OvertimeStaff = () => {
 
   // 權限檢查 - 只有護理長和admin可以編輯
   const canEdit = useMemo(() => {
-    return user && (user.role === 'head_nurse' || user.role === 'admin');
-  }, [user]);
+    return !isGuest && user && (user.role === 'head_nurse' || user.role === 'admin');
+  }, [user, isGuest]);
   
   // 確保選擇的日期是有效的
   const selectedDate = useMemo(() => {

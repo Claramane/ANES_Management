@@ -182,6 +182,22 @@ const HeadNurseRoute = ({ children }) => {
   return children;
 };
 
+// 訪客限制路由 - 只允許訪問特定頁面
+const GuestRestrictedRoute = ({ children, allowedForGuest = false }) => {
+  const { checkAuthStatus, user } = useAuthStore();
+  
+  if (!checkAuthStatus()) {
+    return <Navigate to="/login" replace />;
+  }
+  
+  // 如果是訪客模式且該頁面不允許訪客訪問，跳轉到dashboard
+  if (user?.role === 'guest' && !allowedForGuest) {
+    return <Navigate to="/dashboard" replace />;
+  }
+  
+  return children;
+};
+
 function App() {
   const { initializeAuth, checkAuthStatus, token, user, setAuth, logout } = useAuthStore();
   
@@ -241,15 +257,51 @@ function App() {
           }>
             <Route index element={<Navigate to="/dashboard" replace />} />
             <Route path="dashboard" element={<Dashboard />} />
-            <Route path="weekly-schedule" element={<WeeklySchedule />} />
-            <Route path="monthly-schedule" element={<MonthlySchedule />} />
-            <Route path="doctor-schedule" element={<DoctorSchedule />} />
-            <Route path="formula" element={<Formula />} />
-            <Route path="shift-swap" element={<ShiftSwapPage />} />
-            <Route path="announcements" element={<AnnouncementPage />} />
-            <Route path="overtime-staff" element={<OvertimeStaff />} />
-            <Route path="settings" element={<SettingsPage />} />
-            <Route path="version-history" element={<VersionHistory />} />
+            <Route path="weekly-schedule" element={
+              <GuestRestrictedRoute allowedForGuest={true}>
+                <WeeklySchedule />
+              </GuestRestrictedRoute>
+            } />
+            <Route path="monthly-schedule" element={
+              <GuestRestrictedRoute allowedForGuest={true}>
+                <MonthlySchedule />
+              </GuestRestrictedRoute>
+            } />
+            <Route path="doctor-schedule" element={
+              <GuestRestrictedRoute allowedForGuest={true}>
+                <DoctorSchedule />
+              </GuestRestrictedRoute>
+            } />
+            <Route path="formula" element={
+              <GuestRestrictedRoute allowedForGuest={false}>
+                <Formula />
+              </GuestRestrictedRoute>
+            } />
+            <Route path="shift-swap" element={
+              <GuestRestrictedRoute allowedForGuest={false}>
+                <ShiftSwapPage />
+              </GuestRestrictedRoute>
+            } />
+            <Route path="announcements" element={
+              <GuestRestrictedRoute allowedForGuest={false}>
+                <AnnouncementPage />
+              </GuestRestrictedRoute>
+            } />
+            <Route path="overtime-staff" element={
+              <GuestRestrictedRoute allowedForGuest={true}>
+                <OvertimeStaff />
+              </GuestRestrictedRoute>
+            } />
+            <Route path="settings" element={
+              <GuestRestrictedRoute allowedForGuest={false}>
+                <SettingsPage />
+              </GuestRestrictedRoute>
+            } />
+            <Route path="version-history" element={
+              <GuestRestrictedRoute allowedForGuest={false}>
+                <VersionHistory />
+              </GuestRestrictedRoute>
+            } />
             
             {/* 護理長專用路由 */}
             <Route path="user-management" element={

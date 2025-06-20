@@ -14,17 +14,18 @@ import {
   IconButton,
   Tooltip
 } from '@mui/material';
-import { LockOutlined, Fingerprint } from '@mui/icons-material';
+import { LockOutlined, Fingerprint, Visibility } from '@mui/icons-material';
 import { useAuthStore } from '../store/authStore';
 import { api } from '../utils/api';
 
 function Login() {
   const navigate = useNavigate();
-  const { login, checkAuthStatus, isLoading, error } = useAuthStore();
+  const { login, loginAsGuest, checkAuthStatus, isLoading, error } = useAuthStore();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [formError, setFormError] = useState('');
   const [isPasskeyLoading, setIsPasskeyLoading] = useState(false);
+  const [isGuestLoading, setIsGuestLoading] = useState(false);
 
   useEffect(() => {
     // 檢查是否已有有效的認證狀態，如果有則跳轉到儀表板
@@ -201,6 +202,25 @@ function Login() {
     }
   };
 
+  const handleGuestLogin = async () => {
+    setIsGuestLoading(true);
+    setFormError('');
+
+    try {
+      const success = await loginAsGuest();
+      if (success) {
+        // 設置登入方式標記
+        localStorage.setItem('loginMethod', 'guest');
+        navigate('/dashboard');
+      }
+    } catch (error) {
+      console.error('訪客登入失敗:', error);
+      setFormError('訪客登入失敗，請稍後再試');
+    } finally {
+      setIsGuestLoading(false);
+    }
+  };
+
   return (
     <Container component="main" maxWidth="xs">
       <Box
@@ -259,7 +279,7 @@ function Login() {
                 autoFocus
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                disabled={isLoading || isPasskeyLoading}
+                disabled={isLoading || isPasskeyLoading || isGuestLoading}
               />
               <TextField
                 margin="normal"
@@ -272,14 +292,14 @@ function Login() {
                 autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                disabled={isLoading || isPasskeyLoading}
+                disabled={isLoading || isPasskeyLoading || isGuestLoading}
               />
               <Button
                 type="submit"
                 fullWidth
                 variant="contained"
                 sx={{ mt: 3, mb: 2, py: 1.2 }}
-                disabled={isLoading || isPasskeyLoading}
+                disabled={isLoading || isPasskeyLoading || isGuestLoading}
               >
                 {isLoading ? <CircularProgress size={24} /> : '登入'}
               </Button>
@@ -292,10 +312,23 @@ function Login() {
                   variant="outlined"
                   startIcon={<Fingerprint />}
                   onClick={handlePasskeyLogin}
-                  disabled={isLoading || isPasskeyLoading}
-                  sx={{ py: 1.2 }}
+                  disabled={isLoading || isPasskeyLoading || isGuestLoading}
+                  sx={{ py: 1.2, mb: 2 }}
                 >
                   {isPasskeyLoading ? <CircularProgress size={24} /> : '使用Passkey登入'}
+                </Button>
+              </Tooltip>
+              
+              <Tooltip title="以訪客身份查看系統">
+                <Button
+                  fullWidth
+                  variant="text"
+                  startIcon={<Visibility />}
+                  onClick={handleGuestLogin}
+                  disabled={isLoading || isPasskeyLoading || isGuestLoading}
+                  sx={{ py: 1.2, color: 'text.secondary' }}
+                >
+                  {isGuestLoading ? <CircularProgress size={24} /> : '訪客模式登入'}
                 </Button>
               </Tooltip>
             </Box>
