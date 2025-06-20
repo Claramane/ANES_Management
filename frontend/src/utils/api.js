@@ -19,7 +19,12 @@ api.interceptors.request.use(
     if (authStorage) {
       const { state } = JSON.parse(authStorage);
       if (state.token) {
-        config.headers.Authorization = `Bearer ${state.token}`;
+        // 如果是訪客模式，不發送token到服務器
+        if (state.user?.role === 'guest') {
+          console.log('訪客模式，不發送token到服務器');
+        } else {
+          config.headers.Authorization = `Bearer ${state.token}`;
+        }
       }
     }
     
@@ -47,6 +52,26 @@ api.interceptors.response.use(
   (error) => {
     // 處理401未授權錯誤 - 自動跳轉到登入頁面
     if (error.response && error.response.status === 401) {
+      // 檢查是否為訪客模式
+      const authStorage = localStorage.getItem('auth-storage');
+      let isGuestMode = false;
+      
+      if (authStorage) {
+        try {
+          const { state } = JSON.parse(authStorage);
+          isGuestMode = state.user?.role === 'guest';
+        } catch (e) {
+          console.warn('解析auth storage失敗:', e);
+        }
+      }
+      
+      // 如果是訪客模式，不要自動登出，只是返回錯誤
+      if (isGuestMode) {
+        console.log('訪客模式下收到401錯誤，不執行自動登出');
+        return Promise.reject(new Error('訪客模式無權限訪問此資源'));
+      }
+      
+      // 非訪客模式才執行自動登出邏輯
       // 清除本地存儲的認證資訊
       localStorage.removeItem('auth-storage');
       
@@ -151,7 +176,12 @@ apiForCachedData.interceptors.request.use(
     if (authStorage) {
       const { state } = JSON.parse(authStorage);
       if (state.token) {
-        config.headers.Authorization = `Bearer ${state.token}`;
+        // 如果是訪客模式，不發送token到服務器
+        if (state.user?.role === 'guest') {
+          console.log('訪客模式（緩存API），不發送token到服務器');
+        } else {
+          config.headers.Authorization = `Bearer ${state.token}`;
+        }
       }
     }
     return config;

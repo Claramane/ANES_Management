@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useCallback } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
@@ -222,9 +222,13 @@ function App() {
     
     // 執行初始化認證檢查
     initializeAuth();
-    
-    // 如果通過初始化檢查且有token，且不是訪客模式，則嘗試獲取最新用戶資料
+  }, [initializeAuth]);
+
+  // 分離的用戶資料同步邏輯
+  const syncUserData = useCallback(() => {
+    // 只有在非訪客模式下才獲取用戶資料
     if (checkAuthStatus() && token && user?.role !== 'guest') {
+      console.log('非訪客模式，獲取最新用戶資料...');
       api.get('/users/me')
         .then(res => {
           // 確保用戶資料是最新的
@@ -240,8 +244,14 @@ function App() {
             }
           }
         });
+    } else if (user?.role === 'guest') {
+      console.log('訪客模式，跳過用戶資料獲取');
     }
-  }, [initializeAuth, checkAuthStatus, token, user, setAuth, logout]);
+  }, [checkAuthStatus, token, user?.role, setAuth, logout]);
+
+  useEffect(() => {
+    syncUserData();
+  }, [syncUserData]);
   
   // 定期檢查認證狀態（每5分鐘）
   useEffect(() => {
