@@ -36,6 +36,11 @@ function base64UrlToArrayBuffer(base64url) {
 const isTokenExpired = (token) => {
   if (!token) return true;
   
+  // 訪客模式的token永不過期
+  if (token === 'guest-mode-token') {
+    return false;
+  }
+  
   try {
     const decoded = jwtDecode(token);
     const currentTime = Date.now() / 1000;
