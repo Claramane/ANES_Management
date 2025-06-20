@@ -198,6 +198,20 @@ const GuestRestrictedRoute = ({ children, allowedForGuest = false }) => {
   return children;
 };
 
+// 智能重定向組件
+const SmartRedirect = () => {
+  const { user, checkAuthStatus } = useAuthStore();
+  
+  // 確保認證狀態檢查通過
+  if (!checkAuthStatus()) {
+    return <Navigate to="/login" replace />;
+  }
+  
+  // 根據用戶角色決定跳轉路徑
+  const redirectPath = user?.role === 'guest' ? '/weekly-schedule' : '/dashboard';
+  return <Navigate to={redirectPath} replace />;
+};
+
 function App() {
   const { initializeAuth, checkAuthStatus, token, user, setAuth, logout } = useAuthStore();
   
@@ -256,10 +270,7 @@ function App() {
             </ProtectedRoute>
           }>
             <Route index element={
-              <Navigate 
-                to={user?.role === 'guest' ? '/weekly-schedule' : '/dashboard'} 
-                replace 
-              />
+              <SmartRedirect />
             } />
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="weekly-schedule" element={
