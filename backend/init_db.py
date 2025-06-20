@@ -19,8 +19,8 @@ def init_db():
         create_tables()
         
         # 檢查是否已存在管理員用戶
-        user = db.query(User).filter(User.username == settings.ADMIN_USERNAME).first()
-        if not user:
+        admin_user = db.query(User).filter(User.username == settings.ADMIN_USERNAME).first()
+        if not admin_user:
             # 創建管理員用戶
             admin_user = User(
                 username=settings.ADMIN_USERNAME,
@@ -33,8 +33,11 @@ def init_db():
                 updated_at=datetime.now()
             )
             db.add(admin_user)
-            
-            # 創建測試用護理師用戶
+            logger.info("創建管理員用戶")
+        
+        # 檢查是否已存在測試護理師用戶
+        test_nurse = db.query(User).filter(User.username == "nurse").first()
+        if not test_nurse:
             test_nurse = User(
                 username="nurse",
                 email="nurse@example.com",
@@ -46,8 +49,11 @@ def init_db():
                 updated_at=datetime.now()
             )
             db.add(test_nurse)
-            
-            # 創建訪客用戶
+            logger.info("創建測試護理師用戶")
+        
+        # 檢查是否已存在訪客用戶
+        guest_user = db.query(User).filter(User.username == "guest").first()
+        if not guest_user:
             guest_user = User(
                 username="guest",
                 email="guest@example.com",
@@ -59,8 +65,14 @@ def init_db():
                 updated_at=datetime.now()
             )
             db.add(guest_user)
-            
-            # 創建默認公告分類
+            logger.info("創建訪客用戶")
+        
+        # 提交用戶創建
+        db.commit()
+        
+        # 檢查並創建默認公告分類
+        existing_categories = db.query(AnnouncementCategory).count()
+        if existing_categories == 0:
             categories = [
                 {"name": "班表相關", "description": "與班表有關的公告"},
                 {"name": "人事相關", "description": "與人事有關的公告"},
@@ -80,13 +92,17 @@ def init_db():
                 )
                 db.add(category)
             
-            # 提交變更以獲取ID
-            db.commit()
-            
+            logger.info("創建默認公告分類")
+        
+        # 提交分類創建
+        db.commit()
+        
+        # 檢查並設置公告權限
+        existing_permissions = db.query(AnnouncementPermission).count()
+        if existing_permissions == 0:
             # 獲取所有分類
             all_categories = db.query(AnnouncementCategory).all()
             
-            # 設置權限
             # 護理長可以在所有分類發布公告
             for category in all_categories:
                 permission = AnnouncementPermission(
@@ -110,7 +126,11 @@ def init_db():
                 )
                 db.add(permission)
             
-            # 創建默認班別規則
+            logger.info("設置公告權限")
+        
+        # 檢查並創建默認班別規則
+        existing_rules = db.query(ShiftRule).count()
+        if existing_rules == 0:
             shift_rules = [
                 {
                     "shift_type": "D",
@@ -162,19 +182,20 @@ def init_db():
                     is_active=True
                 )
                 db.add(rule)
+            
+            logger.info("創建默認班別規則")
                 
-            db.commit()
-            
-            # 添加以下代碼，確保在最後調用公告分類初始化
-            init_announcement_categories(db)
-            
-            logger.info("初始化數據庫完成!")
-        else:
-            logger.info("數據庫已初始化，無需重複操作")
-    
+        db.commit()
+        
+        # 添加以下代碼，確保在最後調用公告分類初始化
+        init_announcement_categories(db)
+        
+        logger.info("初始化數據庫完成!")
+        
     except Exception as e:
         logger.error(f"初始化數據庫時發生錯誤: {e}")
         db.rollback()
+        raise e
     finally:
         db.close()
 
