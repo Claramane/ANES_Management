@@ -267,21 +267,8 @@ function App() {
               <Layout />
             </ProtectedRoute>
           }>
-            <Route index element={
-              <Navigate to={
-                // 檢查是否為訪客用戶，如果是則跳轉到醫師班表，否則跳轉到儀表板
-                (() => {
-                  const authData = JSON.parse(localStorage.getItem('auth-storage') || '{}');
-                  const user = authData?.state?.user;
-                  return user?.role === 'guest' ? '/doctor-schedule' : '/dashboard';
-                })()
-              } replace />
-            } />
-            <Route path="dashboard" element={
-              <NonGuestRoute>
-                <Dashboard />
-              </NonGuestRoute>
-            } />
+            <Route index element={<Navigate to="/dashboard" replace />} />
+            <Route path="dashboard" element={<Dashboard />} />
             <Route path="weekly-schedule" element={<WeeklySchedule />} />
             <Route path="monthly-schedule" element={<MonthlySchedule />} />
             <Route path="doctor-schedule" element={<DoctorSchedule />} />

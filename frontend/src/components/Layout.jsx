@@ -71,9 +71,7 @@ function Layout() {
 
   // 一般選單項目
   const menuItems = [
-    ...(!isGuest ? [
-      { text: '首頁', icon: <HomeIcon />, path: '/dashboard' },
-    ] : []),
+    { text: '首頁', icon: <HomeIcon />, path: '/dashboard' },
     { text: '週班表', icon: <ViewWeekIcon />, path: '/weekly-schedule' },
     { text: '月班表', icon: <CalendarMonthIcon />, path: '/monthly-schedule' },
     { text: '醫師班表', icon: <EventIcon />, path: '/doctor-schedule' },

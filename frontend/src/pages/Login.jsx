@@ -210,7 +210,7 @@ function Login() {
       if (success) {
         // 設置登入方式標記
         localStorage.setItem('loginMethod', 'guest');
-        navigate('/doctor-schedule');
+        navigate('/dashboard');
       }
     } catch (error) {
       console.error('訪客登入失敗:', error);

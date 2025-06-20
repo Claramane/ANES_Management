@@ -829,16 +829,81 @@ function Dashboard() {
       
       {/* 訪客模式說明 */}
       {user?.role === 'guest' && (
-        <Alert severity="info" sx={{ mb: 3 }}>
-          <Typography variant="body2">
-            <strong>訪客模式可使用功能：</strong><br />
-            • 查看醫師班表<br />
-            • 查看月排班表<br />
-            • 查看週排班表<br />
-            • 查看加班人員安排<br />
-            <em>注意：所有頁面均為只讀模式，無法進行任何編輯操作</em>
-          </Typography>
-        </Alert>
+        <Box sx={{ mt: 3 }}>
+          <Alert severity="info" sx={{ mb: 3 }}>
+            <Typography variant="body1" sx={{ fontWeight: 'bold', mb: 1 }}>
+              訪客模式使用說明
+            </Typography>
+            <Typography variant="body2" component="div">
+              歡迎使用護理班表管理系統的訪客模式！您可以瀏覽以下功能：
+              <ul style={{ margin: '8px 0', paddingLeft: '20px' }}>
+                <li>查看醫師班表安排</li>
+                <li>查看月排班表</li>
+                <li>查看週排班表</li>
+                <li>查看加班人員安排</li>
+              </ul>
+            </Typography>
+          </Alert>
+          
+          <Alert severity="warning" sx={{ mb: 3 }}>
+            <Typography variant="body1" sx={{ fontWeight: 'bold', mb: 1 }}>
+              訪客權限限制
+            </Typography>
+            <Typography variant="body2" component="div">
+              請注意，訪客模式下有以下限制：
+              <ul style={{ margin: '8px 0', paddingLeft: '20px' }}>
+                <li>所有頁面均為<strong>只讀模式</strong>，無法進行任何編輯操作</li>
+                <li>無法訪問換班申請功能</li>
+                <li>無法查看公告專區</li>
+                <li>無法使用系統設定功能</li>
+                <li>無法查看歷史紀錄</li>
+              </ul>
+            </Typography>
+          </Alert>
+          
+          <Alert severity="success" sx={{ mb: 3 }}>
+            <Typography variant="body1" sx={{ fontWeight: 'bold', mb: 1 }}>
+              快速導航
+            </Typography>
+            <Typography variant="body2" component="div">
+              您可以通過左側導航選單快速訪問可用功能：
+              <Box sx={{ mt: 1, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                <Button 
+                  variant="outlined" 
+                  size="small" 
+                  onClick={() => navigate('/doctor-schedule')}
+                  sx={{ textTransform: 'none' }}
+                >
+                  醫師班表
+                </Button>
+                <Button 
+                  variant="outlined" 
+                  size="small" 
+                  onClick={() => navigate('/monthly-schedule')}
+                  sx={{ textTransform: 'none' }}
+                >
+                  月班表
+                </Button>
+                <Button 
+                  variant="outlined" 
+                  size="small" 
+                  onClick={() => navigate('/weekly-schedule')}
+                  sx={{ textTransform: 'none' }}
+                >
+                  週班表
+                </Button>
+                <Button 
+                  variant="outlined" 
+                  size="small" 
+                  onClick={() => navigate('/overtime-staff')}
+                  sx={{ textTransform: 'none' }}
+                >
+                  加班人員
+                </Button>
+              </Box>
+            </Typography>
+          </Alert>
+        </Box>
       )}
       
       {error && (
@@ -847,279 +912,323 @@ function Dashboard() {
         </Alert>
       )}
       
-      <Grid container spacing={3}>
-        {/* 右側容器 - 小螢幕時先顯示 */}
-        <Grid item xs={12} md={6} sx={{ order: { xs: 1, md: 2 } }}>
-          <Grid container spacing={3} sx={{ height: '100%' }}>
-            {/* 今日班表卡片 - 右上 */}
-            <Grid item xs={12} sx={{ height: 'auto' }}>
-              <Card sx={{ height: 'fit-content', boxShadow: 'none', border: '1px solid #e0e0e0' }}>
-                <CardContent>
-                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                    <TodayIcon color="primary" sx={{ mr: 1 }} />
-                    <Typography variant="h6">今日班表</Typography>
-                  </Box>
-                  
-                  {todayWork.details ? (
-                    <Box sx={{ mt: 2 }}>
-                      <Chip 
-                        label={todayWork.shift && !['O', 'V', ''].includes(todayWork.shift) ? `${todayWork.shift}班` : todayWork.details?.name || '未排班'} 
-                        color="primary" 
-                        className={`shift-${todayWork.shift}`} 
-                        sx={{ fontWeight: 'bold', mb: 1 }}
-                      />
-                      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                        <Typography variant="body1" sx={{ mr: 1 }}>
-                          <strong>工作分配:</strong>
-                        </Typography>
-                        {todayWork.areaCode ? (
-                          <Chip 
-                            label={todayWork.areaCode}
-                            size="small"
-                            sx={{
-                              height: '24px',
-                              fontSize: '0.875rem',
-                              backgroundColor: getAreaStyle(todayWork.areaCode).bg,
-                              color: getAreaStyle(todayWork.areaCode).text,
-                              border: `1px solid ${getAreaStyle(todayWork.areaCode).border}`,
-                              '& .MuiChip-label': { px: 1 }
-                            }}
-                          />
-                        ) : (
-                          <Typography variant="body1" color="text.secondary">
-                            未分配區域
-                          </Typography>
-                        )}
-                      </Box>
-                      <Typography variant="body1">
-                        <strong>時間:</strong> {todayWork.details?.time || '-'}
-                      </Typography>
+      {/* 只有非訪客用戶才顯示原本的四個container */}
+      {user?.role !== 'guest' && (
+        <Grid container spacing={3}>
+          {/* 右側容器 - 小螢幕時先顯示 */}
+          <Grid item xs={12} md={6} sx={{ order: { xs: 1, md: 2 } }}>
+            <Grid container spacing={3} sx={{ height: '100%' }}>
+              {/* 今日班表卡片 - 右上 */}
+              <Grid item xs={12} sx={{ height: 'auto' }}>
+                <Card sx={{ height: 'fit-content', boxShadow: 'none', border: '1px solid #e0e0e0' }}>
+                  <CardContent>
+                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                      <TodayIcon color="primary" sx={{ mr: 1 }} />
+                      <Typography variant="h6">今日班表</Typography>
                     </Box>
-                  ) : (
-                    <Typography variant="body1" color="text.secondary">
-                      今日無班表安排
-                    </Typography>
-                  )}
-                </CardContent>
-              </Card>
-            </Grid>
-            
-            {/* 本月班表卡片 - 右下，填滿剩餘空間 */}
-            <Grid item xs={12} sx={{ flex: 1, display: 'flex' }}>
-              <Card sx={{ width: '100%', display: 'flex', flexDirection: 'column', boxShadow: 'none', border: '1px solid #e0e0e0' }}>
-                <CardContent sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                    <EventIcon color="primary" sx={{ mr: 1 }} />
-                    <Typography variant="h6">本月班表</Typography>
-                  </Box>
-                  
-                  {monthlyCalendarData.length > 0 ? (
-                    <Box sx={{ width: '100%', overflowX: 'auto', flex: 1 }}>
-                      {/* 日曆表格 */}
-                      <Box component="table" sx={{ 
-                        width: '100%', 
-                        height: '100%',
-                        borderCollapse: 'collapse',
-                        border: '1px solid #e0e0e0'
-                      }}>
-                        {/* 表頭 */}
-                        <Box component="thead">
-                          <Box component="tr">
-                            {['一', '二', '三', '四', '五', '六', '日'].map(day => (
-                              <Box 
-                                component="th" 
-                                key={day}
-                                sx={{
-                                  padding: '8px',
-                                  textAlign: 'center',
-                                  backgroundColor: '#f5f5f5',
-                                  border: '1px solid #e0e0e0',
-                                  fontSize: '14px',
-                                  fontWeight: 'bold',
-                                  width: '14.28%'
-                                }}
-                              >
-                                {day}
+                    
+                    {todayWork.details ? (
+                      <Box sx={{ mt: 2 }}>
+                        <Chip 
+                          label={todayWork.shift && !['O', 'V', ''].includes(todayWork.shift) ? `${todayWork.shift}班` : todayWork.details?.name || '未排班'} 
+                          color="primary" 
+                          className={`shift-${todayWork.shift}`} 
+                          sx={{ fontWeight: 'bold', mb: 1 }}
+                        />
+                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                          <Typography variant="body1" sx={{ mr: 1 }}>
+                            <strong>工作分配:</strong>
+                          </Typography>
+                          {todayWork.areaCode ? (
+                            <Chip 
+                              label={todayWork.areaCode}
+                              size="small"
+                              sx={{
+                                height: '24px',
+                                fontSize: '0.875rem',
+                                backgroundColor: getAreaStyle(todayWork.areaCode).bg,
+                                color: getAreaStyle(todayWork.areaCode).text,
+                                border: `1px solid ${getAreaStyle(todayWork.areaCode).border}`,
+                                '& .MuiChip-label': { px: 1 }
+                              }}
+                            />
+                          ) : (
+                            <Typography variant="body1" color="text.secondary">
+                              未分配區域
+                            </Typography>
+                          )}
+                        </Box>
+                        <Typography variant="body1">
+                          <strong>時間:</strong> {todayWork.details?.time || '-'}
+                        </Typography>
+                      </Box>
+                    ) : (
+                      <Typography variant="body1" color="text.secondary">
+                        今日無班表安排
+                      </Typography>
+                    )}
+                  </CardContent>
+                </Card>
+              </Grid>
+              
+              {/* 本月班表卡片 - 右下，填滿剩餘空間 */}
+              <Grid item xs={12} sx={{ flex: 1, display: 'flex' }}>
+                <Card sx={{ width: '100%', display: 'flex', flexDirection: 'column', boxShadow: 'none', border: '1px solid #e0e0e0' }}>
+                  <CardContent sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                      <EventIcon color="primary" sx={{ mr: 1 }} />
+                      <Typography variant="h6">本月班表</Typography>
+                    </Box>
+                    
+                    {monthlyCalendarData.length > 0 ? (
+                      <Box sx={{ width: '100%', overflowX: 'auto', flex: 1 }}>
+                        {/* 日曆表格 */}
+                        <Box component="table" sx={{ 
+                          width: '100%', 
+                          height: '100%',
+                          borderCollapse: 'collapse',
+                          border: '1px solid #e0e0e0'
+                        }}>
+                          {/* 表頭 */}
+                          <Box component="thead">
+                            <Box component="tr">
+                              {['一', '二', '三', '四', '五', '六', '日'].map(day => (
+                                <Box 
+                                  component="th" 
+                                  key={day}
+                                  sx={{
+                                    padding: '8px',
+                                    textAlign: 'center',
+                                    backgroundColor: '#f5f5f5',
+                                    border: '1px solid #e0e0e0',
+                                    fontSize: '14px',
+                                    fontWeight: 'bold',
+                                    width: '14.28%'
+                                  }}
+                                >
+                                  {day}
+                                </Box>
+                              ))}
+                            </Box>
+                          </Box>
+                          
+                          {/* 表格主體 */}
+                          <Box component="tbody">
+                            {monthlyCalendarData.map((week, weekIndex) => (
+                              <Box component="tr" key={weekIndex}>
+                                {week.map((dayData, dayIndex) => (
+                                  <Box 
+                                    component="td" 
+                                    key={dayIndex}
+                                    sx={{
+                                      ...calendarCellStyle,
+                                      height: '90px',
+                                      ...(dayData.date && isToday(dayData.date) && { 
+                                        backgroundColor: '#e8f5e9',
+                                        border: '2px solid #4caf50'
+                                      }),
+                                      ...((!dayData.date) && { 
+                                        backgroundColor: '#f9f9f9',
+                                        opacity: 0.5
+                                      })
+                                    }}
+                                  >
+                                    {dayData.date && <RenderCalendarCell day={dayData} />}
+                                  </Box>
+                                ))}
                               </Box>
                             ))}
                           </Box>
                         </Box>
-                        
-                        {/* 表格主體 */}
-                        <Box component="tbody">
-                          {monthlyCalendarData.map((week, weekIndex) => (
-                            <Box component="tr" key={weekIndex}>
-                              {week.map((dayData, dayIndex) => (
-                                <Box 
-                                  component="td" 
-                                  key={dayIndex}
-                                  sx={{
-                                    ...calendarCellStyle,
-                                    height: '90px',
-                                    ...(dayData.date && isToday(dayData.date) && { 
-                                      backgroundColor: '#e8f5e9',
-                                      border: '2px solid #4caf50'
-                                    }),
-                                    ...((!dayData.date) && { 
-                                      backgroundColor: '#f9f9f9',
-                                      opacity: 0.5
-                                    })
-                                  }}
-                                >
-                                  {dayData.date && <RenderCalendarCell day={dayData} />}
-                                </Box>
-                              ))}
-                            </Box>
-                          ))}
-                        </Box>
                       </Box>
-                    </Box>
-                  ) : (
-                    <Typography variant="body1" color="text.secondary">
-                      無法載入本月班表
-                    </Typography>
-                  )}
-                </CardContent>
-                <CardActions>
-                  <Button 
-                    size="small" 
-                    endIcon={<ArrowForwardIcon />}
-                    onClick={() => navigate('/weekly-schedule')}
-                  >
-                    查看詳細班表
-                  </Button>
-                </CardActions>
-              </Card>
+                    ) : (
+                      <Typography variant="body1" color="text.secondary">
+                        無法載入本月班表
+                      </Typography>
+                    )}
+                  </CardContent>
+                  <CardActions>
+                    <Button 
+                      size="small" 
+                      endIcon={<ArrowForwardIcon />}
+                      onClick={() => navigate('/weekly-schedule')}
+                    >
+                      查看詳細班表
+                    </Button>
+                  </CardActions>
+                </Card>
+              </Grid>
             </Grid>
           </Grid>
-        </Grid>
 
-        {/* 左側容器 - 小螢幕時後顯示 */}
-        <Grid item xs={12} md={6} sx={{ order: { xs: 2, md: 1 } }}>
-          <Grid container spacing={3} sx={{ height: '100%' }}>
-            {/* 最新公告卡片 - 左上 */}
-            <Grid item xs={12} sx={{ height: 'auto' }}>
-              <Card sx={{ height: 'fit-content', boxShadow: 'none', border: '1px solid #e0e0e0' }}>
-                <CardContent>
-                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                    <AnnouncementIcon color="primary" sx={{ mr: 1 }} />
-                    <Typography variant="h6">最新公告</Typography>
-                  </Box>
-                  
-                  {announcementsLoading ? (
-                    <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
-                      <CircularProgress size={24} />
+          {/* 左側容器 - 小螢幕時後顯示 */}
+          <Grid item xs={12} md={6} sx={{ order: { xs: 2, md: 1 } }}>
+            <Grid container spacing={3} sx={{ height: '100%' }}>
+              {/* 最新公告卡片 - 左上 */}
+              <Grid item xs={12} sx={{ height: 'auto' }}>
+                <Card sx={{ height: 'fit-content', boxShadow: 'none', border: '1px solid #e0e0e0' }}>
+                  <CardContent>
+                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                      <AnnouncementIcon color="primary" sx={{ mr: 1 }} />
+                      <Typography variant="h6">最新公告</Typography>
                     </Box>
-                  ) : announcementsError ? (
-                    <Alert severity="error" sx={{ mb: 1 }}>
-                      {announcementsError}
-                    </Alert>
-                  ) : announcements.length > 0 ? (
-                    <List sx={{ p: 0 }}>
-                      {announcements.map((ann, index) => (
-                        <React.Fragment key={ann.id}>
-                          <ListItem 
-                            button 
-                            onClick={() => handleOpenAnnouncementDetail(ann)}
-                            sx={{ px: 0, py: 1 }}
-                          >
-                            <ListItemText
-                              primary={
-                                <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 0.5 }}>
-                                  <Typography variant="body2" component="span" sx={{ fontWeight: 'bold', mr: 1, maxWidth: '70%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                    {ann.title}
+                    
+                    {announcementsLoading ? (
+                      <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+                        <CircularProgress size={24} />
+                      </Box>
+                    ) : announcementsError ? (
+                      <Alert severity="error" sx={{ mb: 1 }}>
+                        {announcementsError}
+                      </Alert>
+                    ) : announcements.length > 0 ? (
+                      <List sx={{ p: 0 }}>
+                        {announcements.map((ann, index) => (
+                          <React.Fragment key={ann.id}>
+                            <ListItem 
+                              button 
+                              onClick={() => handleOpenAnnouncementDetail(ann)}
+                              sx={{ px: 0, py: 1 }}
+                            >
+                              <ListItemText
+                                primary={
+                                  <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 0.5 }}>
+                                    <Typography variant="body2" component="span" sx={{ fontWeight: 'bold', mr: 1, maxWidth: '70%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                      {ann.title}
+                                    </Typography>
+                                    <Chip 
+                                      label={ann.category} 
+                                      size="small" 
+                                      sx={{ 
+                                        ...getCategoryStyle(ann.category),
+                                        height: '20px',
+                                        '& .MuiChip-label': { px: 0.5, fontSize: '0.7rem' }
+                                      }} 
+                                    />
+                                  </Box>
+                                }
+                                secondary={format(parseISO(ann.created_at), 'MM/dd', { locale: zhTW })}
+                                secondaryTypographyProps={{ variant: 'caption' }}
+                              />
+                            </ListItem>
+                            {index < announcements.length - 1 && <Divider />}
+                          </React.Fragment>
+                        ))}
+                      </List>
+                    ) : (
+                      <Typography variant="body2" color="text.secondary">
+                        沒有最新公告
+                      </Typography>
+                    )}
+                  </CardContent>
+                  <CardActions>
+                    <Button 
+                      size="small" 
+                      endIcon={<ArrowForwardIcon />}
+                      onClick={() => navigate('/announcements')}
+                    >
+                      查看所有公告
+                    </Button>
+                  </CardActions>
+                </Card>
+              </Grid>
+
+              {/* 換班請求卡片 - 左下，填滿剩餘空間 */}
+              <Grid item xs={12} sx={{ flex: 1, display: 'flex' }}>
+                <Card sx={{ width: '100%', display: 'flex', flexDirection: 'column', boxShadow: 'none', border: '1px solid #e0e0e0' }}>
+                  <CardContent sx={{ flex: 1 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                      <SyncIcon color="primary" sx={{ mr: 1 }} />
+                      <Typography variant="h6">
+                        待處理換班請求
+                        {recommendedSwaps.length > 0 && (
+                          <Badge badgeContent={recommendedSwaps.length} color="error" sx={{ ml: 1 }}>
+                            <RecommendIcon color="action" fontSize="small" />
+                          </Badge>
+                        )}
+                      </Typography>
+                    </Box>
+                    
+                    {swapsLoading ? (
+                      <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+                        <CircularProgress size={24} />
+                      </Box>
+                    ) : swapsError ? (
+                      <Alert severity="error" sx={{ mb: 1 }}>
+                        {swapsError}
+                      </Alert>
+                    ) : (recommendedSwaps.length > 0 || myShiftSwapRequests.length > 0) ? (
+                      <List sx={{ p: 0 }}>
+                        {/* 顯示推薦的換班請求 */}
+                        {recommendedSwaps.slice(0, 2).map((swap, index) => (
+                          <React.Fragment key={`rec-${swap.id}`}>
+                            <ListItem 
+                              button 
+                              onClick={() => navigate('/shift-swap')}
+                              sx={{ px: 0, py: 1 }}
+                            >
+                              <ListItemIcon sx={{ minWidth: 36 }}>
+                                <RecommendIcon color="error" fontSize="small" />
+                              </ListItemIcon>
+                              <ListItemText
+                                primary={
+                                  <Typography variant="body2" component="span" sx={{ fontWeight: 'bold' }}>
+                                    {swap.requestor?.full_name || '某人'} 請求換班 ({swap.from_date ? format(new Date(swap.from_date), 'MM/dd', { locale: zhTW }) : 'N/A'})
                                   </Typography>
-                                  <Chip 
-                                    label={ann.category} 
-                                    size="small" 
-                                    sx={{ 
-                                      ...getCategoryStyle(ann.category),
-                                      height: '20px',
-                                      '& .MuiChip-label': { px: 0.5, fontSize: '0.7rem' }
-                                    }} 
-                                  />
-                                </Box>
-                              }
-                              secondary={format(parseISO(ann.created_at), 'MM/dd', { locale: zhTW })}
-                              secondaryTypographyProps={{ variant: 'caption' }}
-                            />
-                          </ListItem>
-                          {index < announcements.length - 1 && <Divider />}
-                        </React.Fragment>
-                      ))}
-                    </List>
-                  ) : (
-                    <Typography variant="body2" color="text.secondary">
-                      沒有最新公告
-                    </Typography>
-                  )}
-                </CardContent>
-                <CardActions>
-                  <Button 
-                    size="small" 
-                    endIcon={<ArrowForwardIcon />}
-                    onClick={() => navigate('/announcements')}
-                  >
-                    查看所有公告
-                  </Button>
-                </CardActions>
-              </Card>
-            </Grid>
-
-            {/* 換班請求卡片 - 左下，填滿剩餘空間 */}
-            <Grid item xs={12} sx={{ flex: 1, display: 'flex' }}>
-              <Card sx={{ width: '100%', display: 'flex', flexDirection: 'column', boxShadow: 'none', border: '1px solid #e0e0e0' }}>
-                <CardContent sx={{ flex: 1 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                    <SyncIcon color="primary" sx={{ mr: 1 }} />
-                    <Typography variant="h6">
-                      待處理換班請求
-                      {recommendedSwaps.length > 0 && (
-                        <Badge badgeContent={recommendedSwaps.length} color="error" sx={{ ml: 1 }}>
-                          <RecommendIcon color="action" fontSize="small" />
-                        </Badge>
-                      )}
-                    </Typography>
-                  </Box>
-                  
-                  {swapsLoading ? (
-                    <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
-                      <CircularProgress size={24} />
-                    </Box>
-                  ) : swapsError ? (
-                    <Alert severity="error" sx={{ mb: 1 }}>
-                      {swapsError}
-                    </Alert>
-                  ) : (recommendedSwaps.length > 0 || myShiftSwapRequests.length > 0) ? (
-                    <List sx={{ p: 0 }}>
-                      {/* 顯示推薦的換班請求 */}
-                      {recommendedSwaps.slice(0, 2).map((swap, index) => (
-                        <React.Fragment key={`rec-${swap.id}`}>
-                          <ListItem 
-                            button 
-                            onClick={() => navigate('/shift-swap')}
-                            sx={{ px: 0, py: 1 }}
-                          >
-                            <ListItemIcon sx={{ minWidth: 36 }}>
-                              <RecommendIcon color="error" fontSize="small" />
-                            </ListItemIcon>
-                            <ListItemText
-                              primary={
-                                <Typography variant="body2" component="span" sx={{ fontWeight: 'bold' }}>
-                                  {swap.requestor?.full_name || '某人'} 請求換班 ({swap.from_date ? format(new Date(swap.from_date), 'MM/dd', { locale: zhTW }) : 'N/A'})
-                                </Typography>
-                              }
-                              secondary={
-                                <Box component="div" sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
-                                  {swap.swap_type === 'overtime' ? (
-                                    // 加班換班顯示
-                                    <>
-                                      {swap.from_overtime && (
+                                }
+                                secondary={
+                                  <Box component="div" sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
+                                    {swap.swap_type === 'overtime' ? (
+                                      // 加班換班顯示
+                                      <>
+                                        {swap.from_overtime && (
+                                          <Chip 
+                                            label={swap.from_overtime + '加'}
+                                            size="small" 
+                                            sx={{ 
+                                              backgroundColor: '#FF8A65',
+                                              color: 'white',
+                                              height: '20px',
+                                              minWidth: '28px',
+                                              borderRadius: '4px',
+                                              '& .MuiChip-label': {
+                                                padding: '0 4px',
+                                                fontSize: '11px',
+                                                fontWeight: 'bold'
+                                              }
+                                            }}
+                                          />
+                                        )}
+                                        {swap.to_overtime && (
+                                          <>
+                                            <ArrowForwardIcon sx={{ fontSize: 16, color: '#666' }} />
+                                            <Chip 
+                                              label={swap.to_overtime === '未指定' ? '不加班' : swap.to_overtime}
+                                              size="small" 
+                                              sx={{ 
+                                                backgroundColor: swap.to_overtime === '未指定' ? '#E0E0E0' : '#FFB74D',
+                                                color: '#333',
+                                                height: '20px',
+                                                minWidth: '28px',
+                                                borderRadius: '4px',
+                                                '& .MuiChip-label': {
+                                                  padding: '0 4px',
+                                                  fontSize: '11px',
+                                                  fontWeight: 'bold'
+                                                }
+                                              }}
+                                            />
+                                          </>
+                                        )}
+                                      </>
+                                    ) : swap.swap_type === 'mission' ? (
+                                      // 工作區域交換顯示
+                                      <>
                                         <Chip 
-                                          label={swap.from_overtime + '加'}
+                                          label={swap.from_mission || '未指定'} 
                                           size="small" 
                                           sx={{ 
-                                            backgroundColor: '#FF8A65',
+                                            backgroundColor: '#4dabf5',
                                             color: 'white',
                                             height: '20px',
                                             minWidth: '28px',
@@ -1131,151 +1240,12 @@ function Dashboard() {
                                             }
                                           }}
                                         />
-                                      )}
-                                      {swap.to_overtime && (
-                                        <>
-                                          <ArrowForwardIcon sx={{ fontSize: 16, color: '#666' }} />
-                                          <Chip 
-                                            label={swap.to_overtime === '未指定' ? '不加班' : swap.to_overtime}
-                                            size="small" 
-                                            sx={{ 
-                                              backgroundColor: swap.to_overtime === '未指定' ? '#E0E0E0' : '#FFB74D',
-                                              color: '#333',
-                                              height: '20px',
-                                              minWidth: '28px',
-                                              borderRadius: '4px',
-                                              '& .MuiChip-label': {
-                                                padding: '0 4px',
-                                                fontSize: '11px',
-                                                fontWeight: 'bold'
-                                              }
-                                            }}
-                                          />
-                                        </>
-                                      )}
-                                    </>
-                                  ) : swap.swap_type === 'mission' ? (
-                                    // 工作區域交換顯示
-                                    <>
-                                      <Chip 
-                                        label={swap.from_mission || '未指定'} 
-                                        size="small" 
-                                        sx={{ 
-                                          backgroundColor: '#4dabf5',
-                                          color: 'white',
-                                          height: '20px',
-                                          minWidth: '28px',
-                                          borderRadius: '4px',
-                                          '& .MuiChip-label': {
-                                            padding: '0 4px',
-                                            fontSize: '11px',
-                                            fontWeight: 'bold'
-                                          }
-                                        }}
-                                      />
-                                      <ArrowForwardIcon sx={{ fontSize: 16, color: '#666' }} />
-                                      <Chip 
-                                        label={swap.to_mission || '未指定'} 
-                                        size="small" 
-                                        sx={{ 
-                                          backgroundColor: '#81c784',
-                                          color: 'white',
-                                          height: '20px',
-                                          minWidth: '28px',
-                                          borderRadius: '4px',
-                                          '& .MuiChip-label': {
-                                            padding: '0 4px',
-                                            fontSize: '11px',
-                                            fontWeight: 'bold'
-                                          }
-                                        }}
-                                      />
-                                    </>
-                                  ) : (
-                                    // 一般換班顯示
-                                    <>
-                                      <Chip 
-                                        label={swap.from_shift || 'O'} 
-                                        size="small" 
-                                        sx={{ 
-                                          backgroundColor: SHIFT_COLORS[swap.from_shift] || '#9e9e9e',
-                                          color: swap.from_shift === 'O' ? 'black' : 'white',
-                                          height: '20px',
-                                          minWidth: '20px',
-                                          '& .MuiChip-label': {
-                                            padding: '0 4px',
-                                            fontSize: '11px',
-                                            fontWeight: 'bold'
-                                          }
-                                        }}
-                                      />
-                                      <ArrowForwardIcon sx={{ fontSize: 16, color: '#666' }} />
-                                      <Chip 
-                                        label={swap.to_shift || 'O'} 
-                                        size="small" 
-                                        sx={{ 
-                                          backgroundColor: SHIFT_COLORS[swap.to_shift] || '#9e9e9e',
-                                          color: swap.to_shift === 'O' ? 'black' : 'white',
-                                          height: '20px',
-                                          minWidth: '20px',
-                                          '& .MuiChip-label': {
-                                            padding: '0 4px',
-                                            fontSize: '11px',
-                                            fontWeight: 'bold'
-                                          }
-                                        }}
-                                      />
-                                    </>
-                                  )}
-                                  
-                                  {/* 顯示狀態 */}
-                                  <Chip 
-                                    label={'待處理'} 
-                                    size="small" 
-                                    sx={{ 
-                                      ...STATUS_COLORS['pending'],
-                                      height: '20px',
-                                      minWidth: '28px',
-                                      fontSize: '11px',
-                                      '& .MuiChip-label': { padding: '0 4px' }
-                                    }} 
-                                  />
-                                </Box>
-                              }
-                              secondaryTypographyProps={{ component: "div" }}
-                            />
-                          </ListItem>
-                          {index < recommendedSwaps.length - 1 && <Divider />}
-                        </React.Fragment>
-                      ))}
-                      
-                      {recommendedSwaps.length > 0 && myShiftSwapRequests.length > 0 && <Divider sx={{ my: 1 }} />}
-                      
-                      {/* 顯示自己的換班請求 */}
-                      {myShiftSwapRequests.slice(0, 2).map((swap, index) => (
-                        <React.Fragment key={`my-${swap.id}`}>
-                          <ListItem 
-                            button 
-                            onClick={() => navigate('/shift-swap')}
-                            sx={{ px: 0, py: 1 }}
-                          >
-                            <ListItemText
-                              primary={
-                                <Typography variant="body2" component="span" sx={{ fontWeight: 'bold' }}>
-                                  您的換班請求 ({swap.from_date ? format(new Date(swap.from_date), 'MM/dd', { locale: zhTW }) : 'N/A'})
-                                </Typography>
-                              }
-                              secondary={
-                                <Box component="div" sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
-                                  {swap.swap_type === 'overtime' ? (
-                                    // 加班換班顯示
-                                    <>
-                                      {swap.from_overtime && (
+                                        <ArrowForwardIcon sx={{ fontSize: 16, color: '#666' }} />
                                         <Chip 
-                                          label={swap.from_overtime + '加'}
+                                          label={swap.to_mission || '未指定'} 
                                           size="small" 
                                           sx={{ 
-                                            backgroundColor: '#FF8A65',
+                                            backgroundColor: '#81c784',
                                             color: 'white',
                                             height: '20px',
                                             minWidth: '28px',
@@ -1287,16 +1257,93 @@ function Dashboard() {
                                             }
                                           }}
                                         />
-                                      )}
-                                      {swap.to_overtime && (
-                                        <>
-                                          <ArrowForwardIcon sx={{ fontSize: 16, color: '#666' }} />
+                                      </>
+                                    ) : (
+                                      // 一般換班顯示
+                                      <>
+                                        <Chip 
+                                          label={swap.from_shift || 'O'} 
+                                          size="small" 
+                                          sx={{ 
+                                            backgroundColor: SHIFT_COLORS[swap.from_shift] || '#9e9e9e',
+                                            color: swap.from_shift === 'O' ? 'black' : 'white',
+                                            height: '20px',
+                                            minWidth: '20px',
+                                            '& .MuiChip-label': {
+                                              padding: '0 4px',
+                                              fontSize: '11px',
+                                              fontWeight: 'bold'
+                                            }
+                                          }}
+                                        />
+                                        <ArrowForwardIcon sx={{ fontSize: 16, color: '#666' }} />
+                                        <Chip 
+                                          label={swap.to_shift || 'O'} 
+                                          size="small" 
+                                          sx={{ 
+                                            backgroundColor: SHIFT_COLORS[swap.to_shift] || '#9e9e9e',
+                                            color: swap.to_shift === 'O' ? 'black' : 'white',
+                                            height: '20px',
+                                            minWidth: '20px',
+                                            '& .MuiChip-label': {
+                                              padding: '0 4px',
+                                              fontSize: '11px',
+                                              fontWeight: 'bold'
+                                            }
+                                          }}
+                                        />
+                                      </>
+                                    )}
+                                    
+                                    {/* 顯示狀態 */}
+                                    <Chip 
+                                      label={'待處理'} 
+                                      size="small" 
+                                      sx={{ 
+                                        ...STATUS_COLORS['pending'],
+                                        height: '20px',
+                                        minWidth: '28px',
+                                        fontSize: '11px',
+                                        '& .MuiChip-label': { padding: '0 4px' }
+                                      }} 
+                                    />
+                                  </Box>
+                                }
+                                secondaryTypographyProps={{ component: "div" }}
+                              />
+                            </ListItem>
+                            {index < recommendedSwaps.length - 1 && <Divider />}
+                          </React.Fragment>
+                        ))}
+                        
+                        {recommendedSwaps.length > 0 && myShiftSwapRequests.length > 0 && <Divider sx={{ my: 1 }} />}
+                        
+                        {/* 顯示自己的換班請求 */}
+                        {myShiftSwapRequests.slice(0, 2).map((swap, index) => (
+                          <React.Fragment key={`my-${swap.id}`}>
+                            <ListItem 
+                              button 
+                              onClick={() => navigate('/shift-swap')}
+                              sx={{ px: 0, py: 1 }}
+                            >
+                              <ListItemText
+                                primary={
+                                  <Typography variant="body2" component="span" sx={{ fontWeight: 'bold' }}>
+                                    您的換班請求 ({swap.from_date ? format(new Date(swap.from_date), 'MM/dd', { locale: zhTW }) : 'N/A'})
+                                  </Typography>
+                                }
+                                secondary={
+                                  <Box component="div" sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
+                                    {swap.swap_type === 'overtime' ? (
+                                      // 加班換班顯示
+                                      <>
+                                        {swap.from_overtime && (
                                           <Chip 
-                                            label={swap.to_overtime === '未指定' ? '不加班' : swap.to_overtime}
+                                            label={swap.from_overtime + '加'}
                                             size="small" 
                                             sx={{ 
-                                              backgroundColor: swap.to_overtime === '未指定' ? '#E0E0E0' : '#FFB74D',
-                                              color: '#333',
+                                              backgroundColor: '#FF8A65',
+                                              color: 'white',
                                               height: '20px',
                                               minWidth: '28px',
                                               borderRadius: '4px',
@@ -1307,127 +1354,148 @@ function Dashboard() {
                                               }
                                             }}
                                           />
-                                        </>
-                                      )}
-                                    </>
-                                  ) : swap.swap_type === 'mission' ? (
-                                    // 工作區域交換顯示
-                                    <>
-                                      <Chip 
-                                        label={swap.from_mission || '未指定'} 
-                                        size="small" 
-                                        sx={{ 
-                                          backgroundColor: '#4dabf5',
-                                          color: 'white',
-                                          height: '20px',
-                                          minWidth: '28px',
-                                          borderRadius: '4px',
-                                          '& .MuiChip-label': {
-                                            padding: '0 4px',
-                                            fontSize: '11px',
-                                            fontWeight: 'bold'
-                                          }
-                                        }}
-                                      />
-                                      <ArrowForwardIcon sx={{ fontSize: 16, color: '#666' }} />
-                                      <Chip 
-                                        label={swap.to_mission || '未指定'} 
-                                        size="small" 
-                                        sx={{ 
-                                          backgroundColor: '#81c784',
-                                          color: 'white',
-                                          height: '20px',
-                                          minWidth: '28px',
-                                          borderRadius: '4px',
-                                          '& .MuiChip-label': {
-                                            padding: '0 4px',
-                                            fontSize: '11px',
-                                            fontWeight: 'bold'
-                                          }
-                                        }}
-                                      />
-                                    </>
-                                  ) : (
-                                    // 一般換班顯示
-                                    <>
-                                      <Chip 
-                                        label={swap.from_shift || 'O'} 
-                                        size="small" 
-                                        sx={{ 
-                                          backgroundColor: SHIFT_COLORS[swap.from_shift] || '#9e9e9e',
-                                          color: swap.from_shift === 'O' ? 'black' : 'white',
-                                          height: '20px',
-                                          minWidth: '20px',
-                                          '& .MuiChip-label': {
-                                            padding: '0 4px',
-                                            fontSize: '11px',
-                                            fontWeight: 'bold'
-                                          }
-                                        }}
-                                      />
-                                      <ArrowForwardIcon sx={{ fontSize: 16, color: '#666' }} />
-                                      <Chip 
-                                        label={swap.to_shift || 'O'} 
-                                        size="small" 
-                                        sx={{ 
-                                          backgroundColor: SHIFT_COLORS[swap.to_shift] || '#9e9e9e',
-                                          color: swap.to_shift === 'O' ? 'black' : 'white',
-                                          height: '20px',
-                                          minWidth: '20px',
-                                          '& .MuiChip-label': {
-                                            padding: '0 4px',
-                                            fontSize: '11px',
-                                            fontWeight: 'bold'
-                                          }
-                                        }}
-                                      />
-                                    </>
-                                  )}
-                                  
-                                  {/* 顯示狀態 */}
-                                  <Chip 
-                                    label={swap.status === 'pending' ? '待處理' : 
-                                           swap.status === 'accepted' ? '已完成' : 
-                                           swap.status === 'rejected' ? '已駁回' : 
-                                           swap.status === 'cancelled' ? '已取消' : '處理中'} 
-                                    size="small" 
-                                    sx={{ 
-                                      ...STATUS_COLORS[swap.status || 'pending'],
-                                      height: '20px',
-                                      minWidth: '28px',
-                                      fontSize: '11px',
-                                      '& .MuiChip-label': { padding: '0 4px' }
-                                    }} 
-                                  />
-                                </Box>
-                              }
-                              secondaryTypographyProps={{ component: "div" }}
-                            />
-                          </ListItem>
-                          {index < myShiftSwapRequests.length - 1 && <Divider />}
-                        </React.Fragment>
-                      ))}
-                    </List>
-                  ) : (
-                    <Typography variant="body2" color="text.secondary">
-                      沒有待處理的換班請求
-                    </Typography>
-                  )}
-                </CardContent>
-                <CardActions>
-                  <Button 
-                    size="small" 
-                    endIcon={<ArrowForwardIcon />}
-                    onClick={() => navigate('/shift-swap')}
-                  >
-                    查看換班申請
-                  </Button>
-                </CardActions>
-              </Card>
+                                        )}
+                                        {swap.to_overtime && (
+                                          <>
+                                            <ArrowForwardIcon sx={{ fontSize: 16, color: '#666' }} />
+                                            <Chip 
+                                              label={swap.to_overtime === '未指定' ? '不加班' : swap.to_overtime}
+                                              size="small" 
+                                              sx={{ 
+                                                backgroundColor: swap.to_overtime === '未指定' ? '#E0E0E0' : '#FFB74D',
+                                                color: '#333',
+                                                height: '20px',
+                                                minWidth: '28px',
+                                                borderRadius: '4px',
+                                                '& .MuiChip-label': {
+                                                  padding: '0 4px',
+                                                  fontSize: '11px',
+                                                  fontWeight: 'bold'
+                                                }
+                                              }}
+                                            />
+                                          </>
+                                        )}
+                                      </>
+                                    ) : swap.swap_type === 'mission' ? (
+                                      // 工作區域交換顯示
+                                      <>
+                                        <Chip 
+                                          label={swap.from_mission || '未指定'} 
+                                          size="small" 
+                                          sx={{ 
+                                            backgroundColor: '#4dabf5',
+                                            color: 'white',
+                                            height: '20px',
+                                            minWidth: '28px',
+                                            borderRadius: '4px',
+                                            '& .MuiChip-label': {
+                                              padding: '0 4px',
+                                              fontSize: '11px',
+                                              fontWeight: 'bold'
+                                            }
+                                          }}
+                                        />
+                                        <ArrowForwardIcon sx={{ fontSize: 16, color: '#666' }} />
+                                        <Chip 
+                                          label={swap.to_mission || '未指定'} 
+                                          size="small" 
+                                          sx={{ 
+                                            backgroundColor: '#81c784',
+                                            color: 'white',
+                                            height: '20px',
+                                            minWidth: '28px',
+                                            borderRadius: '4px',
+                                            '& .MuiChip-label': {
+                                              padding: '0 4px',
+                                              fontSize: '11px',
+                                              fontWeight: 'bold'
+                                            }
+                                          }}
+                                        />
+                                      </>
+                                    ) : (
+                                      // 一般換班顯示
+                                      <>
+                                        <Chip 
+                                          label={swap.from_shift || 'O'} 
+                                          size="small" 
+                                          sx={{ 
+                                            backgroundColor: SHIFT_COLORS[swap.from_shift] || '#9e9e9e',
+                                            color: swap.from_shift === 'O' ? 'black' : 'white',
+                                            height: '20px',
+                                            minWidth: '20px',
+                                            '& .MuiChip-label': {
+                                              padding: '0 4px',
+                                              fontSize: '11px',
+                                              fontWeight: 'bold'
+                                            }
+                                          }}
+                                        />
+                                        <ArrowForwardIcon sx={{ fontSize: 16, color: '#666' }} />
+                                        <Chip 
+                                          label={swap.to_shift || 'O'} 
+                                          size="small" 
+                                          sx={{ 
+                                            backgroundColor: SHIFT_COLORS[swap.to_shift] || '#9e9e9e',
+                                            color: swap.to_shift === 'O' ? 'black' : 'white',
+                                            height: '20px',
+                                            minWidth: '20px',
+                                            '& .MuiChip-label': {
+                                              padding: '0 4px',
+                                              fontSize: '11px',
+                                              fontWeight: 'bold'
+                                            }
+                                          }}
+                                        />
+                                      </>
+                                    )}
+                                    
+                                    {/* 顯示狀態 */}
+                                    <Chip 
+                                      label={swap.status === 'pending' ? '待處理' : 
+                                             swap.status === 'accepted' ? '已完成' : 
+                                             swap.status === 'rejected' ? '已駁回' : 
+                                             swap.status === 'cancelled' ? '已取消' : '處理中'} 
+                                      size="small" 
+                                      sx={{ 
+                                        ...STATUS_COLORS[swap.status || 'pending'],
+                                        height: '20px',
+                                        minWidth: '28px',
+                                        fontSize: '11px',
+                                        '& .MuiChip-label': { padding: '0 4px' }
+                                      }} 
+                                    />
+                                  </Box>
+                                }
+                                secondaryTypographyProps={{ component: "div" }}
+                              />
+                            </ListItem>
+                            {index < myShiftSwapRequests.length - 1 && <Divider />}
+                          </React.Fragment>
+                        ))}
+                      </List>
+                    ) : (
+                      <Typography variant="body2" color="text.secondary">
+                        沒有待處理的換班請求
+                      </Typography>
+                    )}
+                  </CardContent>
+                  <CardActions>
+                    <Button 
+                      size="small" 
+                      endIcon={<ArrowForwardIcon />}
+                      onClick={() => navigate('/shift-swap')}
+                    >
+                      查看換班申請
+                    </Button>
+                  </CardActions>
+                </Card>
+              </Grid>
             </Grid>
           </Grid>
         </Grid>
-      </Grid>
+      )}
 
       {/* 公告詳情 Drawer */}
       <Drawer anchor="right" open={isAnnouncementDetailOpen} onClose={handleCloseAnnouncementDetail}>
