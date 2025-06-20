@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List, Dict, Optional
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta
 import logging
 from pydantic import BaseModel
 
@@ -10,13 +10,7 @@ from ..services.doctor_schedule_service import DoctorScheduleService
 from ..core.security import get_current_user
 from ..models.user import User
 from ..core.config import settings
-
-# 定義台灣時區
-TAIWAN_TZ = timezone(timedelta(hours=8))
-
-def get_taiwan_now():
-    """獲取台灣當前時間"""
-    return datetime.now(TAIWAN_TZ)
+from ..utils.timezone import now, get_timezone_info
 
 logger = logging.getLogger(__name__)
 
@@ -63,28 +57,25 @@ async def get_doctor_schedules(
         logger.error(f"獲取醫師班表失敗: {str(e)}")
         raise HTTPException(status_code=500, detail=f"獲取醫師班表失敗: {str(e)}")
 
-@router.get("/today")
+@router.get("/today", response_model=Dict)
 async def get_today_schedule(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """獲取今日醫師班表"""
+    """獲取今日班表"""
     try:
-        now = get_taiwan_now()
-        logger.info(f"獲取今日班表，台灣當前時間: {now}")
+        # 記錄當前時間用於調試
+        current_time = now()
+        logger.info(f"獲取今日班表請求，當前時間: {current_time}")
         
         schedule = DoctorScheduleService.get_today_schedule(db)
         if not schedule:
-            raise HTTPException(status_code=404, detail="今日無班表資料")
+            return {"message": "今日無班表資料", "data": None}
         
-        return {
-            "success": True,
-            "data": schedule,
-            "message": "獲取今日班表成功"
-        }
+        return {"message": "獲取成功", "data": schedule}
     except Exception as e:
         logger.error(f"獲取今日班表失敗: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"獲取今日班表失敗: {str(e)}")
+        raise HTTPException(status_code=500, detail="獲取今日班表失敗")
 
 @router.post("/update-from-external")
 async def update_schedules_from_external(
@@ -132,14 +123,14 @@ async def update_future_four_months_schedules(
         # 計算未來四個月的日期範圍（從明天開始）
         from datetime import datetime, timedelta
         
-        now = datetime.now()
+        current_now = now()
         # 從明天開始，避免覆蓋今天手動管理的資料
-        tomorrow = now + timedelta(days=1)
+        tomorrow = current_now + timedelta(days=1)
         start_date = tomorrow.strftime('%Y%m%d')  # 明天開始
         
         # 更精確的計算：加4個月
-        current_year = now.year
-        current_month = now.month
+        current_year = current_now.year
+        current_month = current_now.month
         
         end_year = current_year
         end_month = current_month + 4
@@ -347,27 +338,21 @@ async def get_update_logs(
         raise HTTPException(status_code=500, detail=f"獲取更新日誌失敗: {str(e)}")
 
 @router.get("/health")
-async def check_api_health():
-    """檢查外部API健康狀態"""
-    try:
-        import requests
-        
-        response = requests.get(f"{settings.EXTERNAL_API_BASE}/health", timeout=10)
-        response.raise_for_status()
-        
-        return {
-            "success": True,
-            "external_api_status": "healthy",
-            "message": "外部API連接正常"
+async def health_check():
+    """健康檢查端點"""
+    timezone_info = get_timezone_info()
+    
+    return {
+        "success": True, 
+        "message": "路由正常工作", 
+        "timestamp": now().isoformat(),
+        "timezone_info": {
+            "timezone": timezone_info["timezone"],
+            "offset": timezone_info["offset"],
+            "taiwan_time": timezone_info["taiwan_time"].strftime("%Y-%m-%d %H:%M:%S"),
+            "utc_time": timezone_info["utc_time"].strftime("%Y-%m-%d %H:%M:%S")
         }
-        
-    except Exception as e:
-        logger.error(f"外部API健康檢查失敗: {str(e)}")
-        return {
-            "success": False,
-            "external_api_status": "error",
-            "message": f"外部API連接失敗: {str(e)}"
-        }
+    }
 
 @router.post("/doctor/{doctor_id}/meeting-time")
 async def set_doctor_meeting_time(
@@ -537,7 +522,7 @@ async def check_auto_off_duty(
         return {
             "success": True,
             "message": "自動下班檢測已執行完成",
-            "timestamp": datetime.now().isoformat()
+            "timestamp": now().isoformat()
         }
         
     except HTTPException:
@@ -552,44 +537,21 @@ async def test_endpoint():
     """
     測試端點，用於驗證路由是否正常工作
     """
-    return {"success": True, "message": "路由正常工作", "timestamp": datetime.now().isoformat()}
+    return {"success": True, "message": "路由正常工作", "timestamp": now().isoformat()}
 
 @router.get("/debug/routes")
 async def debug_routes():
-    """
-    調試端點：列出所有醫師班表相關的路由
-    """
+    """調試路由，返回當前時間和路由資訊"""
     return {
-        "success": True,
-        "message": "醫師班表路由調試信息",
-        "available_endpoints": [
-            "POST /api/doctor-schedules/doctor/{doctor_id}/set-status",
-            "POST /api/doctor-schedules/doctor/{doctor_id}/toggle-active", 
-            "POST /api/doctor-schedules/doctor/{doctor_id}/toggle-leave",
-            "POST /api/doctor-schedules/doctor/{doctor_id}/area-code",
-            "POST /api/doctor-schedules/doctor/{doctor_id}/meeting-time",
-            "POST /api/doctor-schedules/doctor/{doctor_id}/meeting-time/remove",
-            "POST /api/doctor-schedules/check-auto-off-duty",
-            "POST /api/doctor-schedules/test-endpoint",
-            "GET /api/doctor-schedules/debug/routes"
-        ]
-    }
-
-@router.get("/test")
-async def test_route():
-    """測試路由是否正常工作"""
-    logger.info("測試路由被調用")
-    return {
-        "success": True, 
-        "message": "路由正常工作", 
-        "timestamp": get_taiwan_now().isoformat()
-    }
-
-@router.get("/")
-async def get_schedules_root():
-    """根路徑測試"""
-    return {
-        "success": True, 
-        "message": "路由正常工作", 
-        "timestamp": get_taiwan_now().isoformat()
+        "message": "醫師班表路由調試資訊",
+        "current_time": now(),
+        "timezone": "Asia/Taipei",
+        "routes": [
+            "GET /api/doctor-schedules/today - 獲取今日班表",
+            "GET /api/doctor-schedules/date-range - 獲取日期範圍班表",
+            "POST /api/doctor-schedules/doctor/{doctor_id}/set-status - 設定醫師狀態",
+            "POST /api/doctor-schedules/doctor/{doctor_id}/set-meeting-time - 設定開會時間",
+            "DELETE /api/doctor-schedules/doctor/{doctor_id}/meeting-time - 刪除開會時間"
+        ],
+        "timestamp": now().isoformat()
     } 

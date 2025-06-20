@@ -1,6 +1,6 @@
 import requests
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
@@ -8,11 +8,9 @@ from sqlalchemy import and_
 from ..models.doctor_schedule import DoctorSchedule, DayShiftDoctor, DoctorScheduleUpdateLog
 from ..core.database import get_db
 from ..core.config import settings
+from ..utils.timezone import now, now_time
 
 logger = logging.getLogger(__name__)
-
-# 定義台灣時區
-TAIWAN_TZ = timezone(timedelta(hours=8))
 
 class DoctorScheduleService:
     """醫師班表服務"""
@@ -38,16 +36,6 @@ class DoctorScheduleService:
     }
     
     @classmethod
-    def get_taiwan_now(cls) -> datetime:
-        """獲取台灣當前時間"""
-        return datetime.now(TAIWAN_TZ)
-    
-    @classmethod
-    def get_taiwan_today_str(cls) -> str:
-        """獲取台灣當前日期字串（YYYYMMDD格式）"""
-        return cls.get_taiwan_now().strftime('%Y%m%d')
-    
-    @classmethod
     def parse_work_time(cls, time_str: str) -> tuple:
         """解析工作時間字串，返回開始和結束時間"""
         try:
@@ -71,7 +59,7 @@ class DoctorScheduleService:
             if not start_time or not end_time:
                 return True  # 如果無法解析時間，預設為在工作時間內
             
-            current_time = cls.get_taiwan_now().time()
+            current_time = now_time()
             
             # 處理跨午夜的情況（如夜班）
             if start_time <= end_time:
@@ -96,7 +84,7 @@ class DoctorScheduleService:
             if not start_time or not end_time:
                 return False
             
-            current_time = cls.get_taiwan_now().time()
+            current_time = now_time()
             
             # 處理跨午夜的情況（開會時間不太可能跨午夜，但為了完整性）
             if start_time <= end_time:
@@ -117,7 +105,7 @@ class DoctorScheduleService:
             doctor = db.query(DayShiftDoctor).filter(DayShiftDoctor.id == doctor_id).first()
             if doctor:
                 doctor.meeting_time = meeting_time
-                doctor.updated_at = cls.get_taiwan_now()
+                doctor.updated_at = now()
                 
                 # 如果目前在開會時間內且是上班狀態，設定為下班狀態
                 if meeting_time and cls.is_doctor_in_meeting(meeting_time) and doctor.status == 'on_duty':
@@ -140,7 +128,7 @@ class DoctorScheduleService:
             if doctor:
                 old_meeting_time = doctor.meeting_time
                 doctor.meeting_time = None
-                doctor.updated_at = cls.get_taiwan_now()
+                doctor.updated_at = now()
                 
                 # 刪除開會時間後，如果在工作時間內且不是請假狀態，恢復上班狀態
                 if old_meeting_time and cls.is_doctor_in_working_hours(doctor.time) and doctor.status != 'off':
@@ -159,8 +147,8 @@ class DoctorScheduleService:
     def update_doctors_active_status_by_time(cls, db: Session):
         """根據工作時間和開會時間自動更新醫師的狀態"""
         try:
-            # 獲取今天的所有白班醫師（使用台灣時間）
-            today = cls.get_taiwan_today_str()
+            # 獲取今天的所有白班醫師
+            today = now().strftime('%Y%m%d')
             today_schedule = db.query(DoctorSchedule).filter(
                 DoctorSchedule.date == today
             ).first()
@@ -169,12 +157,12 @@ class DoctorScheduleService:
                 logger.info("今日無班表資料，跳過自動下班檢測")
                 return
             
-            current_time = cls.get_taiwan_now().time()
-            current_datetime = cls.get_taiwan_now()
+            current_time = now_time()
+            current_datetime = now()
             updated_count = 0
             meeting_cleared_count = 0
             
-            logger.info(f"開始檢查醫師自動狀態更新，當前台灣時間: {current_time}")
+            logger.info(f"開始檢查醫師自動狀態更新，當前時間: {current_time}")
             
             # 檢查每個醫師的狀態
             for doctor in today_schedule.day_shift_doctors:
@@ -200,7 +188,7 @@ class DoctorScheduleService:
                     doctor.status = 'off_duty'
                     doctor.updated_at = current_datetime
                     updated_count += 1
-                    logger.info(f"醫師 {doctor.name} 已自動設為下班狀態（工作時間: {doctor.time}，當前台灣時間: {current_time}）")
+                    logger.info(f"醫師 {doctor.name} 已自動設為下班狀態（工作時間: {doctor.time}，當前時間: {current_time}）")
                 
                 # 2. 處理開會狀態
                 if doctor.meeting_time:
@@ -402,7 +390,7 @@ class DoctorScheduleService:
                 ).first()
                 
                 # 如果是今天的資料，跳過更新以保護手動管理
-                today = cls.get_taiwan_today_str()
+                today = now().strftime('%Y%m%d')
                 if date == today:
                     logger.info(f"跳過今天({date})的班表更新，保護手動管理的資料")
                     continue
@@ -411,7 +399,7 @@ class DoctorScheduleService:
                     # 更新現有資料
                     existing_schedule.duty_doctor = schedule_item.get('值班')
                     existing_schedule.schedule_notes = schedule_item.get('排班注記', [])
-                    existing_schedule.updated_at = cls.get_taiwan_now()
+                    existing_schedule.updated_at = now()
                     
                     # 保存現有醫師的手動設置資料
                     existing_doctors = {}
@@ -607,7 +595,7 @@ class DoctorScheduleService:
     @classmethod
     def get_today_schedule(cls, db: Session) -> Optional[Dict]:
         """獲取今日班表資料"""
-        today = cls.get_taiwan_today_str()
+        today = now().strftime('%Y%m%d')
         schedules = cls.get_schedules_by_date_range(db, today, today)
         return schedules[0] if schedules else None
     
@@ -618,7 +606,7 @@ class DoctorScheduleService:
             doctor = db.query(DayShiftDoctor).filter(DayShiftDoctor.id == doctor_id).first()
             if doctor:
                 doctor.area_code = new_area_code
-                doctor.updated_at = cls.get_taiwan_now()
+                doctor.updated_at = now()
                 db.commit()
                 return True
             return False
@@ -653,7 +641,7 @@ class DoctorScheduleService:
             doctor.status = 'on_duty'
         
         # 更新時間戳
-        doctor.updated_at = cls.get_taiwan_now()
+        doctor.updated_at = now()
         
         try:
             db.commit()
@@ -687,7 +675,7 @@ class DoctorScheduleService:
             doctor.status = 'off'      # 請假
         
         # 更新時間戳
-        doctor.updated_at = cls.get_taiwan_now()
+        doctor.updated_at = now()
         
         try:
             db.commit()
