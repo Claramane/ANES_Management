@@ -860,49 +860,6 @@ function Dashboard() {
               </ul>
             </Typography>
           </Alert>
-          
-          <Alert severity="success" sx={{ mb: 3 }}>
-            <Typography variant="body1" sx={{ fontWeight: 'bold', mb: 1 }}>
-              快速導航
-            </Typography>
-            <Typography variant="body2" component="div">
-              您可以通過左側導航選單快速訪問可用功能：
-              <Box sx={{ mt: 1, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                <Button 
-                  variant="outlined" 
-                  size="small" 
-                  onClick={() => navigate('/doctor-schedule')}
-                  sx={{ textTransform: 'none' }}
-                >
-                  醫師班表
-                </Button>
-                <Button 
-                  variant="outlined" 
-                  size="small" 
-                  onClick={() => navigate('/monthly-schedule')}
-                  sx={{ textTransform: 'none' }}
-                >
-                  月班表
-                </Button>
-                <Button 
-                  variant="outlined" 
-                  size="small" 
-                  onClick={() => navigate('/weekly-schedule')}
-                  sx={{ textTransform: 'none' }}
-                >
-                  週班表
-                </Button>
-                <Button 
-                  variant="outlined" 
-                  size="small" 
-                  onClick={() => navigate('/overtime-staff')}
-                  sx={{ textTransform: 'none' }}
-                >
-                  加班人員
-                </Button>
-              </Box>
-            </Typography>
-          </Alert>
         </Box>
       )}
       

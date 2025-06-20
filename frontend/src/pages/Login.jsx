@@ -320,7 +320,7 @@ function Login() {
               
               <Button
                 fullWidth
-                variant="text"
+                variant="outlined"
                 onClick={handleGuestLogin}
                 disabled={isLoading || isPasskeyLoading}
                 sx={{ 
@@ -329,7 +329,7 @@ function Login() {
                   fontSize: '0.9rem'
                 }}
               >
-                訪客模式登入（僅限查看）
+                訪客模式登入
               </Button>
             </Box>
           </Box>
