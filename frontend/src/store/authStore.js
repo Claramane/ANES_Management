@@ -36,11 +36,6 @@ function base64UrlToArrayBuffer(base64url) {
 const isTokenExpired = (token) => {
   if (!token) return true;
   
-  // 訪客模式的token永不過期
-  if (token === 'guest-mode-token') {
-    return false;
-  }
-  
   try {
     const decoded = jwtDecode(token);
     const currentTime = Date.now() / 1000;
@@ -116,6 +111,12 @@ export const useAuthStore = create(
         return true;
       },
       
+      // 檢查當前用戶是否為訪客
+      isGuest: () => {
+        const { user } = get();
+        return user?.role === 'guest';
+      },
+      
       // 登入
       login: async (username, password, isPasskeyLogin = false) => {
         set({ isLoading: true, error: null });
@@ -178,55 +179,6 @@ export const useAuthStore = create(
           });
           return false;
         }
-      },
-      
-      // 訪客模式登入
-      loginAsGuest: async () => {
-        set({ isLoading: true, error: null });
-        try {
-          // 創建訪客用戶對象
-          const guestUser = {
-            id: 0,
-            username: 'guest',
-            full_name: '訪客用戶',
-            role: 'guest',
-            identity: '訪客',
-            email: null,
-            is_active: true,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          };
-
-          // 生成假的token（實際上不會用於API調用）
-          const guestToken = 'guest-mode-token';
-
-          // 設置訪客認證狀態
-          set({
-            token: guestToken,
-            user: guestUser,
-            isAuthenticated: true,
-            isLoading: false,
-            error: null
-          });
-
-          return true;
-        } catch (error) {
-          console.error('訪客登入失敗:', error);
-          set({
-            token: null,
-            user: null,
-            isAuthenticated: false,
-            isLoading: false,
-            error: '訪客登入失敗'
-          });
-          return false;
-        }
-      },
-      
-      // 檢查是否為訪客模式
-      isGuestMode: () => {
-        const { user } = get();
-        return user?.role === 'guest';
       },
       
       // 登出

@@ -40,13 +40,13 @@ const drawerWidth = 240;
 function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, logout, isGuestMode } = useAuthStore();
+  const { user, logout } = useAuthStore();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [desktopOpen, setDesktopOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);
 
   const isHeadNurse = user?.role === 'head_nurse' || user?.role === 'admin';
-  const isGuest = isGuestMode();
+  const isGuest = user?.role === 'guest';
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
@@ -71,33 +71,28 @@ function Layout() {
 
   // 一般選單項目
   const menuItems = [
-    { text: '首頁', icon: <HomeIcon />, path: '/dashboard' },
-    { text: '週班表', icon: <ViewWeekIcon />, path: '/weekly-schedule', guestAllowed: true },
-    { text: '月班表', icon: <CalendarMonthIcon />, path: '/monthly-schedule', guestAllowed: true },
-    { text: '醫師班表', icon: <EventIcon />, path: '/doctor-schedule', guestAllowed: true },
-    { text: '換班申請', icon: <SyncIcon />, path: '/shift-swap', guestAllowed: false },
-    { text: '加班人員', icon: <WorkIcon />, path: '/overtime-staff', guestAllowed: true },
-    { text: '公告專區', icon: <AnnouncementIcon />, path: '/announcements', guestAllowed: false },
-    { text: '系統設定', icon: <SettingsIcon />, path: '/settings', guestAllowed: false },
+    ...(!isGuest ? [
+      { text: '首頁', icon: <HomeIcon />, path: '/dashboard' },
+    ] : []),
+    { text: '週班表', icon: <ViewWeekIcon />, path: '/weekly-schedule' },
+    { text: '月班表', icon: <CalendarMonthIcon />, path: '/monthly-schedule' },
+    { text: '醫師班表', icon: <EventIcon />, path: '/doctor-schedule' },
+    ...(!isGuest ? [
+      { text: '換班申請', icon: <SyncIcon />, path: '/shift-swap' },
+    ] : []),
+    { text: '加班人員', icon: <WorkIcon />, path: '/overtime-staff' },
+    ...(!isGuest ? [
+      { text: '公告專區', icon: <AnnouncementIcon />, path: '/announcements' },
+      { text: '系統設定', icon: <SettingsIcon />, path: '/settings' },
+    ] : []),
     // { text: '歷史紀錄', icon: <HistoryIcon />, path: '/version-history' },
   ];
 
   // 護理長專用選單 
   const headNurseMenuItems = [
-    { text: '公式班表', icon: <EventIcon />, path: '/formula', guestAllowed: false },
-    { text: '用戶管理', icon: <PeopleIcon />, path: '/user-management', guestAllowed: false },
+    { text: '公式班表', icon: <EventIcon />, path: '/formula' },
+    { text: '用戶管理', icon: <PeopleIcon />, path: '/user-management' },
   ];
-
-  // 根據用戶角色過濾選單項目
-  const getFilteredMenuItems = (items) => {
-    if (isGuest) {
-      return items.filter(item => item.guestAllowed !== false);
-    }
-    return items;
-  };
-
-  const filteredMenuItems = getFilteredMenuItems(menuItems);
-  const filteredHeadNurseMenuItems = isGuest ? [] : headNurseMenuItems;
 
   const drawer = (
     <div>
@@ -118,7 +113,7 @@ function Layout() {
       </Toolbar>
       <Divider />
       <List>
-        {filteredMenuItems.map((item) => (
+        {menuItems.map((item) => (
           <ListItem key={item.text} disablePadding>
             <ListItemButton
               selected={location.pathname === item.path}
@@ -138,7 +133,7 @@ function Layout() {
         <>
           <Divider />
           <List>
-            {filteredHeadNurseMenuItems.map((item) => (
+            {headNurseMenuItems.map((item) => (
               <ListItem key={item.text} disablePadding>
                 <ListItemButton
                   selected={location.pathname === item.path}
@@ -199,7 +194,7 @@ function Layout() {
             }}
           >
             {/* 根據當前頁面路徑顯示標題 */}
-            {[...filteredMenuItems, ...filteredHeadNurseMenuItems].find(
+            {[...menuItems, ...headNurseMenuItems].find(
               (item) => item.path === location.pathname
             )?.text || (
               <>

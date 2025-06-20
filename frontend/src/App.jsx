@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
@@ -182,34 +182,32 @@ const HeadNurseRoute = ({ children }) => {
   return children;
 };
 
-// 訪客限制路由 - 只允許訪問特定頁面
-const GuestRestrictedRoute = ({ children, allowedForGuest = false }) => {
+// 訪客模式路由（僅允許查看特定頁面）
+const GuestRoute = ({ children }) => {
   const { checkAuthStatus, user } = useAuthStore();
   
   if (!checkAuthStatus()) {
     return <Navigate to="/login" replace />;
   }
   
-  // 如果是訪客模式且該頁面不允許訪客訪問，跳轉到週班表
-  if (user?.role === 'guest' && !allowedForGuest) {
-    return <Navigate to="/weekly-schedule" replace />;
-  }
-  
+  // 訪客只能訪問特定頁面，且沒有編輯權限
   return children;
 };
 
-// 智能重定向組件
-const SmartRedirect = () => {
-  const { user, checkAuthStatus } = useAuthStore();
+// 非訪客路由（訪客無法訪問的頁面）
+const NonGuestRoute = ({ children }) => {
+  const { checkAuthStatus, user } = useAuthStore();
   
-  // 確保認證狀態檢查通過
   if (!checkAuthStatus()) {
     return <Navigate to="/login" replace />;
   }
   
-  // 根據用戶角色決定跳轉路徑
-  const redirectPath = user?.role === 'guest' ? '/weekly-schedule' : '/dashboard';
-  return <Navigate to={redirectPath} replace />;
+  // 如果是訪客，重定向到首頁
+  if (user?.role === 'guest') {
+    return <Navigate to="/dashboard" replace />;
+  }
+  
+  return children;
 };
 
 function App() {
@@ -222,13 +220,9 @@ function App() {
     
     // 執行初始化認證檢查
     initializeAuth();
-  }, [initializeAuth]);
-
-  // 分離的用戶資料同步邏輯
-  const syncUserData = useCallback(() => {
-    // 只有在非訪客模式下才獲取用戶資料
-    if (checkAuthStatus() && token && user?.role !== 'guest') {
-      console.log('非訪客模式，獲取最新用戶資料...');
+    
+    // 如果通過初始化檢查且有token，則嘗試獲取最新用戶資料
+    if (checkAuthStatus() && token) {
       api.get('/users/me')
         .then(res => {
           // 確保用戶資料是最新的
@@ -244,14 +238,8 @@ function App() {
             }
           }
         });
-    } else if (user?.role === 'guest') {
-      console.log('訪客模式，跳過用戶資料獲取');
     }
-  }, [checkAuthStatus, token, user?.role, setAuth, logout]);
-
-  useEffect(() => {
-    syncUserData();
-  }, [syncUserData]);
+  }, [initializeAuth, checkAuthStatus, token, setAuth, logout]);
   
   // 定期檢查認證狀態（每5分鐘）
   useEffect(() => {
@@ -280,53 +268,44 @@ function App() {
             </ProtectedRoute>
           }>
             <Route index element={
-              <SmartRedirect />
+              <Navigate to={
+                // 檢查是否為訪客用戶，如果是則跳轉到醫師班表，否則跳轉到儀表板
+                (() => {
+                  const authData = JSON.parse(localStorage.getItem('auth-storage') || '{}');
+                  const user = authData?.state?.user;
+                  return user?.role === 'guest' ? '/doctor-schedule' : '/dashboard';
+                })()
+              } replace />
             } />
-            <Route path="dashboard" element={<Dashboard />} />
-            <Route path="weekly-schedule" element={
-              <GuestRestrictedRoute allowedForGuest={true}>
-                <WeeklySchedule />
-              </GuestRestrictedRoute>
+            <Route path="dashboard" element={
+              <NonGuestRoute>
+                <Dashboard />
+              </NonGuestRoute>
             } />
-            <Route path="monthly-schedule" element={
-              <GuestRestrictedRoute allowedForGuest={true}>
-                <MonthlySchedule />
-              </GuestRestrictedRoute>
-            } />
-            <Route path="doctor-schedule" element={
-              <GuestRestrictedRoute allowedForGuest={true}>
-                <DoctorSchedule />
-              </GuestRestrictedRoute>
-            } />
-            <Route path="formula" element={
-              <GuestRestrictedRoute allowedForGuest={false}>
-                <Formula />
-              </GuestRestrictedRoute>
-            } />
+            <Route path="weekly-schedule" element={<WeeklySchedule />} />
+            <Route path="monthly-schedule" element={<MonthlySchedule />} />
+            <Route path="doctor-schedule" element={<DoctorSchedule />} />
+            <Route path="formula" element={<Formula />} />
             <Route path="shift-swap" element={
-              <GuestRestrictedRoute allowedForGuest={false}>
+              <NonGuestRoute>
                 <ShiftSwapPage />
-              </GuestRestrictedRoute>
+              </NonGuestRoute>
             } />
             <Route path="announcements" element={
-              <GuestRestrictedRoute allowedForGuest={false}>
+              <NonGuestRoute>
                 <AnnouncementPage />
-              </GuestRestrictedRoute>
+              </NonGuestRoute>
             } />
-            <Route path="overtime-staff" element={
-              <GuestRestrictedRoute allowedForGuest={true}>
-                <OvertimeStaff />
-              </GuestRestrictedRoute>
-            } />
+            <Route path="overtime-staff" element={<OvertimeStaff />} />
             <Route path="settings" element={
-              <GuestRestrictedRoute allowedForGuest={false}>
+              <NonGuestRoute>
                 <SettingsPage />
-              </GuestRestrictedRoute>
+              </NonGuestRoute>
             } />
             <Route path="version-history" element={
-              <GuestRestrictedRoute allowedForGuest={false}>
+              <NonGuestRoute>
                 <VersionHistory />
-              </GuestRestrictedRoute>
+              </NonGuestRoute>
             } />
             
             {/* 護理長專用路由 */}

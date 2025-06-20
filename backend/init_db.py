@@ -47,6 +47,19 @@ def init_db():
             )
             db.add(test_nurse)
             
+            # 創建訪客用戶
+            guest_user = User(
+                username="guest",
+                email="guest@example.com",
+                full_name="訪客用戶",
+                hashed_password=get_password_hash("guest123"),
+                role="guest",
+                identity="訪客",
+                created_at=datetime.now(),
+                updated_at=datetime.now()
+            )
+            db.add(guest_user)
+            
             # 創建默認公告分類
             categories = [
                 {"name": "班表相關", "description": "與班表有關的公告"},

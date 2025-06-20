@@ -7,7 +7,7 @@ class UserBase(BaseModel):
     username: str
     email: Optional[EmailStr] = None
     full_name: Optional[str] = None
-    role: Optional[str] = None  # head_nurse, nurse, leader, secretary
+    role: Optional[str] = None  # head_nurse, nurse, leader, secretary, guest
     identity: Optional[str] = None  # Optional: 護理師身份（一般護理師、資深護理師等）
     group_data: Optional[str] = None  # 儲存使用者分組資料，JSON字符串格式
     hire_date: Optional[date] = None  # 入職日期

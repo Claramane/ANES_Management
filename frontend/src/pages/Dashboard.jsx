@@ -33,8 +33,7 @@ import {
   Recommend as RecommendIcon,
   Work as WorkIcon,
   ViewWeek as ViewWeekIcon,
-  Close as CloseIcon,
-  Visibility as VisibilityIcon
+  Close as CloseIcon
 } from '@mui/icons-material';
 import { useAuthStore } from '../store/authStore';
 import apiService from '../utils/api';
@@ -268,9 +267,7 @@ const RenderCalendarCell = ({ day }) => {
 
 function Dashboard() {
   const navigate = useNavigate();
-  const { user, isGuestMode } = useAuthStore();
-  const isGuest = isGuestMode();
-  
+  const { user } = useAuthStore();
   const { 
     monthlySchedule, 
     isLoading: scheduleLoading, 
@@ -821,11 +818,28 @@ function Dashboard() {
   return (
     <Box sx={{ p: { xs: 1.5, sm: 2, md: 3 } }}>
       <Typography variant="h4" gutterBottom>
-        哈囉！{user?.full_name || user?.username}
+        {user?.role === 'guest' ? '歡迎使用訪客模式' : `哈囉！${user?.full_name || user?.username}`}
       </Typography>
       <Typography variant="h6" color="text.secondary" gutterBottom>
-        今天是{formattedToday}
+        {user?.role === 'guest' 
+          ? '您正在以訪客身份瀏覽系統，僅能查看資料，無法進行編輯操作'
+          : `今天是${formattedToday}`
+        }
       </Typography>
+      
+      {/* 訪客模式說明 */}
+      {user?.role === 'guest' && (
+        <Alert severity="info" sx={{ mb: 3 }}>
+          <Typography variant="body2">
+            <strong>訪客模式可使用功能：</strong><br />
+            • 查看醫師班表<br />
+            • 查看月排班表<br />
+            • 查看週排班表<br />
+            • 查看加班人員安排<br />
+            <em>注意：所有頁面均為只讀模式，無法進行任何編輯操作</em>
+          </Typography>
+        </Alert>
+      )}
       
       {error && (
         <Alert severity="error" sx={{ mb: 3 }}>
@@ -1040,17 +1054,15 @@ function Dashboard() {
                     </Typography>
                   )}
                 </CardContent>
-                {!isGuest && (
-                  <CardActions>
-                    <Button 
-                      size="small" 
-                      endIcon={<ArrowForwardIcon />}
-                      onClick={() => navigate('/announcements')}
-                    >
-                      查看所有公告
-                    </Button>
-                  </CardActions>
-                )}
+                <CardActions>
+                  <Button 
+                    size="small" 
+                    endIcon={<ArrowForwardIcon />}
+                    onClick={() => navigate('/announcements')}
+                  >
+                    查看所有公告
+                  </Button>
+                </CardActions>
               </Card>
             </Grid>
 
@@ -1061,8 +1073,8 @@ function Dashboard() {
                   <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                     <SyncIcon color="primary" sx={{ mr: 1 }} />
                     <Typography variant="h6">
-                      {isGuest ? '班表資訊' : '待處理換班請求'}
-                      {!isGuest && recommendedSwaps.length > 0 && (
+                      待處理換班請求
+                      {recommendedSwaps.length > 0 && (
                         <Badge badgeContent={recommendedSwaps.length} color="error" sx={{ ml: 1 }}>
                           <RecommendIcon color="action" fontSize="small" />
                         </Badge>
@@ -1398,21 +1410,19 @@ function Dashboard() {
                     </List>
                   ) : (
                     <Typography variant="body2" color="text.secondary">
-                      {isGuest ? '您正在以訪客模式瀏覽' : '沒有待處理的換班請求'}
+                      沒有待處理的換班請求
                     </Typography>
                   )}
                 </CardContent>
-                {!isGuest && (
-                  <CardActions>
-                    <Button 
-                      size="small" 
-                      endIcon={<ArrowForwardIcon />}
-                      onClick={() => navigate('/shift-swap')}
-                    >
-                      查看換班申請
-                    </Button>
-                  </CardActions>
-                )}
+                <CardActions>
+                  <Button 
+                    size="small" 
+                    endIcon={<ArrowForwardIcon />}
+                    onClick={() => navigate('/shift-swap')}
+                  >
+                    查看換班申請
+                  </Button>
+                </CardActions>
               </Card>
             </Grid>
           </Grid>

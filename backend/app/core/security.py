@@ -75,6 +75,13 @@ async def get_current_active_user(
     不檢查 is_active 狀態，直接返回已認證的用戶"""
     return current_user
 
+async def get_guest_or_active_user(
+    current_user: User = Depends(get_current_user)
+) -> User:
+    """獲取當前用戶（包括訪客用戶）
+    用於允許訪客訪問的只讀頁面"""
+    return current_user
+
 def get_head_nurse_user(current_user: User = Depends(get_current_user)) -> User:
     """獲取護理長用戶（用於需要護理長權限的操作）"""
     if current_user.role != "head_nurse" and current_user.role != "admin" and current_user.username != "admin":
