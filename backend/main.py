@@ -1,6 +1,22 @@
+import os
+import sys
+from pathlib import Path
+
+# 設定時區環境變數（在導入其他模組之前）
+os.environ['TZ'] = 'Asia/Taipei'
+
+# 嘗試在Unix系統上設定時區
+try:
+    import time
+    time.tzset()
+except (ImportError, AttributeError):
+    # Windows系統或其他不支援tzset的系統
+    pass
+
 from dotenv import load_dotenv
 load_dotenv()
-from fastapi import FastAPI
+
+from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
@@ -9,19 +25,44 @@ import uvicorn
 from starlette.middleware.sessions import SessionMiddleware
 from sqlalchemy import text
 from contextlib import asynccontextmanager
+import asyncio
 
 from app.core.config import settings
-from app.core.database import engine, Base, create_tables
+from app.core.database import engine, Base, create_tables, get_db
 from app.routes import routers
 from app.tasks.doctor_schedule_tasks import doctor_schedule_task_manager
+from app.routers.doctor_schedule import router as doctor_schedule_router
+from app.models import doctor_schedule
+from app.services.doctor_schedule_service import DoctorScheduleService
+from app.core.scheduler import scheduler
 
-logging.basicConfig(level=logging.INFO)
+# 添加專案根目錄到 Python 路徑
+current_dir = Path(__file__).parent
+sys.path.insert(0, str(current_dir))
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler('app.log', encoding='utf-8')
+    ]
+)
 logger = logging.getLogger(__name__)
+
+# 記錄時區設定
+logger.info(f"應用啟動時設定時區: {os.environ.get('TZ', '未設定')}")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 啟動時執行
     print("🚀 正在啟動醫師班表管理系統...")
+    
+    # 記錄當前時區和時間
+    from datetime import datetime
+    current_time = datetime.now()
+    logger.info(f"系統當前時間: {current_time}")
+    logger.info(f"時區環境變數: {os.environ.get('TZ', '未設定')}")
     
     # 初始化資料庫表
     create_tables()
@@ -50,6 +91,17 @@ async def lifespan(app: FastAPI):
     try:
         doctor_schedule_task_manager.start_scheduler()
         logger.info("醫師班表定時任務啟動成功（包含自動下班檢測）")
+        
+        # 啟動時執行一次自動狀態更新
+        db = next(get_db())
+        try:
+            DoctorScheduleService.update_doctors_active_status_by_time(db)
+            logger.info("啟動時執行自動狀態更新完成")
+        except Exception as e:
+            logger.error(f"啟動時自動狀態更新失敗: {str(e)}")
+        finally:
+            db.close()
+            
     except Exception as e:
         logger.error(f"啟動醫師班表定時任務失敗: {str(e)}")
     

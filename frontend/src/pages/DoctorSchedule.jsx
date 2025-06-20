@@ -555,10 +555,9 @@ const DoctorSchedule = () => {
     
     try {
       const now = new Date();
-      // 轉換為UTC+8時間
-      const utc8Now = new Date(now.getTime() + (8 * 60 * 60 * 1000));
-      const currentHour = utc8Now.getHours();
-      const currentMinute = utc8Now.getMinutes();
+      // 直接使用本地時間，不需要手動轉換UTC+8
+      const currentHour = now.getHours();
+      const currentMinute = now.getMinutes();
       const currentTimeInMinutes = currentHour * 60 + currentMinute;
       
       // 解析時間範圍，例如 "08:00-18:00"
@@ -592,10 +591,9 @@ const DoctorSchedule = () => {
     
     try {
       const now = new Date();
-      // 轉換為UTC+8時間
-      const utc8Now = new Date(now.getTime() + (8 * 60 * 60 * 1000));
-      const currentHour = utc8Now.getHours();
-      const currentMinute = utc8Now.getMinutes();
+      // 直接使用本地時間，不需要手動轉換UTC+8
+      const currentHour = now.getHours();
+      const currentMinute = now.getMinutes();
       const currentTimeInMinutes = currentHour * 60 + currentMinute;
       
       const startTimeInMinutes = meetingTime.startHour * 60 + meetingTime.startMinute;

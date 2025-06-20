@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List, Dict, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 import logging
 from pydantic import BaseModel
 
@@ -10,6 +10,13 @@ from ..services.doctor_schedule_service import DoctorScheduleService
 from ..core.security import get_current_user
 from ..models.user import User
 from ..core.config import settings
+
+# 定義台灣時區
+TAIWAN_TZ = timezone(timedelta(hours=8))
+
+def get_taiwan_now():
+    """獲取台灣當前時間"""
+    return datetime.now(TAIWAN_TZ)
 
 logger = logging.getLogger(__name__)
 
@@ -63,20 +70,18 @@ async def get_today_schedule(
 ):
     """獲取今日醫師班表"""
     try:
-        schedule = DoctorScheduleService.get_today_schedule(db)
+        now = get_taiwan_now()
+        logger.info(f"獲取今日班表，台灣當前時間: {now}")
         
+        schedule = DoctorScheduleService.get_today_schedule(db)
         if not schedule:
-            return {
-                "success": True,
-                "message": "今日無班表資料",
-                "schedule": None
-            }
+            raise HTTPException(status_code=404, detail="今日無班表資料")
         
         return {
             "success": True,
-            "schedule": schedule
+            "data": schedule,
+            "message": "獲取今日班表成功"
         }
-        
     except Exception as e:
         logger.error(f"獲取今日班表失敗: {str(e)}")
         raise HTTPException(status_code=500, detail=f"獲取今日班表失敗: {str(e)}")
@@ -568,4 +573,23 @@ async def debug_routes():
             "POST /api/doctor-schedules/test-endpoint",
             "GET /api/doctor-schedules/debug/routes"
         ]
+    }
+
+@router.get("/test")
+async def test_route():
+    """測試路由是否正常工作"""
+    logger.info("測試路由被調用")
+    return {
+        "success": True, 
+        "message": "路由正常工作", 
+        "timestamp": get_taiwan_now().isoformat()
+    }
+
+@router.get("/")
+async def get_schedules_root():
+    """根路徑測試"""
+    return {
+        "success": True, 
+        "message": "路由正常工作", 
+        "timestamp": get_taiwan_now().isoformat()
     } 
