@@ -82,13 +82,23 @@ class Settings(BaseSettings):
         
     @field_validator("TRUSTED_HOSTS", mode="before")
     def assemble_trusted_hosts(cls, v: Union[str, List[str]]) -> List[str]:
-        if not v or v == []:
+        if not v or v == [] or v == "":
             return []
-        if isinstance(v, str) and not v.startswith("["):
-            return [i.strip() for i in v.split(",")]
-        elif isinstance(v, (list, str)):
+        
+        if isinstance(v, list):
             return v
-        raise ValueError(v)
+            
+        if isinstance(v, str):
+            # 處理空字符串
+            if v.strip() == "":
+                return []
+            # 處理逗號分隔的字符串
+            if "," in v:
+                return [host.strip() for host in v.split(",") if host.strip()]
+            # 處理單個主機
+            return [v.strip()]
+            
+        return []
         
     @field_validator("DEBUG", mode="before")
     def parse_debug(cls, v: Union[str, bool]) -> bool:
