@@ -14,7 +14,9 @@ import pytz
 from datetime import datetime
 
 from app.core.config import settings
-from app.core.database import engine, Base, create_tables
+from app.core.database import engine, Base, create_tables, SessionLocal
+from app.core.security import get_password_hash
+from app.models.user import User
 from app.routes import routers
 from app.tasks.doctor_schedule_tasks import doctor_schedule_task_manager
 from app.utils.timezone import get_timezone_info
@@ -31,6 +33,36 @@ except:
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+def ensure_guest_user():
+    """確保訪客用戶存在於資料庫中"""
+    db = SessionLocal()
+    try:
+        # 檢查是否已存在訪客用戶
+        guest_user = db.query(User).filter(User.username == "guest").first()
+        if not guest_user:
+            # 創建訪客用戶
+            guest_user = User(
+                username="guest",
+                email="guest@example.com",
+                full_name="訪客用戶",
+                hashed_password=get_password_hash("guest123"),
+                role="guest",
+                identity="訪客",
+                created_at=datetime.now(),
+                updated_at=datetime.now()
+            )
+            db.add(guest_user)
+            db.commit()
+            logger.info("✅ 創建訪客用戶成功")
+        else:
+            logger.info("✅ 訪客用戶已存在")
+    except Exception as e:
+        logger.error(f"❌ 創建訪客用戶時發生錯誤: {str(e)}")
+        db.rollback()
+        raise e
+    finally:
+        db.close()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -66,6 +98,13 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"資料庫連接失敗: {str(e)}")
         raise Exception("無法連接到資料庫，請檢查資料庫配置和連接狀態")
+    
+    # 確保訪客用戶存在
+    try:
+        ensure_guest_user()
+    except Exception as e:
+        logger.error(f"檢查訪客用戶時發生錯誤: {str(e)}")
+        # 不拋出異常，讓應用繼續啟動
     
     # 啟動醫師班表定時任務管理器（包含自動下班檢測）
     try:
