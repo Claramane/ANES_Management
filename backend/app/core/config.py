@@ -30,6 +30,7 @@
 # WEBAUTHN_EXPECTED_ORIGIN=https://your-frontend-domain.zeabur.app
 # IS_PRODUCTION=true
 # HTTPS_ONLY=true
+# TRUSTED_HOSTS=your-backend-domain.zeabur.app,another-domain.zeabur.app
 # ADMIN_USERNAME=admin
 # ADMIN_PASSWORD=secure-production-password
 
@@ -58,6 +59,9 @@ class Settings(BaseSettings):
     # CORS設置
     BACKEND_CORS_ORIGINS: List[str] = []
 
+    # 可信主機設置
+    TRUSTED_HOSTS: List[str] = []
+
     WEBAUTHN_EXPECTED_ORIGIN: str = "http://localhost:3000"
     
     # 遠端環境設定
@@ -70,6 +74,16 @@ class Settings(BaseSettings):
             # 若未指定則用 FRONTEND_ORIGIN
             frontend = info.data.get("FRONTEND_ORIGIN", "http://localhost:3000")
             return [frontend]
+        if isinstance(v, str) and not v.startswith("["):
+            return [i.strip() for i in v.split(",")]
+        elif isinstance(v, (list, str)):
+            return v
+        raise ValueError(v)
+        
+    @field_validator("TRUSTED_HOSTS", mode="before")
+    def assemble_trusted_hosts(cls, v: Union[str, List[str]]) -> List[str]:
+        if not v or v == []:
+            return []
         if isinstance(v, str) and not v.startswith("["):
             return [i.strip() for i in v.split(",")]
         elif isinstance(v, (list, str)):

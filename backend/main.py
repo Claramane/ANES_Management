@@ -141,13 +141,22 @@ app = FastAPI(
 #     app.add_middleware(HTTPSRedirectMiddleware)
 
 # 添加可信主機中間件
-app.add_middleware(
-    TrustedHostMiddleware, 
-    allowed_hosts=["*"] if not settings.IS_PRODUCTION else [
-        "anesmanagementbackend.zeabur.app",
-        "eckanesmanagement.zeabur.app"
-    ]
-)
+if not settings.IS_PRODUCTION:
+    # 開發環境允許所有主機
+    trusted_hosts = ["*"]
+    logger.info("🔓 開發環境：允許所有主機訪問")
+else:
+    # 生產環境必須設置 TRUSTED_HOSTS 環境變數
+    if settings.TRUSTED_HOSTS:
+        trusted_hosts = settings.TRUSTED_HOSTS
+        logger.info(f"🔒 生產環境：允許的主機 {trusted_hosts}")
+    else:
+        # 如果沒有設置環境變數，記錄警告並拒絕所有請求
+        trusted_hosts = []
+        logger.warning("⚠️  警告：生產環境未設置 TRUSTED_HOSTS 環境變數，將拒絕所有請求！")
+        logger.warning("⚠️  請設置 TRUSTED_HOSTS 環境變數。")
+
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=trusted_hosts)
 
 # 加入 SessionMiddleware
 app.add_middleware(
