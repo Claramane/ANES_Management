@@ -41,6 +41,7 @@ import { useScheduleStore } from '../store/scheduleStore';
 import { format, startOfToday, getDate, getMonth, getYear, eachDayOfInterval, parseISO, startOfMonth, endOfMonth, getDay, isToday } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
 import { cachedScheduleDetailsRequest } from '../utils/scheduleCache';
+import NurseCalendar, { SHIFT_COLORS } from '../components/common/NurseCalendar';
 
 // 班次顏色和名稱的映射，可以根據需要擴展
 const shiftDetails = {
@@ -111,18 +112,7 @@ const getAreaStyle = (areaCode) => {
   return { bg: '#f0f0f0', text: '#757575', border: '#bdbdbd' };
 };
 
-// 定義班別顏色（月曆用）
-const SHIFT_COLORS = {
-  'D': '#4caf50', // 白班
-  'A': '#c6c05f', // A班
-  'N': '#2196f3', // 大夜
-  'K': '#8AA6C1', // K班
-  'C': '#a9d0ab', // C班
-  'F': '#d8bd89', // F班
-  'E': '#ff9800', // 小夜
-  'B': '#e7b284', // B班
-  'O': '#9e9e9e'  // 休假
-};
+// 班別顏色已在 NurseCalendar 組件中定義，這裡移除重複定義
 
 // 狀態顏色配置
 const STATUS_COLORS = {
@@ -146,124 +136,7 @@ const getCategoryStyle = (category) => {
   return categoryColors[category] || categoryColors.default;
 };
 
-// 添加日曆單元格的CSS
-const calendarCellStyle = {
-  position: 'relative',
-  height: '100%',
-  minHeight: '70px',
-  padding: '4px',
-  border: '1px solid #e0e0e0',
-  overflow: 'hidden',
-  cursor: 'default',
-  '&:hover': {
-    backgroundColor: '#f5f5f5',
-  },
-  '&.selected': {
-    backgroundColor: '#e3f2fd',
-    border: '2px solid #2196f3',
-  },
-  '&.today': {
-    backgroundColor: '#e8f5e9',
-  }
-};
-
-// 渲染日曆單元格內容的組件 - 已優化版本
-const RenderCalendarCell = ({ day }) => {
-  if (!day.date) return null;
-  
-  const commonTagStyle = {
-    fontSize: '10px',
-    padding: '2px 4px',
-    borderRadius: '0 4px 4px 4px',
-    width: '100%',
-    display: 'flex',
-    alignItems: 'center',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-    boxSizing: 'border-box',
-    marginTop: '2px'
-  };
-  
-  return (
-    <div className="cell-content" style={{ 
-      display: 'flex', 
-      flexDirection: 'column',
-      height: '100%',
-      width: '100%'
-    }}>
-      {/* 日期顯示在最上方 */}
-      <Box sx={{ 
-        textAlign: 'right',
-        padding: '2px 4px',
-        fontWeight: 'bold',
-        fontSize: '12px',
-        width: '100%'
-      }}>
-        {format(day.date, 'd')}
-      </Box>
-      
-      {/* 班別顯示在第二行 */}
-      {day.shift && (
-        <Box sx={{ 
-          backgroundColor: SHIFT_COLORS[day.shift] || '#9e9e9e',
-          color: day.shift === 'O' ? 'black' : 'white',
-          fontWeight: 'bold',
-          fontSize: '11px',
-          padding: '2px 4px',
-          borderRadius: '4px',
-          width: '100%',
-          textAlign: 'left',
-          marginTop: '2px'
-        }}>
-          {day.shift}
-        </Box>
-      )}
-      
-      <Box sx={{ 
-        display: 'flex', 
-        flexDirection: 'column',
-        gap: '2px',
-        overflow: 'hidden',
-        flex: 1,
-        width: '100%',
-        mt: 0.5
-      }}>
-        {/* 工作區域 */}
-        {day.mission && (
-          <Box sx={{ 
-            ...commonTagStyle,
-            backgroundColor: '#4dabf5',
-            color: 'white',
-          }}>
-            <ViewWeekIcon sx={{ fontSize: '10px', mr: 0.3 }} />
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{day.mission}</span>
-          </Box>
-        )}
-        
-        {/* 加班信息 - 已優化，移除"加班"文字和班別外框 */}
-        {day.overtime && (
-          <Box sx={{ 
-            ...commonTagStyle,
-            backgroundColor: '#ff8a65',
-            color: 'white',
-          }}>
-            <WorkIcon sx={{ fontSize: '10px', mr: 0.3 }} />
-            {day.overtimeShift && (
-              <span style={{
-                color: 'white',
-                fontSize: '9px',
-                fontWeight: 'bold',
-              }}>
-                {day.overtimeShift}
-              </span>
-            )}
-          </Box>
-        )}
-      </Box>
-    </div>
-  );
-};
+// 原本的日曆單元格相關代碼已移至 NurseCalendar 組件
 
 function Dashboard() {
   const navigate = useNavigate();
@@ -898,64 +771,13 @@ function Dashboard() {
                   
                   {monthlyCalendarData.length > 0 ? (
                     <Box sx={{ width: '100%', overflowX: 'auto', flex: 1 }}>
-                      {/* 日曆表格 */}
-                      <Box component="table" sx={{ 
-                        width: '100%', 
-                        height: '100%',
-                        borderCollapse: 'collapse',
-                        border: '1px solid #e0e0e0'
-                      }}>
-                        {/* 表頭 */}
-                        <Box component="thead">
-                          <Box component="tr">
-                            {['一', '二', '三', '四', '五', '六', '日'].map(day => (
-                              <Box 
-                                component="th" 
-                                key={day}
-                                sx={{
-                                  padding: '8px',
-                                  textAlign: 'center',
-                                  backgroundColor: '#f5f5f5',
-                                  border: '1px solid #e0e0e0',
-                                  fontSize: '14px',
-                                  fontWeight: 'bold',
-                                  width: '14.28%'
-                                }}
-                              >
-                                {day}
-                              </Box>
-                            ))}
-                          </Box>
-                        </Box>
-                        
-                        {/* 表格主體 */}
-                        <Box component="tbody">
-                          {monthlyCalendarData.map((week, weekIndex) => (
-                            <Box component="tr" key={weekIndex}>
-                              {week.map((dayData, dayIndex) => (
-                                <Box 
-                                  component="td" 
-                                  key={dayIndex}
-                                  sx={{
-                                    ...calendarCellStyle,
-                                    height: '90px',
-                                    ...(dayData.date && isToday(dayData.date) && { 
-                                      backgroundColor: '#e8f5e9',
-                                      border: '2px solid #4caf50'
-                                    }),
-                                    ...((!dayData.date) && { 
-                                      backgroundColor: '#f9f9f9',
-                                      opacity: 0.5
-                                    })
-                                  }}
-                                >
-                                  {dayData.date && <RenderCalendarCell day={dayData} />}
-                                </Box>
-                              ))}
-                            </Box>
-                          ))}
-                        </Box>
-                      </Box>
+                      <NurseCalendar
+                        selectedDate={selectedDate}
+                        calendarData={monthlyCalendarData}
+                        showTable={true}
+                        cellHeight="90px"
+                        clickable={false}
+                      />
                     </Box>
                   ) : (
                     <Typography variant="body1" color="text.secondary">

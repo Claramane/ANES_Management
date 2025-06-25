@@ -178,10 +178,7 @@ const ShiftSwap = () => {
         return;
       }
       
-      // 使用正確的API獲取月度班表
-      console.log(`正在獲取 ${year}年${month}月 的班表數據...`);
-      const response = await apiService.schedule.getMonthlySchedule(year, month);
-      
+      const response = await cachedScheduleDetailsRequest(year, month);
       if (response.data) {
         const newSchedules = { ...monthlySchedules, [monthKey]: response.data };
         setMonthlySchedules(newSchedules);
@@ -189,24 +186,12 @@ const ShiftSwap = () => {
       }
     } catch (error) {
       console.error('獲取月份數據失敗:', error);
-      setNotification({
-        open: true,
-        message: `獲取排班表時發生錯誤: ${error.message}`,
-        type: 'error'
-      });
       setCalendarData(createEmptyCalendarData(date));
     }
   }, [monthlySchedules]);
   
   // 生成日曆數據
   const generateCalendarData = useCallback((date, scheduleData) => {
-    console.log('生成日曆數據，參數:', {
-      date: format(date, 'yyyy-MM-dd'),
-      scheduleDataType: typeof scheduleData,
-      scheduleDataKeys: scheduleData ? Object.keys(scheduleData) : null,
-      userId: user?.id
-    });
-    
     const start = startOfMonth(date);
     const end = endOfMonth(date);
     const days = eachDayOfInterval({ start, end });
@@ -216,7 +201,7 @@ const ShiftSwap = () => {
       const dateStr = format(day, 'yyyy-MM-dd');
       calendar[dateStr] = {
         date: day,
-        shift: 'O', // 預設為休假
+        shift: null,
         mission: null,
         overtime: false,
         overtimeShift: null
@@ -225,35 +210,42 @@ const ShiftSwap = () => {
       // 從班表數據中提取信息
       if (scheduleData && scheduleData.data && user) {
         const userId = user.id;
-        const year = date.getFullYear();
-        const month = date.getMonth() + 1;
-        
-        // 修正數據結構訪問方式，注意API返回的年月可能是字符串
-        const yearData = scheduleData.data[String(year)] || scheduleData.data[year];
+        const yearData = scheduleData.data[date.getFullYear()];
         if (yearData) {
-          const monthData = yearData[String(month)] || yearData[month];
+          const monthData = yearData[date.getMonth() + 1];
           if (monthData && monthData.schedule) {
-            console.log(`找到 ${year}年${month}月的班表數據，護理師數量:`, monthData.schedule.length);
-            
             const userSchedule = monthData.schedule.find(s => String(s.id) === String(userId));
             if (userSchedule && userSchedule.shifts) {
               const dayIndex = day.getDate() - 1;
-              const shift = userSchedule.shifts[dayIndex];
-              if (shift) {
-                calendar[dateStr].shift = shift;
-                console.log(`${dateStr}: 找到班別 ${shift}`);
-              }
-            } else {
-              console.warn(`未找到用戶 ${userId} 的班表數據`);
+              calendar[dateStr].shift = userSchedule.shifts[dayIndex] || 'O';
             }
           }
-        } else {
-          console.warn(`未找到 ${year} 年的數據`);
+          
+          // 工作分配
+          if (monthData && monthData.assignments) {
+            const userAssignment = monthData.assignments.find(a => String(a.id) === String(userId));
+            if (userAssignment && userAssignment.missions) {
+              const dayIndex = day.getDate() - 1;
+              calendar[dateStr].mission = userAssignment.missions[dayIndex] || null;
+            }
+          }
+          
+          // 加班信息
+          if (monthData && monthData.overtime) {
+            const userOvertime = monthData.overtime.find(o => String(o.id) === String(userId));
+            if (userOvertime && userOvertime.overtime_shifts) {
+              const dayIndex = day.getDate() - 1;
+              const overtimeShift = userOvertime.overtime_shifts[dayIndex];
+              if (overtimeShift && overtimeShift !== 'X') {
+                calendar[dateStr].overtime = true;
+                calendar[dateStr].overtimeShift = overtimeShift;
+              }
+            }
+          }
         }
       }
     });
     
-    console.log('生成的日曆數據示例:', Object.entries(calendar).slice(0, 3));
     setCalendarData(calendar);
   }, [user]);
   
@@ -615,13 +607,7 @@ const ShiftSwap = () => {
               views={['year', 'month']}
               value={currentMonth}
               onChange={handleMonthChange}
-              slots={{ textField: TextField }}
-              slotProps={{ 
-                textField: { 
-                  fullWidth: true, 
-                  margin: "normal" 
-                } 
-              }}
+              renderInput={(params) => <TextField {...params} fullWidth margin="normal" />}
             />
           </LocalizationProvider>
           
