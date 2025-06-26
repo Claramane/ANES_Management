@@ -2236,6 +2236,111 @@ const ShiftSwap = () => {
   };
 
   // 渲染換班詳情抽屜
+  // 獲取班別顏色樣式 (共用函數)
+  const getShiftStyle = (shift, size = '35px') => {
+    return {
+      backgroundColor: SHIFT_COLORS[shift] || '#757575',
+      color: shift === 'O' ? 'black' : 'white',
+      width: size,
+      height: size,
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center',
+      borderRadius: '50%',
+      fontSize: size === '35px' ? '16px' : '12px',
+      fontWeight: 'bold'
+    };
+  };
+  
+  // 獲取加班標籤樣式 (共用函數)
+  const getOvertimeStyle = (content, size = 'normal') => {
+    const isSmall = size === 'small';
+    return {
+      backgroundColor: content === '未指定' || content === '無' ? '#E0E0E0' : '#FF8A65',
+      color: content === '未指定' || content === '無' ? '#666' : 'white',
+      minWidth: isSmall ? '30px' : '40px',
+      height: isSmall ? '20px' : '28px',
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center',
+      borderRadius: '6px',
+      fontSize: isSmall ? '10px' : '13px',
+      fontWeight: 'bold',
+      padding: isSmall ? '0 4px' : '0 8px'
+    };
+  };
+
+  // 渲染換班內容的視覺化標示 (用於列表中)
+  const renderSwapVisual = (request, isInline = true) => {
+    const containerStyle = isInline ? 
+      { display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5 } : 
+      { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1, mb: 2 };
+    
+    const shiftSize = isInline ? '20px' : '35px';
+    const overtimeSize = isInline ? 'small' : 'normal';
+
+    return (
+      <Box sx={containerStyle}>
+        {/* 原內容 */}
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          {request.swap_type === 'overtime' ? (
+            <Box sx={{ ...getOvertimeStyle(request.from_overtime || '無', overtimeSize) }}>
+              {request.from_overtime ? (request.from_overtime + '加') : '無'}
+            </Box>
+          ) : request.swap_type === 'mission' ? (
+            <Chip 
+              label={request.from_mission || '未指定'}
+              size={isInline ? 'small' : 'medium'}
+              sx={{ 
+                backgroundColor: '#4dabf5',
+                color: 'white',
+                height: isInline ? '18px' : '24px',
+                fontSize: isInline ? '10px' : '12px',
+                fontWeight: 'bold'
+              }}
+            />
+          ) : (
+            <Box sx={{ ...getShiftStyle(request.from_shift, shiftSize) }}>
+              {request.from_shift || 'O'}
+            </Box>
+          )}
+        </Box>
+        
+        {/* 箭頭 */}
+        <ArrowForwardIcon sx={{ 
+          color: '#666', 
+          fontSize: isInline ? 16 : 20,
+          mx: isInline ? 0.3 : 1
+        }} />
+        
+        {/* 目標內容 */}
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          {request.swap_type === 'overtime' ? (
+            <Box sx={{ ...getOvertimeStyle(request.to_overtime || '無', overtimeSize) }}>
+              {request.to_overtime === '未指定' ? '不加班' : request.to_overtime || '無'}
+            </Box>
+          ) : request.swap_type === 'mission' ? (
+            <Chip 
+              label={request.to_mission || '未指定'}
+              size={isInline ? 'small' : 'medium'}
+              sx={{ 
+                backgroundColor: '#81c784',
+                color: 'white',
+                height: isInline ? '18px' : '24px',
+                fontSize: isInline ? '10px' : '12px',
+                fontWeight: 'bold'
+              }}
+            />
+          ) : (
+            <Box sx={{ ...getShiftStyle(request.to_shift, shiftSize) }}>
+              {request.to_shift || 'O'}
+            </Box>
+          )}
+        </Box>
+      </Box>
+    );
+  };
+
   const renderDetailDrawer = () => {
     if (!selectedRequest) return null;
     
@@ -2245,39 +2350,6 @@ const ShiftSwap = () => {
     const displayStatus = getRequestDisplayStatus(selectedRequest);
     const canAccept = !isRequester && (selectedRequest.target_nurse_id === null || isTargeted) && 
                      selectedRequest.status === 'pending' && !isRequestExpired(selectedRequest) && eligibilityCheck.eligible;
-    
-    // 獲取班別顏色
-    const getShiftStyle = (shift) => {
-      return {
-        backgroundColor: SHIFT_COLORS[shift] || '#757575',
-        color: shift === 'O' ? 'black' : 'white',
-        width: '35px',
-        height: '35px',
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        borderRadius: '50%',
-        fontSize: '16px',
-        fontWeight: 'bold'
-      };
-    };
-    
-    // 獲取加班標籤樣式
-    const getOvertimeStyle = (content) => {
-      return {
-        backgroundColor: content === '未指定' || content === '無' ? '#E0E0E0' : '#FF8A65',
-        color: content === '未指定' || content === '無' ? '#666' : 'white',
-        minWidth: '40px',
-        height: '28px',
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        borderRadius: '6px',
-        fontSize: '13px',
-        fontWeight: 'bold',
-        padding: '0 8px'
-      };
-    };
     
     return (
       <Drawer
@@ -2340,75 +2412,40 @@ const ShiftSwap = () => {
               </Box>
               
               {/* 班別轉換顯示 */}
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1, mb: 2 }}>
-                {/* 原班別 */}
-                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                  <Typography variant="caption" sx={{ mb: 0.5 }}>
+              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+                {/* 標籤行 */}
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%', px: 2 }}>
+                  <Typography variant="caption" sx={{ textAlign: 'center' }}>
                     {selectedRequest.swap_type === 'overtime' ? '原加班' : 
                      selectedRequest.swap_type === 'mission' ? '原工作區域' : '原班別'}
                   </Typography>
-                  {selectedRequest.swap_type === 'overtime' ? (
-                    <Box sx={{ ...getOvertimeStyle(selectedRequest.from_overtime || '無') }}>
-                      {selectedRequest.from_overtime ? (selectedRequest.from_overtime + '加') : '無加班'}
-                    </Box>
-                  ) : selectedRequest.swap_type === 'mission' ? (
-                    <Chip 
-                      label={selectedRequest.from_mission || '未指定'}
-                      sx={{ 
-                        backgroundColor: '#4dabf5',
-                        color: 'white',
-                        height: '24px',
-                        fontSize: '12px',
-                        fontWeight: 'bold'
-                      }}
-                    />
-                  ) : (
-                    <Box sx={{ ...getShiftStyle(selectedRequest.from_shift) }}>
-                      {selectedRequest.from_shift || 'O'}
-                    </Box>
-                  )}
-                  {selectedRequest.from_mission && selectedRequest.swap_type !== 'mission' && (
-                    <Typography variant="caption" sx={{ mt: 0.5 }}>
-                      {selectedRequest.from_mission}
-                    </Typography>
-                  )}
-                </Box>
-                
-                {/* 箭頭 */}
-                <ArrowForwardIcon sx={{ mx: 2, color: '#666' }} />
-                
-                {/* 目標班別 */}
-                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                  <Typography variant="caption" sx={{ mb: 0.5 }}>
+                  <Typography variant="caption" sx={{ textAlign: 'center' }}>
                     {selectedRequest.swap_type === 'overtime' ? '目標狀態' : 
                      selectedRequest.swap_type === 'mission' ? '目標工作區域' : '目標班別'}
                   </Typography>
-                  {selectedRequest.swap_type === 'overtime' ? (
-                    <Box sx={{ ...getOvertimeStyle(selectedRequest.to_overtime || '無') }}>
-                      {selectedRequest.to_overtime === '未指定' ? '不加班' : selectedRequest.to_overtime || '無'}
-                    </Box>
-                  ) : selectedRequest.swap_type === 'mission' ? (
-                    <Chip 
-                      label={selectedRequest.to_mission || '未指定'}
-                      sx={{ 
-                        backgroundColor: '#81c784',
-                        color: 'white',
-                        height: '24px',
-                        fontSize: '12px',
-                        fontWeight: 'bold'
-                      }}
-                    />
-                  ) : (
-                    <Box sx={{ ...getShiftStyle(selectedRequest.to_shift) }}>
-                      {selectedRequest.to_shift || 'O'}
-                    </Box>
-                  )}
-                  {selectedRequest.to_mission && selectedRequest.swap_type !== 'mission' && (
-                    <Typography variant="caption" sx={{ mt: 0.5 }}>
-                      {selectedRequest.to_mission}
-                    </Typography>
-                  )}
                 </Box>
+                
+                {/* 視覺化換班內容 */}
+                {renderSwapVisual(selectedRequest, false)}
+                
+                {/* 工作區域信息 - 只在非工作區域換班類型時顯示 */}
+                {selectedRequest.swap_type !== 'mission' && (selectedRequest.from_mission || selectedRequest.to_mission) && (
+                  <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2, mt: 1 }}>
+                    {selectedRequest.from_mission && (
+                      <Typography variant="caption" sx={{ textAlign: 'center' }}>
+                        {selectedRequest.from_mission}
+                      </Typography>
+                    )}
+                    {selectedRequest.from_mission && selectedRequest.to_mission && (
+                      <ArrowForwardIcon sx={{ color: '#666', fontSize: 16 }} />
+                    )}
+                    {selectedRequest.to_mission && (
+                      <Typography variant="caption" sx={{ textAlign: 'center' }}>
+                        {selectedRequest.to_mission}
+                      </Typography>
+                    )}
+                  </Box>
+                )}
               </Box>
               
               {/* 加班信息 - 只在非加班換班類型時顯示 */}
@@ -3701,6 +3738,20 @@ const ShiftSwap = () => {
                                 {request.to_date && ` • 到: ${format(parseISO(request.to_date), 'MM/dd')}`}
                                 {request.notes && ` • ${request.notes}`}
                               </Typography>
+                              
+                              {/* 添加視覺化換班內容 */}
+                              <Box sx={{ 
+                                mt: 1, 
+                                opacity: isFaded ? 0.6 : 1,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 1
+                              }}>
+                                <Typography variant="caption" color="text.secondary" sx={{ minWidth: 'fit-content' }}>
+                                  換班內容:
+                                </Typography>
+                                {renderSwapVisual(request, true)}
+                              </Box>
                             </Box>
                           }
                         />
