@@ -1157,8 +1157,83 @@ function Dashboard() {
               </Card>
             </Grid>
 
-            {/* 在線用戶卡片 - 右中 */}
-            <Grid item xs={12} sx={{ height: 'auto' }}>
+
+            
+            {/* 本月班表卡片 - 右下，填滿剩餘空間 */}
+            <Grid item xs={12} sx={{ flex: 1, display: 'flex' }}>
+              <Card sx={{ width: '100%', display: 'flex', flexDirection: 'column', boxShadow: 'none', border: '1px solid #e0e0e0' }}>
+                <CardContent sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                    <EventIcon color="primary" sx={{ mr: 1 }} />
+                    <Typography variant="h6">本月班表</Typography>
+                  </Box>
+                  
+                  {monthlyCalendarData.length > 0 ? (
+                    <Box sx={{ width: '100%', overflowX: 'auto', flex: 1 }}>
+                      {/* 🚀 完全複製 ShiftSwap 的月曆表格實現 */}
+                      <style>{calendarStyles}</style>
+                      <div className="calendar-container">
+                        <table className="calendar-table">
+                          <thead>
+                            <tr>
+                              {weekDays.map(day => (
+                                <th key={day}>{day}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {monthlyCalendarData.map((week, weekIndex) => (
+                              <tr key={weekIndex}>
+                                {week.map((day, dayIndex) => {
+                                  // 檢查日期是否過期
+                                  const isExpired = day.date && day.date < today;
+                                  
+                                  return (
+                                    <td 
+                                      key={dayIndex}
+                                      className={`
+                                        ${!day.date ? 'empty-cell' : ''}
+                                        ${day.date && isToday(day.date) ? 'today' : ''}
+                                        ${isExpired ? 'expired-cell' : ''} 
+                                      `}
+                                      style={{
+                                        cursor: isExpired ? 'not-allowed' : 'default',
+                                        opacity: isExpired ? 0.5 : 1
+                                      }}
+                                    >
+                                      {day.date && <RenderCalendarCell day={day} />}
+                                    </td>
+                                  );
+                                })}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </Box>
+                  ) : (
+                    <Typography variant="body1" color="text.secondary">
+                      無法載入本月班表
+                    </Typography>
+                  )}
+                </CardContent>
+                <CardActions>
+                  <Button 
+                    size="small" 
+                    endIcon={<ArrowForwardIcon />}
+                    onClick={() => navigate('/weekly-schedule')}
+                  >
+                    查看詳細班表
+                  </Button>
+                </CardActions>
+              </Card>
+            </Grid>
+
+            {/* 在線用戶卡片 - 手機版：本月班表下方 */}
+            <Grid item xs={12} sx={{ 
+              height: 'auto',
+              display: { xs: 'block', md: 'none' }  // 只在手機版顯示
+            }}>
               <Card sx={{ height: 'fit-content', boxShadow: 'none', border: '1px solid #e0e0e0' }}>
                 <CardContent>
                   <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
@@ -1256,76 +1331,6 @@ function Dashboard() {
                 </CardContent>
               </Card>
             </Grid>
-            
-            {/* 本月班表卡片 - 右下，填滿剩餘空間 */}
-            <Grid item xs={12} sx={{ flex: 1, display: 'flex' }}>
-              <Card sx={{ width: '100%', display: 'flex', flexDirection: 'column', boxShadow: 'none', border: '1px solid #e0e0e0' }}>
-                <CardContent sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                    <EventIcon color="primary" sx={{ mr: 1 }} />
-                    <Typography variant="h6">本月班表</Typography>
-                  </Box>
-                  
-                  {monthlyCalendarData.length > 0 ? (
-                    <Box sx={{ width: '100%', overflowX: 'auto', flex: 1 }}>
-                      {/* 🚀 完全複製 ShiftSwap 的月曆表格實現 */}
-                      <style>{calendarStyles}</style>
-                      <div className="calendar-container">
-                        <table className="calendar-table">
-                          <thead>
-                            <tr>
-                              {weekDays.map(day => (
-                                <th key={day}>{day}</th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {monthlyCalendarData.map((week, weekIndex) => (
-                              <tr key={weekIndex}>
-                                {week.map((day, dayIndex) => {
-                                  // 檢查日期是否過期
-                                  const isExpired = day.date && day.date < today;
-                                  
-                                  return (
-                                    <td 
-                                      key={dayIndex}
-                                      className={`
-                                        ${!day.date ? 'empty-cell' : ''}
-                                        ${day.date && isToday(day.date) ? 'today' : ''}
-                                        ${isExpired ? 'expired-cell' : ''} 
-                                      `}
-                                      style={{
-                                        cursor: isExpired ? 'not-allowed' : 'default',
-                                        opacity: isExpired ? 0.5 : 1
-                                      }}
-                                    >
-                                      {day.date && <RenderCalendarCell day={day} />}
-                                    </td>
-                                  );
-                                })}
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </Box>
-                  ) : (
-                    <Typography variant="body1" color="text.secondary">
-                      無法載入本月班表
-                    </Typography>
-                  )}
-                </CardContent>
-                <CardActions>
-                  <Button 
-                    size="small" 
-                    endIcon={<ArrowForwardIcon />}
-                    onClick={() => navigate('/weekly-schedule')}
-                  >
-                    查看詳細班表
-                  </Button>
-                </CardActions>
-              </Card>
-            </Grid>
           </Grid>
         </Grid>
 
@@ -1398,6 +1403,109 @@ function Dashboard() {
                     查看所有公告
                   </Button>
                 </CardActions>
+              </Card>
+            </Grid>
+
+            {/* 在線用戶卡片 - 桌面版：最新公告下方 */}
+            <Grid item xs={12} sx={{ 
+              height: 'auto',
+              display: { xs: 'none', md: 'block' }  // 只在桌面版顯示
+            }}>
+              <Card sx={{ height: 'fit-content', boxShadow: 'none', border: '1px solid #e0e0e0' }}>
+                <CardContent>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                    <Badge 
+                      badgeContent={onlineUsers.length} 
+                      color="success" 
+                      sx={{ mr: 1 }}
+                    >
+                      <WorkIcon color="primary" />
+                    </Badge>
+                    <Typography variant="h6">目前在線</Typography>
+                  </Box>
+                  
+                  {onlineUsersLoading ? (
+                    <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+                      <CircularProgress size={24} />
+                    </Box>
+                  ) : onlineUsersError ? (
+                    <Alert severity="error" sx={{ mb: 1 }}>
+                      {onlineUsersError}
+                    </Alert>
+                  ) : onlineUsers.length > 0 ? (
+                    <List sx={{ p: 0, maxHeight: 200, overflowY: 'auto' }}>
+                      {onlineUsers.map((onlineUser, index) => (
+                        <React.Fragment key={onlineUser.id}>
+                          <ListItem sx={{ px: 0, py: 0.5 }}>
+                            <ListItemAvatar>
+                              <Avatar 
+                                sx={{ 
+                                  width: 32, 
+                                  height: 32, 
+                                  fontSize: '0.8rem',
+                                  backgroundColor: onlineUser.isWorking ? '#4caf50' : '#9e9e9e',
+                                  color: 'white'
+                                }}
+                              >
+                                {onlineUser.full_name?.charAt(0) || onlineUser.username?.charAt(0) || '?'}
+                              </Avatar>
+                            </ListItemAvatar>
+                            <ListItemText
+                              primary={
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                  <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                                    {onlineUser.full_name || onlineUser.username}
+                                  </Typography>
+                                  <Chip 
+                                    label={onlineUser.todayShift || 'O'} 
+                                    size="small" 
+                                    sx={{ 
+                                      backgroundColor: SHIFT_COLORS[onlineUser.todayShift] || '#9e9e9e',
+                                      color: onlineUser.todayShift === 'O' ? 'black' : 'white',
+                                      height: '18px',
+                                      minWidth: '18px',
+                                      fontSize: '10px',
+                                      '& .MuiChip-label': {
+                                        padding: '0 4px',
+                                        fontSize: '10px',
+                                        fontWeight: 'bold'
+                                      }
+                                    }}
+                                  />
+                                  <Chip 
+                                    label={onlineUser.isWorking ? '上班中' : '非上班時間'} 
+                                    size="small" 
+                                    sx={{ 
+                                      backgroundColor: onlineUser.isWorking ? '#4caf50' : '#9e9e9e',
+                                      color: 'white',
+                                      height: '18px',
+                                      fontSize: '10px',
+                                      '& .MuiChip-label': {
+                                        padding: '0 4px',
+                                        fontSize: '10px',
+                                        fontWeight: 'bold'
+                                      }
+                                    }}
+                                  />
+                                </Box>
+                              }
+                              secondary={
+                                <Typography variant="caption" color="text.secondary">
+                                  {onlineUser.identity || '未設定身份'} • 最後活動: {onlineUser.last_login_time ? format(parseISO(onlineUser.last_login_time), 'HH:mm') : '未知'}
+                                </Typography>
+                              }
+                            />
+                          </ListItem>
+                          {index < onlineUsers.length - 1 && <Divider />}
+                        </React.Fragment>
+                      ))}
+                    </List>
+                  ) : (
+                    <Typography variant="body2" color="text.secondary">
+                      目前沒有其他用戶在線
+                    </Typography>
+                  )}
+                </CardContent>
               </Card>
             </Grid>
 
