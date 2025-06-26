@@ -1812,10 +1812,6 @@ const ShiftSwap = () => {
         requestData.to_overtime = '未指定';  // 由接受者來指定
         // 確保to_shift與from_shift一致
         requestData.to_shift = currentShift;
-        // 添加說明信息，讓接受者了解這是加班請求
-        if (!requestData.notes) {
-          requestData.notes = `申請取消加班，希望有人能替我加班。原加班班種: ${overtimeShift || '未指定'}`;
-        }
       }
       
       console.log('最終換班請求數據:', requestData);
