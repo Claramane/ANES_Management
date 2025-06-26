@@ -197,6 +197,7 @@ const apiService = {
     getProfile: () => api.get('/users/me'),
     getAll: () => api.get('/users'),
     getOnlineUsers: () => api.get('/online-users'),
+    heartbeat: () => api.post('/heartbeat'), // 新增：心跳功能
     create: (userData) => api.post('/users', userData),
     update: (userId, userData) => api.put(`/users/${userId}`, userData),
     delete: (userId) => api.delete(`/users/${userId}`),

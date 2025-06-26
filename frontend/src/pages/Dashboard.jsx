@@ -44,6 +44,7 @@ import { format, startOfToday, getDate, getMonth, getYear, eachDayOfInterval, pa
 import { zhTW } from 'date-fns/locale';
 import { cachedScheduleDetailsRequest } from '../utils/scheduleCache';
 import { SHIFT_COLORS } from '../constants/shiftSwapConstants';
+import useHeartbeat from '../hooks/useHeartbeat';
 
 // 班次顏色和名稱的映射，可以根據需要擴展
 const shiftDetails = {
@@ -324,6 +325,9 @@ function Dashboard() {
     updateSelectedDate // 獲取更新日期的函數
   } = useScheduleStore();
   
+  // 啟用心跳功能
+  useHeartbeat();
+  
   // 🗑️ 不再使用 store 的班表數據，改用 ShiftSwap 模式直接獲取
   // monthlySchedule, isLoading: scheduleLoading, fetchMonthlySchedule - 已移除
 
@@ -423,7 +427,7 @@ function Dashboard() {
     if (needsUpdate) {
       console.log('Dashboard: selectedDate 需要更新到當前月份');
       updateSelectedDate(today);
-      return;
+       return;
     }
 
     // 當用戶和日期都正確時，獲取完整的月度數據
@@ -435,7 +439,7 @@ function Dashboard() {
   const fetchCompleteMonthData = async () => {
     if (!user) return;
     
-    setIsLoading(true);
+    setIsLoading(true); 
     try {
       const year = selectedDate.getFullYear();
       const month = selectedDate.getMonth() + 1;
@@ -537,7 +541,7 @@ function Dashboard() {
           userShifts = userSchedule.shifts || [];
           console.log(`Dashboard 用戶班表天數: ${userShifts.length}`);
           console.log(`Dashboard 班表內容: ${userShifts.join(', ')}`);
-        } else {
+    } else {
           console.warn(`Dashboard 在 ${nurseSchedules.length} 名護理師中未找到ID=${userId}的用戶班表`);
           console.log("Dashboard 所有護理師ID:", nurseSchedules.map(nurse => nurse.id).join(", "));
         }
@@ -1031,13 +1035,13 @@ function Dashboard() {
     }
   }, [user, monthlyCalendarData]);
 
-  // 定時更新在線用戶狀態（每30秒）
+  // 定時更新在線用戶狀態（每1分鐘）
   useEffect(() => {
     if (!user) return;
 
     const interval = setInterval(() => {
       fetchOnlineUsers();
-    }, 30000); // 30秒更新一次
+    }, 60000); // 1分鐘更新一次（因為現在有心跳功能）
 
     return () => clearInterval(interval);
   }, [user, monthlyCalendarData]);
@@ -1182,7 +1186,7 @@ function Dashboard() {
                             </tr>
                           </thead>
                           <tbody>
-                            {monthlyCalendarData.map((week, weekIndex) => (
+                          {monthlyCalendarData.map((week, weekIndex) => (
                               <tr key={weekIndex}>
                                 {week.map((day, dayIndex) => {
                                   // 檢查日期是否過期
@@ -1190,7 +1194,7 @@ function Dashboard() {
                                   
                                   return (
                                     <td 
-                                      key={dayIndex}
+                                  key={dayIndex}
                                       className={`
                                         ${!day.date ? 'empty-cell' : ''}
                                         ${day.date && isToday(day.date) ? 'today' : ''}
@@ -1266,7 +1270,7 @@ function Dashboard() {
                                   width: 32, 
                                   height: 32, 
                                   fontSize: '0.8rem',
-                                  backgroundColor: onlineUser.isWorking ? '#4caf50' : '#9e9e9e',
+                                  backgroundColor: onlineUser.isWorking ? '#f44336' : '#9e9e9e', // 上班時間顯示紅色
                                   color: 'white'
                                 }}
                               >
@@ -1283,7 +1287,7 @@ function Dashboard() {
                                     label={onlineUser.todayShift || 'O'} 
                                     size="small" 
                                     sx={{ 
-                                      backgroundColor: SHIFT_COLORS[onlineUser.todayShift] || '#9e9e9e',
+                                      backgroundColor: SHIFT_COLORS[onlineUser.todayShift] || '#9e9e9e', // 手機版班表顏色 Chip
                                       color: onlineUser.todayShift === 'O' ? 'black' : 'white',
                                       height: '18px',
                                       minWidth: '18px',
@@ -1299,7 +1303,7 @@ function Dashboard() {
                                     label={onlineUser.isWorking ? '上班中' : '非上班時間'} 
                                     size="small" 
                                     sx={{ 
-                                      backgroundColor: onlineUser.isWorking ? '#4caf50' : '#9e9e9e',
+                                      backgroundColor: onlineUser.isWorking ? '#f44336' : '#9e9e9e', // 上班時間顯示紅色
                                       color: 'white',
                                       height: '18px',
                                       fontSize: '10px',
@@ -1443,7 +1447,7 @@ function Dashboard() {
                                   width: 32, 
                                   height: 32, 
                                   fontSize: '0.8rem',
-                                  backgroundColor: onlineUser.isWorking ? '#4caf50' : '#9e9e9e',
+                                  backgroundColor: onlineUser.isWorking ? '#f44336' : '#9e9e9e', // 上班時間顯示紅色
                                   color: 'white'
                                 }}
                               >
@@ -1460,7 +1464,7 @@ function Dashboard() {
                                     label={onlineUser.todayShift || 'O'} 
                                     size="small" 
                                     sx={{ 
-                                      backgroundColor: SHIFT_COLORS[onlineUser.todayShift] || '#9e9e9e',
+                                      backgroundColor: SHIFT_COLORS[onlineUser.todayShift] || '#9e9e9e', // 桌面版班表顏色 Chip
                                       color: onlineUser.todayShift === 'O' ? 'black' : 'white',
                                       height: '18px',
                                       minWidth: '18px',
@@ -1476,7 +1480,7 @@ function Dashboard() {
                                     label={onlineUser.isWorking ? '上班中' : '非上班時間'} 
                                     size="small" 
                                     sx={{ 
-                                      backgroundColor: onlineUser.isWorking ? '#4caf50' : '#9e9e9e',
+                                      backgroundColor: onlineUser.isWorking ? '#f44336' : '#9e9e9e', // 上班時間顯示紅色
                                       color: 'white',
                                       height: '18px',
                                       fontSize: '10px',

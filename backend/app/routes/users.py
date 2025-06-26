@@ -66,6 +66,7 @@ async def login_for_access_token(
         
         # 更新最後登入資訊
         user.last_login_time = func.now()
+        user.last_activity_time = func.now()
         if request:
             user.last_login_ip = request.client.host
         
@@ -158,23 +159,51 @@ async def read_users(
     users = query.offset(skip).limit(limit).all()
     return users
 
+@router.post("/heartbeat")
+async def heartbeat(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """心跳端點 - 更新用戶活動時間"""
+    try:
+        # 更新當前用戶的活動時間
+        current_user.last_activity_time = func.now()
+        db.add(current_user)
+        db.commit()
+        
+        return {"status": "success", "message": "心跳更新成功"}
+        
+    except Exception as e:
+        logger.error(f"更新心跳時發生錯誤: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="心跳更新失敗"
+        )
+
 @router.get("/online-users", response_model=List[UserSchema])
 async def get_online_users(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """獲取在線用戶列表（最近5分鐘內有活動的用戶）"""
+    """獲取在線用戶列表（最近3分鐘內有活動的用戶）"""
     from datetime import datetime, timedelta
+    from sqlalchemy import or_
     
     try:
-        # 計算5分鐘前的時間
-        five_minutes_ago = datetime.now() - timedelta(minutes=5)
+        # 計算3分鐘前的時間
+        three_minutes_ago = datetime.now() - timedelta(minutes=3)
         
-        # 查詢最近5分鐘內有登入活動的用戶
+        # 查詢最近3分鐘內有活動的用戶（登錄或心跳）
         online_users = db.query(User).filter(
             User.is_active == True,
-            User.last_login_time >= five_minutes_ago
-        ).order_by(User.last_login_time.desc()).all()
+            or_(
+                User.last_activity_time >= three_minutes_ago,
+                User.last_login_time >= three_minutes_ago
+            )
+        ).order_by(
+            User.last_activity_time.desc().nulls_last(),
+            User.last_login_time.desc().nulls_last()
+        ).all()
         
         return online_users
         

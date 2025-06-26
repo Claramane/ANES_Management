@@ -19,6 +19,7 @@ class User(Base):
     deactivated_at = Column(DateTime, nullable=True)  # 停權時間
     last_login_ip = Column(String)
     last_login_time = Column(DateTime)
+    last_activity_time = Column(DateTime)  # 新增：最後活動時間（心跳）
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
