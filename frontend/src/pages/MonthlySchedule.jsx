@@ -174,6 +174,71 @@ const MonthlySchedule = () => {
   const tableBoxRef = useRef(null);
   const [, forceRender] = useState({}); // 用於強制重新渲染的狀態
   
+  // 添加工時檢測狀態
+  const [workTimeViolations, setWorkTimeViolations] = useState({});
+
+  // 工時檢測函數
+  const detectWorkTimeViolations = (scheduleData, daysInMonth) => {
+    const restDays = ['O', 'R', 'V']; // 休息日班種
+    const violations = {};
+
+    scheduleData.forEach((nurse, nurseIndex) => {
+      const shifts = nurse.shifts || [];
+      const nurseViolations = [];
+
+      for (let day = 0; day < shifts.length - 1; day++) {
+        const currentShift = shifts[day];
+        const nextShift = shifts[day + 1];
+
+        // 如果當前是休息日，下一天是工作日
+        if (restDays.includes(currentShift) && !restDays.includes(nextShift)) {
+          // 找到下一個休息日的位置
+          let nextRestDay = -1;
+          for (let searchDay = day + 1; searchDay < shifts.length; searchDay++) {
+            if (restDays.includes(shifts[searchDay])) {
+              nextRestDay = searchDay;
+              break;
+            }
+          }
+          
+          // 計算連續工作天數
+          const continuousWorkDays = nextRestDay === -1 ? 
+            (shifts.length - (day + 1)) : // 如果到月底都沒有休息日
+            (nextRestDay - (day + 1));    // 到下一個休息日前的工作天數
+          
+          // 如果連續工作7天以上，標記整個連續工作區間為違規
+          if (continuousWorkDays >= 7) {
+            const violationStartDay = day + 1; // 從第1個工作日開始標記
+            const violationEndDay = nextRestDay === -1 ? shifts.length : nextRestDay;
+            
+            for (let violationDay = violationStartDay; violationDay < violationEndDay; violationDay++) {
+              nurseViolations.push(violationDay);
+            }
+          }
+        }
+      }
+
+      if (nurseViolations.length > 0) {
+        violations[nurseIndex] = nurseViolations;
+      }
+    });
+
+    return violations;
+  };
+
+  // 檢查指定護理師和日期是否違規
+  const isViolationDay = (nurseIndex, dayIndex) => {
+    // 在sortedMonthlySchedule中找到對應的護理師在原始scheduleData中的索引
+    const nurse = sortedMonthlySchedule[nurseIndex];
+    if (!nurse) return false;
+    
+    const originalIndex = scheduleData.findIndex(n => n.id === nurse.id);
+    if (originalIndex === -1) return false;
+    
+    const nurseViolations = workTimeViolations[originalIndex];
+    return nurseViolations && nurseViolations.includes(dayIndex);
+  };
+
   // 強制重新渲染函數
   const forceUpdate = () => {
     forceRender({});
@@ -259,6 +324,16 @@ const MonthlySchedule = () => {
       }
     }
   }, [storeMonthlySchedule, selectedDate]);
+
+  // 監聽scheduleData變化並更新工時違規檢測
+  useEffect(() => {
+    if (scheduleData.length > 0) {
+      const violations = detectWorkTimeViolations(scheduleData, daysInMonth);
+      setWorkTimeViolations(violations);
+    } else {
+      setWorkTimeViolations({});
+    }
+  }, [scheduleData, daysInMonth]);
 
   // 獲取星期幾名稱
   const getDayName = (day) => {
@@ -1502,6 +1577,20 @@ const MonthlySchedule = () => {
         </Alert>
       )}
       
+      {/* 顯示工時違規統計 */}
+      {Object.keys(workTimeViolations).length > 0 && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          <Box>
+            <Typography variant="body2" component="div">
+              <strong>工時檢測警告：</strong>發現 {Object.keys(workTimeViolations).length} 位護理師存在連續工作7天以上的情況
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+              違規日期已用紅色邊框標示，請檢查並調整班表安排
+            </Typography>
+          </Box>
+        </Alert>
+      )}
+      
       {/* 只有在非臨時班表狀態下才顯示資料庫查詢錯誤 */}
       {storeError && !isTemporarySchedule && (
         <Alert severity="error" sx={{ mb: 2 }}>
@@ -1709,32 +1798,37 @@ const MonthlySchedule = () => {
                     >
                       {nurse.name}
                     </TableCell>
-                    {nurse.shifts.map((shift, dayIndex) => (
-                      <ShiftCell
-                        key={dayIndex}
-                        shift={shift || 'O'}
-                        onClick={() => {
-                          if (hasEditPermission && isEditMode) {
-                            // 點擊單元格時設置焦點
-                            setFocusedCell({ nurseIndex, dayIndex });
-                            tableBoxRef.current?.focus();
-                            // 標準點擊切換班次
-                            toggleShift(nurseIndex, dayIndex);
-                          }
-                        }}
-                        padding="none"
-                        style={{ 
-                          cursor: hasEditPermission && isEditMode ? 'pointer' : 'default',
-                          // 當該單元格處於quickEdit模式時添加高亮邊框
-                          outline: (quickEdit && quickEdit.editing && quickEdit.nurseIndex === nurseIndex && quickEdit.dayIndex === dayIndex) 
-                            ? '2px solid #1976d2' 
-                            : 'none',
-                          transition: 'outline 0.2s ease, background-color 0.3s'
-                        }}
-                      >
-                        {shift || 'O'}
-                      </ShiftCell>
-                    ))}
+                    {nurse.shifts.map((shift, dayIndex) => {
+                      const isViolation = isViolationDay(nurseIndex, dayIndex);
+                      return (
+                        <ShiftCell
+                          key={dayIndex}
+                          shift={shift || 'O'}
+                          onClick={() => {
+                            if (hasEditPermission && isEditMode) {
+                              // 點擊單元格時設置焦點
+                              setFocusedCell({ nurseIndex, dayIndex });
+                              tableBoxRef.current?.focus();
+                              // 標準點擊切換班次
+                              toggleShift(nurseIndex, dayIndex);
+                            }
+                          }}
+                          padding="none"
+                          style={{ 
+                            cursor: hasEditPermission && isEditMode ? 'pointer' : 'default',
+                            // 當該單元格處於quickEdit模式時添加高亮邊框
+                            outline: (quickEdit && quickEdit.editing && quickEdit.nurseIndex === nurseIndex && quickEdit.dayIndex === dayIndex) 
+                              ? '2px solid #1976d2' 
+                              : isViolation 
+                                ? '2px solid #ff0000' // 工時違規用紅色邊框
+                                : 'none',
+                            transition: 'outline 0.2s ease, background-color 0.3s'
+                          }}
+                        >
+                          {shift || 'O'}
+                        </ShiftCell>
+                      );
+                    })}
                     <TableCell 
                       align="center" 
                       padding="none"
@@ -1875,6 +1969,20 @@ const MonthlySchedule = () => {
               <Box sx={{ width: 20, height: 20, backgroundColor: '#a9c4ce', border: '1px solid #ddd' }} />
               <Typography variant="body2">R: REPO (0h)</Typography>
             </Box>
+          </Box>
+          <Box sx={{ mt: 2 }}>
+            <Typography variant="h6" gutterBottom>
+              工時檢測說明
+            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+              <Box sx={{ width: 20, height: 20, border: '2px solid #ff0000', backgroundColor: 'transparent' }} />
+              <Typography variant="body2" color="error">
+                紅色邊框：違反連續工作規定（休息日後連續工作7天以上）
+              </Typography>
+            </Box>
+            <Typography variant="body2" color="text.secondary">
+              ※ 規定：休息日（O/R/V）後如接工作日，則7天內必須安排休息日
+            </Typography>
           </Box>
         </Paper>
       </Box>
