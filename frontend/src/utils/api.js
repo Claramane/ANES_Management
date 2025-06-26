@@ -196,6 +196,7 @@ const apiService = {
   user: {
     getProfile: () => api.get('/users/me'),
     getAll: () => api.get('/users'),
+    getOnlineUsers: () => api.get('/users/online'),
     create: (userData) => api.post('/users', userData),
     update: (userId, userData) => api.put(`/users/${userId}`, userData),
     delete: (userId) => api.delete(`/users/${userId}`),

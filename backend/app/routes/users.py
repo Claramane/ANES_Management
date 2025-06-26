@@ -158,6 +158,33 @@ async def read_users(
     users = query.offset(skip).limit(limit).all()
     return users
 
+@router.get("/users/online", response_model=List[UserSchema])
+async def get_online_users(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """獲取在線用戶列表（最近5分鐘內有活動的用戶）"""
+    from datetime import datetime, timedelta
+    
+    try:
+        # 計算5分鐘前的時間
+        five_minutes_ago = datetime.now() - timedelta(minutes=5)
+        
+        # 查詢最近5分鐘內有登入活動的用戶
+        online_users = db.query(User).filter(
+            User.is_active == True,
+            User.last_login_time >= five_minutes_ago
+        ).order_by(User.last_login_time.desc()).all()
+        
+        return online_users
+        
+    except Exception as e:
+        logger.error(f"獲取在線用戶時發生錯誤: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="獲取在線用戶失敗"
+        )
+
 @router.put("/users/{user_id}", response_model=UserSchema)
 async def update_user(
     user_id: int,
