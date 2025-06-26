@@ -158,7 +158,7 @@ async def read_users(
     users = query.offset(skip).limit(limit).all()
     return users
 
-@router.get("/users/online", response_model=List[UserSchema])
+@router.get("/online-users", response_model=List[UserSchema])
 async def get_online_users(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
