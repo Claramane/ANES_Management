@@ -185,20 +185,20 @@ async def get_online_users(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """獲取在線用戶列表（最近3分鐘內有活動的用戶）"""
+    """獲取在線用戶列表（最近4分鐘內有活動的用戶）"""
     from datetime import datetime, timedelta
     from sqlalchemy import or_, func
     
     try:
-        # 使用資料庫的當前時間來計算3分鐘前的時間，避免時區問題
-        three_minutes_ago = func.now() - timedelta(minutes=3)
+        # 使用資料庫的當前時間來計算4分鐘前的時間，避免時區問題
+        four_minutes_ago = func.now() - timedelta(minutes=4)
         
-        # 查詢最近3分鐘內有活動的用戶（登錄或心跳）
+        # 查詢最近4分鐘內有活動的用戶（登錄或心跳）
         online_users = db.query(User).filter(
             User.is_active == True,
             or_(
-                User.last_activity_time >= three_minutes_ago,
-                User.last_login_time >= three_minutes_ago
+                User.last_activity_time >= four_minutes_ago,
+                User.last_login_time >= four_minutes_ago
             )
         ).order_by(
             User.last_activity_time.desc().nulls_last(),

@@ -68,7 +68,7 @@ const useHeartbeat = () => {
       return;
     }
 
-    // 設置心跳定時器 - 每2分鐘檢查一次
+    // 設置心跳定時器 - 每90秒檢查一次
     heartbeatIntervalRef.current = setInterval(() => {
       const now = Date.now();
       const timeSinceLastActivity = now - lastActivityRef.current;
@@ -77,7 +77,7 @@ const useHeartbeat = () => {
       if (isVisibleRef.current && timeSinceLastActivity < 5 * 60 * 1000) {
         sendHeartbeat();
       }
-    }, 2 * 60 * 1000); // 每2分鐘
+    }, 90 * 1000); // 每90秒，提供更好的在線狀態穩定性
 
     // 立即發送一次心跳
     sendHeartbeat();
