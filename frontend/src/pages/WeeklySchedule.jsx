@@ -397,13 +397,16 @@ const WeeklySchedule = () => {
   };
 
   // 切換編輯模式
-  const toggleEditMode = () => {
+  const toggleEditMode = async () => {
     if (editMode) {
-      // 編輯模式關閉時保存更改
-      saveWorkAssignments();
+      // 編輯模式關閉時保存更改，保存當前週次
+      const currentWeekBeforeSave = currentWeek;
+      await saveWorkAssignments();
+      // 保存完成後，確保週次不被重置
+      setCurrentWeek(currentWeekBeforeSave);
     } else {
-      // 進入編輯模式時，從currentWeekSchedule同步數據到missionValues
-      syncApiDataToMissionValue(currentWeekSchedule);
+      // 進入編輯模式時，同步當前週的工作分配到編輯狀態
+      syncApiDataToMissionValue();
     }
     setEditMode(!editMode);
   };
@@ -472,17 +475,13 @@ const WeeklySchedule = () => {
     const newMissionValues = {};
     const newPmValues = {}; // 新增PM值的狀態
     
-    scheduleData.forEach(nurse => {
+    // 直接使用當前週的排班數據
+    currentWeekSchedule.forEach(nurse => {
       if (nurse.area_codes) {
         nurse.area_codes.forEach((areaCode, dayIndex) => {
           if (areaCode) {
-            // 計算這個日期屬於哪一週
-            const dayOfMonth = dayIndex + 1;
-            const weekIndex = Math.floor((dayOfMonth - 1) / 7);
-            const dayInWeek = (dayOfMonth - 1) % 7;
-            
-            // 構建key: ${nurseId}-${weekNum}-${dayInWeek}
-            const key = `${nurse.id}-${weekIndex + 1}-${dayInWeek}`;
+            // 直接使用當前週的索引
+            const key = `${nurse.id}-${currentWeek}-${dayIndex}`;
             
             // 檢查是否包含斜線（複選格式）
             if (areaCode.includes('/')) {
@@ -500,8 +499,8 @@ const WeeklySchedule = () => {
     
     setMissionValues(newMissionValues);
     setPmValues(newPmValues); // 設定PM值
-    console.log('已同步API數據到missionValue:', Object.keys(newMissionValues).length, '個工作分配');
-    console.log('已同步API數據到pmValue:', Object.keys(newPmValues).length, '個PM工作分配');
+    console.log('已同步當前週API數據到missionValue:', Object.keys(newMissionValues).length, '個工作分配');
+    console.log('已同步當前週API數據到pmValue:', Object.keys(newPmValues).length, '個PM工作分配');
   };
 
   // 保存工作分配更改
@@ -597,6 +596,7 @@ const WeeklySchedule = () => {
         clearScheduleCache('shift-swap', year, month);
         
         setIsSaving(false);
+        console.log(`工作分配保存完成，共更新 ${bulkUpdates.length} 個分配`);
         // setSuccess(`成功儲存 ${bulkUpdates.length} 個工作分配`);
         // setTimeout(() => setSuccess(null), 3000);
       } else {
@@ -1806,10 +1806,7 @@ const WeeklySchedule = () => {
             // 更新store中的數據
             useScheduleStore.setState({ monthlySchedule: monthlyData });
             
-            // 同步API數據到missionValue
-            syncApiDataToMissionValue(monthlyData);
-            
-            console.log('工作分配數據加載完成並同步到missionValue');
+            console.log('工作分配數據加載完成');
           }
         } catch (areaCodeErr) {
           console.error('獲取工作分配資料失敗:', areaCodeErr);
@@ -1826,6 +1823,21 @@ const WeeklySchedule = () => {
       isMounted = false;
     };
   }, [selectedDate, fetchMonthlySchedule]); // 只在selectedDate或fetchMonthlySchedule變化時執行
+
+  // 當現週或編輯模式變化時，同步工作分配數據
+  useEffect(() => {
+    if (editMode && currentWeekSchedule.length > 0) {
+      syncApiDataToMissionValue();
+    }
+  }, [currentWeek, editMode, currentWeekSchedule]);
+
+  // 確保週次在有效範圍內，但不會在保存後重置
+  useEffect(() => {
+    if (currentWeek > weeksInMonth && weeksInMonth > 0) {
+      console.log(`當前週次 ${currentWeek} 超出範圍，調整為第 ${weeksInMonth} 週`);
+      setCurrentWeek(weeksInMonth);
+    }
+  }, [weeksInMonth]); // 只在月份週數變化時檢查，不依賴 currentWeek
 
   // 渲染單元格內容
   const renderCellContent = (nurse, dayIndex) => {
@@ -1863,11 +1875,10 @@ const WeeklySchedule = () => {
         );
       }
       
-      // A班在非編輯模式，直接顯示完整的area_code值
-      // 從API數據中獲取原始的area_code值
-      const nurseScheduleData = currentWeekSchedule.find(n => n.id === nurse.id);
-      if (nurseScheduleData && nurseScheduleData.area_codes && nurseScheduleData.area_codes[dayIndex]) {
-        const areaCode = nurseScheduleData.area_codes[dayIndex];
+      // A班在非編輯模式，顯示工作分配
+      // 優先使用當前週數據中的area_codes，因為它已經經過正確的週次處理
+      if (nurse.area_codes && nurse.area_codes[dayIndex]) {
+        const areaCode = nurse.area_codes[dayIndex];
         return (
           <Box component="span" sx={{ 
             whiteSpace: 'nowrap', 
