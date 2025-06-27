@@ -187,11 +187,11 @@ async def get_online_users(
 ):
     """獲取在線用戶列表（最近3分鐘內有活動的用戶）"""
     from datetime import datetime, timedelta
-    from sqlalchemy import or_
+    from sqlalchemy import or_, func
     
     try:
-        # 計算3分鐘前的時間
-        three_minutes_ago = datetime.now() - timedelta(minutes=3)
+        # 使用資料庫的當前時間來計算3分鐘前的時間，避免時區問題
+        three_minutes_ago = func.now() - timedelta(minutes=3)
         
         # 查詢最近3分鐘內有活動的用戶（登錄或心跳）
         online_users = db.query(User).filter(
@@ -212,6 +212,63 @@ async def get_online_users(
         raise HTTPException(
             status_code=500,
             detail="獲取在線用戶失敗"
+        )
+
+@router.get("/debug/online-users-info")
+async def debug_online_users_info(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """調適端點：獲取在線用戶詳細資訊"""
+    from datetime import datetime, timedelta
+    from sqlalchemy import or_, func, text
+    
+    try:
+        # 獲取資料庫當前時間
+        db_time_result = db.execute(text("SELECT NOW() as db_time")).fetchone()
+        db_time = db_time_result[0]
+        
+        # 計算3分鐘前的時間
+        three_minutes_ago = db_time - timedelta(minutes=3)
+        
+        # 獲取所有活躍用戶的時間資訊
+        users_info = db.execute(text("""
+            SELECT id, username, last_activity_time, last_login_time, 
+                   CASE 
+                       WHEN last_activity_time >= :three_minutes_ago OR last_login_time >= :three_minutes_ago 
+                       THEN true 
+                       ELSE false 
+                   END as is_online
+            FROM users 
+            WHERE is_active = true 
+            ORDER BY COALESCE(last_activity_time, '1900-01-01') DESC, 
+                     COALESCE(last_login_time, '1900-01-01') DESC
+            LIMIT 10
+        """), {"three_minutes_ago": three_minutes_ago}).fetchall()
+        
+        users_list = []
+        for user in users_info:
+            users_list.append({
+                "id": user[0],
+                "username": user[1],
+                "last_activity_time": user[2],
+                "last_login_time": user[3],
+                "is_online": user[4]
+            })
+        
+        return {
+            "db_current_time": db_time,
+            "three_minutes_ago": three_minutes_ago,
+            "total_active_users": len(users_list),
+            "online_users_count": sum(1 for u in users_list if u["is_online"]),
+            "users": users_list
+        }
+        
+    except Exception as e:
+        logger.error(f"獲取調適資訊時發生錯誤: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"獲取調適資訊失敗: {str(e)}"
         )
 
 @router.put("/users/{user_id}", response_model=UserSchema)
