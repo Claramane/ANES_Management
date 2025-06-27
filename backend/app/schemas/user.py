@@ -42,6 +42,7 @@ class UserInDB(UserBase):
     hashed_password: str
     last_login_ip: Optional[str] = None
     last_login_time: Optional[datetime] = None
+    last_activity_time: Optional[datetime] = None  # 新增：最後活動時間
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
@@ -52,6 +53,7 @@ class User(UserBase):
     id: int
     last_login_ip: Optional[str] = None
     last_login_time: Optional[datetime] = None
+    last_activity_time: Optional[datetime] = None  # 新增：最後活動時間
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 

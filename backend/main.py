@@ -101,12 +101,14 @@ app = FastAPI(
 # if settings.IS_PRODUCTION:
 #     app.add_middleware(HTTPSRedirectMiddleware)
 
-# 添加可信主機中間件
+# 添加可信主機中間件 (開發環境允許localhost)
 app.add_middleware(
     TrustedHostMiddleware, 
     allowed_hosts=["*"] if not settings.IS_PRODUCTION else [
         "anesmanagementbackend.zeabur.app",
-        "eckanesmanagement.zeabur.app"
+        "eckanesmanagement.zeabur.app",
+        "localhost",
+        "127.0.0.1"
     ]
 )
 

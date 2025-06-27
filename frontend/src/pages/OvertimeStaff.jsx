@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback, memo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback, memo, useReducer } from 'react';
 import { 
   Box, 
   Typography, 
@@ -364,6 +364,133 @@ const StatRow = memo(({ staff, daysInMonth, selectedDate }) => {
   );
 });
 
+// 新增：狀態管理的 reducer 和初始狀態
+const initialUIState = {
+  isSaving: false,
+  isLoadingOvertimeRecords: false,
+  isLoadingStatistics: false,
+  isGeneratingRandom: false,
+  isResetting: false,
+  isScheduleLoading: false,
+  scheduleLoaded: false,
+  hasSchedule: false,
+  invalidRecordsFixed: true,
+  hasUnsavedChanges: false,
+};
+
+const initialDialogState = {
+  openSnackbar: false,
+  openConfirmDialog: false,
+  openResetConfirmDialog: false,
+};
+
+const initialMessageState = {
+  apiError: null,
+  successMessage: '',
+};
+
+const initialDataState = {
+  markings: {},
+  originalMarkings: {},
+  statisticsData: [],
+  tempDate: null,
+};
+
+const initialConfigState = {
+  showUnmarkedStaff: false,
+  scoreLimit: 2.0,
+  generationAttempts: 0,
+};
+
+// UI狀態 reducer
+const uiStateReducer = (state, action) => {
+  switch (action.type) {
+    case 'SET_LOADING':
+      return { ...state, [action.loadingType]: action.value };
+    case 'SET_SCHEDULE_STATE':
+      return { 
+        ...state, 
+        scheduleLoaded: action.loaded,
+        hasSchedule: action.hasSchedule,
+        isScheduleLoading: action.loading || false
+      };
+    case 'SET_MULTIPLE':
+      return { ...state, ...action.updates };
+    case 'RESET':
+      return initialUIState;
+    default:
+      return state;
+  }
+};
+
+// 對話框狀態 reducer
+const dialogStateReducer = (state, action) => {
+  switch (action.type) {
+    case 'OPEN_DIALOG':
+      return { ...state, [action.dialogType]: true };
+    case 'CLOSE_DIALOG':
+      return { ...state, [action.dialogType]: false };
+    case 'CLOSE_ALL':
+      return initialDialogState;
+    default:
+      return state;
+  }
+};
+
+// 訊息狀態 reducer
+const messageStateReducer = (state, action) => {
+  switch (action.type) {
+    case 'SET_ERROR':
+      return { ...state, apiError: action.error, successMessage: '' };
+    case 'SET_SUCCESS':
+      return { ...state, successMessage: action.message, apiError: null };
+    case 'CLEAR_MESSAGES':
+      return initialMessageState;
+    default:
+      return state;
+  }
+};
+
+// 數據狀態 reducer
+const dataStateReducer = (state, action) => {
+  switch (action.type) {
+    case 'SET_MARKINGS':
+      return { ...state, markings: action.markings };
+    case 'SET_ORIGINAL_MARKINGS':
+      return { ...state, originalMarkings: action.markings };
+    case 'SET_STATISTICS':
+      return { ...state, statisticsData: action.data };
+    case 'SET_TEMP_DATE':
+      return { ...state, tempDate: action.date };
+    case 'RESET_MARKINGS':
+      return { ...state, markings: {}, originalMarkings: {} };
+    case 'UPDATE_MARKINGS_AND_ORIGINAL':
+      return { 
+        ...state, 
+        markings: action.markings,
+        originalMarkings: JSON.parse(JSON.stringify(action.markings))
+      };
+    default:
+      return state;
+  }
+};
+
+// 配置狀態 reducer
+const configStateReducer = (state, action) => {
+  switch (action.type) {
+    case 'TOGGLE_UNMARKED_STAFF':
+      return { ...state, showUnmarkedStaff: !state.showUnmarkedStaff };
+    case 'SET_SCORE_LIMIT':
+      return { ...state, scoreLimit: action.limit };
+    case 'SET_GENERATION_ATTEMPTS':
+      return { ...state, generationAttempts: action.attempts };
+    case 'INCREMENT_ATTEMPTS':
+      return { ...state, generationAttempts: state.generationAttempts + 1 };
+    default:
+      return state;
+  }
+};
+
 const OvertimeStaff = () => {
   const { 
     monthlySchedule: storeMonthlySchedule, 
@@ -380,46 +507,124 @@ const OvertimeStaff = () => {
   // 使用新的 API 緩存機制
   const { fetchWithCache, clearCache } = useApiCache();
   
-  // 新增狀態追蹤各日期的標記情況
-  const [markings, setMarkings] = useState({});
+  // 🚀 優化後的狀態管理 - 使用 useReducer 分組管理狀態
+  const [uiState, dispatchUI] = useReducer(uiStateReducer, initialUIState);
+  const [dialogState, dispatchDialog] = useReducer(dialogStateReducer, initialDialogState);
+  const [messageState, dispatchMessage] = useReducer(messageStateReducer, initialMessageState);
+  const [dataState, dispatchData] = useReducer(dataStateReducer, initialDataState);
+  const [configState, dispatchConfig] = useReducer(configStateReducer, initialConfigState);
   
-  // 新增API相關狀態
-  const [isSaving, setIsSaving] = useState(false);
-  const [isLoadingOvertimeRecords, setIsLoadingOvertimeRecords] = useState(false);
-  const [apiError, setApiError] = useState(null);
-  const [successMessage, setSuccessMessage] = useState('');
-  const [openSnackbar, setOpenSnackbar] = useState(false);
-
-  // 新增統計數據狀態
-  const [statisticsData, setStatisticsData] = useState([]);
-  const [isLoadingStatistics, setIsLoadingStatistics] = useState(false);
-  
-  // 新增標記變更狀態
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  const [originalMarkings, setOriginalMarkings] = useState({});
-  
-  // 新增隨機生成相關狀態
-  const [isGeneratingRandom, setIsGeneratingRandom] = useState(false);
-  const [openConfirmDialog, setOpenConfirmDialog] = useState(false);
-  const [generationAttempts, setGenerationAttempts] = useState(0);
   // 使用 useRef 替代 useState 以確保同步更新
   const shouldCancelGenerationRef = useRef(false);
-  
-  // 班表檢查狀態
-  const [scheduleLoaded, setScheduleLoaded] = useState(false);
-  const [hasSchedule, setHasSchedule] = useState(false);
-  // 新增：本地狀態防止重複加載班表
-  const [isScheduleLoading, setIsScheduleLoading] = useState(false);
-  
-  // 加班記錄更新狀態
-  const [invalidRecordsFixed, setInvalidRecordsFixed] = useState(true);
 
-  // 重設加班表相關狀態
-  const [isResetting, setIsResetting] = useState(false);
-  const [openResetConfirmDialog, setOpenResetConfirmDialog] = useState(false);
+  // 🚀 從狀態中解構常用的值，提高可讀性
+  const {
+    isSaving,
+    isLoadingOvertimeRecords,
+    isLoadingStatistics,
+    isGeneratingRandom,
+    isResetting,
+    isScheduleLoading,
+    scheduleLoaded,
+    hasSchedule,
+    invalidRecordsFixed,
+    hasUnsavedChanges
+  } = uiState;
 
-  // 新增：控制是否顯示未加班人員的狀態
-  const [showUnmarkedStaff, setShowUnmarkedStaff] = useState(false);
+  const {
+    openSnackbar,
+    openConfirmDialog,
+    openResetConfirmDialog
+  } = dialogState;
+
+  const { apiError, successMessage } = messageState;
+
+  const {
+    markings,
+    originalMarkings,
+    statisticsData,
+    tempDate
+  } = dataState;
+
+  const {
+    showUnmarkedStaff,
+    scoreLimit,
+    generationAttempts
+  } = configState;
+
+  // 🚀 所有狀態現在都通過 useReducer 管理，舊的 useState 已被移除
+
+  // 🚀 創建狀態更新輔助函數，簡化調用
+  const updateUI = useCallback((updates) => {
+    dispatchUI({ type: 'SET_MULTIPLE', updates });
+  }, []);
+
+  const updateMessage = useCallback((type, content) => {
+    if (type === 'error') {
+      dispatchMessage({ type: 'SET_ERROR', error: content });
+    } else if (type === 'success') {
+      dispatchMessage({ type: 'SET_SUCCESS', message: content });
+    } else {
+      dispatchMessage({ type: 'CLEAR_MESSAGES' });
+    }
+  }, []);
+
+  const updateDialog = useCallback((dialogType, isOpen) => {
+    if (isOpen) {
+      dispatchDialog({ type: 'OPEN_DIALOG', dialogType });
+    } else {
+      dispatchDialog({ type: 'CLOSE_DIALOG', dialogType });
+    }
+  }, []);
+
+  const updateData = useCallback((type, data) => {
+    switch (type) {
+      case 'markings':
+        dispatchData({ type: 'SET_MARKINGS', markings: data });
+        break;
+      case 'statistics':
+        dispatchData({ type: 'SET_STATISTICS', data });
+        break;
+      case 'tempDate':
+        dispatchData({ type: 'SET_TEMP_DATE', date: data });
+        break;
+      case 'resetMarkings':
+        dispatchData({ type: 'RESET_MARKINGS' });
+        break;
+      default:
+        break;
+    }
+  }, []);
+
+  const updateConfig = useCallback((type, value) => {
+    switch (type) {
+      case 'scoreLimit':
+        dispatchConfig({ type: 'SET_SCORE_LIMIT', limit: value });
+        break;
+      case 'toggleUnmarkedStaff':
+        dispatchConfig({ type: 'TOGGLE_UNMARKED_STAFF' });
+        break;
+      case 'generationAttempts':
+        dispatchConfig({ type: 'SET_GENERATION_ATTEMPTS', attempts: value });
+        break;
+      case 'incrementAttempts':
+        dispatchConfig({ type: 'INCREMENT_ATTEMPTS' });
+        break;
+      default:
+        break;
+    }
+  }, []);
+
+  // 🚀 簡化的錯誤處理函數
+  const showError = useCallback((message) => {
+    updateMessage('error', message);
+    updateDialog('openSnackbar', true);
+  }, [updateMessage, updateDialog]);
+
+  const showSuccess = useCallback((message) => {
+    updateMessage('success', message);
+    updateDialog('openSnackbar', true);
+  }, [updateMessage, updateDialog]);
 
   // 權限檢查 - 只有護理長和admin可以編輯
   const canEdit = useMemo(() => {
@@ -520,17 +725,16 @@ const OvertimeStaff = () => {
     return overtimeByDate;
   }, [storeMonthlySchedule, selectedDate, daysInMonth, hasSchedule]);
 
-  // 添加臨時日期狀態
-  const [tempDate, setTempDate] = useState(null);
+  // 臨時日期狀態已移至 dataState 中管理
 
   // 處理日期變更
   const handleDateChange = (newDate) => {
     if (newDate && newDate instanceof Date && !isNaN(newDate.getTime())) {
       // 只更新臨時日期，不觸發API調用
-      setTempDate(newDate);
+      dispatchData({ type: 'SET_TEMP_DATE', date: newDate });
     } else {
       logger.error('嘗試設置無效的日期:', newDate);
-      setTempDate(new Date());
+      dispatchData({ type: 'SET_TEMP_DATE', date: new Date() });
     }
   };
   
@@ -539,7 +743,7 @@ const OvertimeStaff = () => {
     if (tempDate && tempDate instanceof Date && !isNaN(tempDate.getTime())) {
       updateSelectedDate(tempDate);
       // 清除之前的標記
-      setMarkings({});
+      dispatchData({ type: 'RESET_MARKINGS' });
     }
   };
 
@@ -553,8 +757,8 @@ const OvertimeStaff = () => {
         const nurse = filteredSchedule.find(n => n.id === staffId);
         if (!nurse) {
           logger.error(`未找到護理師數據 (staffId: ${staffId})`);
-          setApiError('未找到護理師數據');
-          setOpenSnackbar(true);
+          dispatchMessage({ type: 'SET_ERROR', error: '未找到護理師數據' });
+          dispatchDialog({ type: 'OPEN_DIALOG', dialogType: 'openSnackbar' });
           return;
         }
         
@@ -565,101 +769,96 @@ const OvertimeStaff = () => {
         if (isSaturday(date)) {
           // 如果是Leader，不允許在週六加班
           if (isLeader) {
-            setApiError('麻醉科Leader不能在週六加班');
-            setOpenSnackbar(true);
+            dispatchMessage({ type: 'SET_ERROR', error: '麻醉科Leader不能在週六加班' });
+            dispatchDialog({ type: 'OPEN_DIALOG', dialogType: 'openSnackbar' });
             return;
           }
           
-          setMarkings(prevMarkings => {
-            // 深拷貝當前標記狀態
-            const newMarkings = { ...prevMarkings };
-            
-            // 初始化該日期的標記對象，如果不存在
-            if (!newMarkings[dateKey]) {
-              newMarkings[dateKey] = {};
-            }
-            
-            // 查看該護理師當前的標記
-            const currentMark = newMarkings[dateKey][staffId] || '';
-            
-            // 檢查當天是否已有其他A班加班人員
-            const existingAStaffId = Object.entries(newMarkings[dateKey] || {})
-              .find(([id, mark]) => mark === 'A' && id !== staffId)?.[0];
-            
-            if (existingAStaffId && currentMark !== 'A') {
-              // 已有其他A班加班人員，不允許設置
-              setApiError('週六只能有一位加班人員A');
-              setOpenSnackbar(true);
-              return prevMarkings;
-            }
-            
-            // 如果當前護理師是A班，則取消標記；否則設為A班
-            if (currentMark === 'A') {
-              // 移除該護理師的標記
-              delete newMarkings[dateKey][staffId];
-              // 如果該日期沒有任何標記，則移除該日期
-              if (Object.keys(newMarkings[dateKey]).length === 0) {
-                delete newMarkings[dateKey];
-              }
-            } else {
-              // 設置為A班
-              newMarkings[dateKey][staffId] = 'A';
-            }
-            
-            return newMarkings;
-          });
-          
-          return;
-        }
-        
-        // 平日的處理邏輯（不對Leader做特殊限制）
-        setMarkings(prevMarkings => {
-          // 深拷貝當前標記狀態
-          const newMarkings = { ...prevMarkings };
+          // 處理週六的標記邏輯
+          const newMarkings = { ...markings };
           
           // 初始化該日期的標記對象，如果不存在
           if (!newMarkings[dateKey]) {
             newMarkings[dateKey] = {};
           }
           
-          // 獲取該員工當前的標記
+          // 查看該護理師當前的標記
           const currentMark = newMarkings[dateKey][staffId] || '';
           
-          // 獲取該日期已使用的所有標記
-          const usedMarks = Object.values(newMarkings[dateKey]);
+          // 檢查當天是否已有其他A班加班人員
+          const existingAStaffId = Object.entries(newMarkings[dateKey] || {})
+            .find(([id, mark]) => mark === 'A' && id !== staffId)?.[0];
           
-          // 找出下一個可用標記
-          let nextMarkIndex = MARK_SEQUENCE.indexOf(currentMark) + 1;
-          if (nextMarkIndex >= MARK_SEQUENCE.length) {
-            nextMarkIndex = 0;
+          if (existingAStaffId && currentMark !== 'A') {
+            // 已有其他A班加班人員，不允許設置
+            dispatchMessage({ type: 'SET_ERROR', error: '週六只能有一位加班人員A' });
+            dispatchDialog({ type: 'OPEN_DIALOG', dialogType: 'openSnackbar' });
+            return;
           }
           
-          let nextMark = MARK_SEQUENCE[nextMarkIndex];
-          
-          // 如果下一個標記已被使用且不為空，則繼續尋找下一個未使用的標記
-          while (nextMark !== '' && usedMarks.includes(nextMark)) {
-            nextMarkIndex = (nextMarkIndex + 1) % MARK_SEQUENCE.length;
-            nextMark = MARK_SEQUENCE[nextMarkIndex];
-          }
-          
-          // 更新標記
-          if (nextMark === '') {
-            // 如果是空標記，則移除該員工的標記
+          // 如果當前護理師是A班，則取消標記；否則設為A班
+          if (currentMark === 'A') {
+            // 移除該護理師的標記
             delete newMarkings[dateKey][staffId];
             // 如果該日期沒有任何標記，則移除該日期
             if (Object.keys(newMarkings[dateKey]).length === 0) {
               delete newMarkings[dateKey];
             }
           } else {
-            newMarkings[dateKey][staffId] = nextMark;
+            // 設置為A班
+            newMarkings[dateKey][staffId] = 'A';
           }
           
-          return newMarkings;
-        });
+          dispatchData({ type: 'SET_MARKINGS', markings: newMarkings });
+          
+          return;
+        }
+        
+        // 平日的處理邏輯（不對Leader做特殊限制）
+        const newMarkings = { ...markings };
+        
+        // 初始化該日期的標記對象，如果不存在
+        if (!newMarkings[dateKey]) {
+          newMarkings[dateKey] = {};
+        }
+        
+        // 獲取該員工當前的標記
+        const currentMark = newMarkings[dateKey][staffId] || '';
+        
+        // 獲取該日期已使用的所有標記
+        const usedMarks = Object.values(newMarkings[dateKey]);
+        
+        // 找出下一個可用標記
+        let nextMarkIndex = MARK_SEQUENCE.indexOf(currentMark) + 1;
+        if (nextMarkIndex >= MARK_SEQUENCE.length) {
+          nextMarkIndex = 0;
+        }
+        
+        let nextMark = MARK_SEQUENCE[nextMarkIndex];
+        
+        // 如果下一個標記已被使用且不為空，則繼續尋找下一個未使用的標記
+        while (nextMark !== '' && usedMarks.includes(nextMark)) {
+          nextMarkIndex = (nextMarkIndex + 1) % MARK_SEQUENCE.length;
+          nextMark = MARK_SEQUENCE[nextMarkIndex];
+        }
+        
+        // 更新標記
+        if (nextMark === '') {
+          // 如果是空標記，則移除該員工的標記
+          delete newMarkings[dateKey][staffId];
+          // 如果該日期沒有任何標記，則移除該日期
+          if (Object.keys(newMarkings[dateKey]).length === 0) {
+            delete newMarkings[dateKey];
+          }
+        } else {
+          newMarkings[dateKey][staffId] = nextMark;
+        }
+        
+        dispatchData({ type: 'SET_MARKINGS', markings: newMarkings });
       } catch (error) {
         logger.error('處理標記時出錯:', error);
-        setApiError('處理標記時發生錯誤');
-        setOpenSnackbar(true);
+        dispatchMessage({ type: 'SET_ERROR', error: '處理標記時發生錯誤' });
+        dispatchDialog({ type: 'OPEN_DIALOG', dialogType: 'openSnackbar' });
       }
     },
     [filteredSchedule]
@@ -668,13 +867,13 @@ const OvertimeStaff = () => {
   // 保存加班記錄 - 優化版本
   const saveOvertimeRecords = async () => {
     if (!canEdit) {
-      setApiError('只有護理長和管理員可以保存加班記錄');
-      setOpenSnackbar(true);
+      dispatchMessage({ type: 'SET_ERROR', error: '只有護理長和管理員可以保存加班記錄' });
+      dispatchDialog({ type: 'OPEN_DIALOG', dialogType: 'openSnackbar' });
       return;
     }
     
-    setIsSaving(true);
-    setApiError(null);
+    dispatchUI({ type: 'SET_LOADING', loadingType: 'isSaving', value: true });
+    dispatchMessage({ type: 'CLEAR_MESSAGES' });
     
     try {
       // 組織數據，收集所有更新
@@ -768,8 +967,11 @@ const OvertimeStaff = () => {
         // 在保存加班記錄成功後，計算並保存月度加班分數
         const scoresSaved = await calculateAndSaveMonthlyScores();
         
-        setSuccessMessage(`加班記錄保存成功！共更新 ${result.data || updateRecords.length} 條記錄${scoresSaved ? '，且月度加班分數已更新' : ''}`);
-        setOpenSnackbar(true);
+        dispatchMessage({ 
+          type: 'SET_SUCCESS', 
+          message: `加班記錄保存成功！共更新 ${result.data || updateRecords.length} 條記錄${scoresSaved ? '，且月度加班分數已更新' : ''}` 
+        });
+        dispatchDialog({ type: 'OPEN_DIALOG', dialogType: 'openSnackbar' });
         
         // 清空相關緩存
         const year = selectedDate.getFullYear();
@@ -791,13 +993,13 @@ const OvertimeStaff = () => {
           processApiData(freshResponse.data); // 直接使用返回的數據更新狀態
         } catch (fetchError) {
           logger.error('保存後重新獲取數據失敗:', fetchError);
-          setApiError('保存成功，但刷新數據時出錯');
-          setOpenSnackbar(true);
+          dispatchMessage({ type: 'SET_ERROR', error: '保存成功，但刷新數據時出錯' });
+          dispatchDialog({ type: 'OPEN_DIALOG', dialogType: 'openSnackbar' });
         }
         // --- 重新獲取結束 ---
       } else {
-        setSuccessMessage('無變更需要保存');
-        setOpenSnackbar(true);
+        dispatchMessage({ type: 'SET_SUCCESS', message: '無變更需要保存' });
+        dispatchDialog({ type: 'OPEN_DIALOG', dialogType: 'openSnackbar' });
       }
     } catch (error) {
       logger.error('保存加班記錄失敗:', error);
@@ -824,10 +1026,10 @@ const OvertimeStaff = () => {
         errorMsg = error.message;
       }
       
-      setApiError(errorMsg);
-      setOpenSnackbar(true);
+      dispatchMessage({ type: 'SET_ERROR', error: errorMsg });
+      dispatchDialog({ type: 'OPEN_DIALOG', dialogType: 'openSnackbar' });
     } finally {
-      setIsSaving(false);
+      dispatchUI({ type: 'SET_LOADING', loadingType: 'isSaving', value: false });
     }
   };
 
@@ -840,7 +1042,7 @@ const OvertimeStaff = () => {
     }
     
     logger.info('開始加載月排班表');
-    setIsScheduleLoading(true);
+    dispatchUI({ type: 'SET_LOADING', loadingType: 'isScheduleLoading', value: true });
 
     try {
       // 使用緩存鍵，包含年月信息
@@ -850,25 +1052,31 @@ const OvertimeStaff = () => {
         return storeMonthlySchedule;
       });
       
-      setScheduleLoaded(true);
-      
-      // 檢查是否有班表數據
-      if (storeMonthlySchedule && 
+      const hasData = storeMonthlySchedule && 
           Array.isArray(storeMonthlySchedule) && 
-          storeMonthlySchedule.length > 0) {
-        setHasSchedule(true);
+          storeMonthlySchedule.length > 0;
+      
+      dispatchUI({ 
+        type: 'SET_SCHEDULE_STATE', 
+        loaded: true, 
+        hasSchedule: hasData 
+      });
+      
+      if (hasData) {
         logger.success('月排班表加載成功');
       } else {
-        setHasSchedule(false);
         logger.warn('月排班表加載後無數據');
       }
     } catch (error) {
       logger.error('獲取月排班表失敗:', error);
-      setScheduleLoaded(true); // 即使失敗也標記為已嘗試加載
-      setHasSchedule(false);
+      dispatchUI({ 
+        type: 'SET_SCHEDULE_STATE', 
+        loaded: true, 
+        hasSchedule: false 
+      });
     } finally {
       logger.info('月排班表加載完成');
-      setIsScheduleLoading(false); // 無論成功或失敗，結束加載狀態
+      dispatchUI({ type: 'SET_LOADING', loadingType: 'isScheduleLoading', value: false });
     }
   };
 
@@ -876,8 +1084,8 @@ const OvertimeStaff = () => {
   const loadOvertimeRecords = async () => {
     if (!selectedDate || !isValid(selectedDate) || !hasSchedule) return Promise.resolve();
     
-    setIsLoadingOvertimeRecords(true);
-    setApiError(null);
+    dispatchUI({ type: 'SET_LOADING', loadingType: 'isLoadingOvertimeRecords', value: true });
+    dispatchMessage({ type: 'CLEAR_MESSAGES' });
     
     try {
       const year = selectedDate.getFullYear();
@@ -936,11 +1144,11 @@ const OvertimeStaff = () => {
       const errorMessage = typeof error === 'object' ? 
         (error.response?.data?.detail || JSON.stringify(error)) : 
         String(error);
-      setApiError(errorMessage);
-      setOpenSnackbar(true);
+      dispatchMessage({ type: 'SET_ERROR', error: errorMessage });
+      dispatchDialog({ type: 'OPEN_DIALOG', dialogType: 'openSnackbar' });
       return Promise.reject(error);
     } finally {
-      setIsLoadingOvertimeRecords(false);
+      dispatchUI({ type: 'SET_LOADING', loadingType: 'isLoadingOvertimeRecords', value: false });
     }
   };
   
@@ -965,10 +1173,11 @@ const OvertimeStaff = () => {
     });
 
     // 批量更新狀態，避免連鎖反應
-    setMarkings(newMarkings);
-    setOriginalMarkings(JSON.parse(JSON.stringify(newMarkings)));
-    setHasUnsavedChanges(false);
-    setInvalidRecordsFixed(false); // 標記需要檢查加班記錄一致性
+    dispatchData({ type: 'UPDATE_MARKINGS_AND_ORIGINAL', markings: newMarkings });
+    dispatchUI({ type: 'SET_MULTIPLE', updates: { 
+      hasUnsavedChanges: false, 
+      invalidRecordsFixed: false 
+    }});
     
     // 只有在至少有一條記錄時才生成統計 - 避免不必要的計算
     if (data.length > 0 && storeMonthlySchedule && storeMonthlySchedule.length > 0) {
@@ -996,8 +1205,11 @@ const OvertimeStaff = () => {
   // 優化月份變化時的數據加載邏輯
   useEffect(() => {
     const loadData = async () => {
-      setScheduleLoaded(false);
-      setHasSchedule(false);
+      dispatchUI({ 
+        type: 'SET_SCHEDULE_STATE', 
+        loaded: false, 
+        hasSchedule: false 
+      });
       // 清除相關緩存
       const year = selectedDate.getFullYear();
       const month = selectedDate.getMonth();
@@ -1172,21 +1384,21 @@ const OvertimeStaff = () => {
     
     // 如果有無效記錄被移除，更新標記狀態並通知用戶
     if (hasInvalidRecords) {
-      setMarkings(newMarkings);
-      setSuccessMessage('已自動移除排班表不一致的加班記錄');
-      setOpenSnackbar(true);
+      dispatchData({ type: 'SET_MARKINGS', markings: newMarkings });
+      dispatchMessage({ type: 'SET_SUCCESS', message: '已自動移除排班表不一致的加班記錄' });
+      dispatchDialog({ type: 'OPEN_DIALOG', dialogType: 'openSnackbar' });
       
       // 如果有權限編輯，建議用戶保存更新後的記錄
       if (canEdit) {
         setTimeout(() => {
-          setApiError('發現與班表不一致的加班記錄已被調整，請記得保存變更');
-          setOpenSnackbar(true);
+          dispatchMessage({ type: 'SET_ERROR', error: '發現與班表不一致的加班記錄已被調整，請記得保存變更' });
+          dispatchDialog({ type: 'OPEN_DIALOG', dialogType: 'openSnackbar' });
         }, 3000);
       }
     }
     
     // 標記已完成清理
-    setInvalidRecordsFixed(true);
+    dispatchUI({ type: 'SET_LOADING', loadingType: 'invalidRecordsFixed', value: true });
   }, [markings, storeMonthlySchedule, hasSchedule, isLoadingOvertimeRecords, invalidRecordsFixed]);
 
   // 檢查加班分配方案是否平衡（僅月度分數）
@@ -1238,18 +1450,15 @@ const OvertimeStaff = () => {
     return true;
   };
 
-  // 新增分數限制狀態
-  const [scoreLimit, setScoreLimit] = useState(2.0);
-
   // 生成統計數據 - 只考慮當月數據
   const generateStatistics = () => {
     const startTime = performance.now();
-    setIsLoadingStatistics(true);
+    dispatchUI({ type: 'SET_LOADING', loadingType: 'isLoadingStatistics', value: true });
     
     try {
       // 直接使用 storeMonthlySchedule 作為數據源
       if (!storeMonthlySchedule || !Array.isArray(storeMonthlySchedule) || storeMonthlySchedule.length === 0) {
-        setStatisticsData([]);
+        dispatchData({ type: 'SET_STATISTICS', data: [] });
         return;
       }
 
@@ -1278,16 +1487,16 @@ const OvertimeStaff = () => {
       const statistics = [...normalStatistics, ...leaderStatistics];
       statistics.sort((a, b) => b.totalScore - a.totalScore);
 
-      setStatisticsData(statistics);
+      dispatchData({ type: 'SET_STATISTICS', data: statistics });
       
       const endTime = performance.now();
       logger.info(`統計數據生成耗時: ${(endTime - startTime).toFixed(2)}ms`);
     } catch (error) {
       logger.error('生成統計數據失敗:', error);
-      setApiError('生成統計數據時發生錯誤: ' + error.message);
-      setOpenSnackbar(true);
+      dispatchMessage({ type: 'SET_ERROR', error: '生成統計數據時發生錯誤: ' + error.message });
+      dispatchDialog({ type: 'OPEN_DIALOG', dialogType: 'openSnackbar' });
     } finally {
-      setIsLoadingStatistics(false);
+      dispatchUI({ type: 'SET_LOADING', loadingType: 'isLoadingStatistics', value: false });
     }
   };
 
@@ -1350,19 +1559,19 @@ const OvertimeStaff = () => {
   // 隨機生成加班人選
   const generateRandomOvertimeStaff = () => {
     if (!canEdit) {
-      setApiError('只有護理長和管理員可以生成加班記錄');
-      setOpenSnackbar(true);
+      dispatchMessage({ type: 'SET_ERROR', error: '只有護理長和管理員可以生成加班記錄' });
+      dispatchDialog({ type: 'OPEN_DIALOG', dialogType: 'openSnackbar' });
       return;
     }
     
-    setOpenConfirmDialog(true);
+    dispatchDialog({ type: 'OPEN_DIALOG', dialogType: 'openConfirmDialog' });
   };
   
   // 全部重新生成加班人選
   const generateFullRandomAssignments = () => {
-    setOpenConfirmDialog(false);
-    setIsGeneratingRandom(true);
-    setGenerationAttempts(0);
+    dispatchDialog({ type: 'CLOSE_DIALOG', dialogType: 'openConfirmDialog' });
+    dispatchUI({ type: 'SET_LOADING', loadingType: 'isGeneratingRandom', value: true });
+    dispatchConfig({ type: 'SET_GENERATION_ATTEMPTS', attempts: 0 });
     shouldCancelGenerationRef.current = false; // 重置取消標記
     
     // 直接開始隨機生成
@@ -1374,9 +1583,9 @@ const OvertimeStaff = () => {
 
   // 生成尚未指定加班人員
   const generatePartialRandomAssignments = () => {
-    setOpenConfirmDialog(false);
-    setIsGeneratingRandom(true);
-    setGenerationAttempts(0);
+    dispatchDialog({ type: 'CLOSE_DIALOG', dialogType: 'openConfirmDialog' });
+    dispatchUI({ type: 'SET_LOADING', loadingType: 'isGeneratingRandom', value: true });
+    dispatchConfig({ type: 'SET_GENERATION_ATTEMPTS', attempts: 0 });
     shouldCancelGenerationRef.current = false; // 重置取消標記
     
     // 直接開始隨機生成
@@ -1403,7 +1612,7 @@ const OvertimeStaff = () => {
       while (!isBalanced && attempts < MAX_OVERTIME_GENERATION_ATTEMPTS && !shouldCancelGenerationRef.current) {
         attempts++;
         // 更新嘗試次數，確保UI更新
-        setGenerationAttempts(attempts);
+        updateConfig('generationAttempts', attempts);
         
         // 更頻繁地檢查取消狀態並更新UI
         if (attempts % 50 === 0) {
@@ -1484,31 +1693,30 @@ const OvertimeStaff = () => {
       // 檢查是否被取消
       if (shouldCancelGenerationRef.current) {
         logger.info('生成已被用戶取消');
-        setSuccessMessage('已成功取消隨機生成');
-        setOpenSnackbar(true);
-        setIsGeneratingRandom(false);
+        showSuccess('已成功取消隨機生成');
+        updateDialog('openSnackbar', true);
         shouldCancelGenerationRef.current = false;
         return;
       }
       
       if (!isBalanced) {
-        setSuccessMessage(`已嘗試 ${MAX_OVERTIME_GENERATION_ATTEMPTS} 次全部重新生成加班人選，但無法達到完全平衡。請嘗試分時段生成或重新設計班表。`);
-        setOpenSnackbar(true);
+        showSuccess(`已嘗試 ${MAX_OVERTIME_GENERATION_ATTEMPTS} 次全部重新生成加班人選，但無法達到完全平衡。請嘗試分時段生成或重新設計班表。`);
+        updateDialog('openSnackbar', true);
       } else {
-        setSuccessMessage(`已全部重新生成加班人選！在第 ${attempts} 次嘗試達到平衡分配。請記得保存變更`);
-        setOpenSnackbar(true);
+        showSuccess(`已全部重新生成加班人選！在第 ${attempts} 次嘗試達到平衡分配。請記得保存變更`);
+        updateDialog('openSnackbar', true);
       }
       
       // 更新標記狀態
-      setMarkings(newMarkings);
-      setGenerationAttempts(attempts);
-      setOpenSnackbar(true);
+      updateData('markings', newMarkings);
+      updateConfig('generationAttempts', attempts);
+      updateDialog('openSnackbar', true);
     } catch (error) {
       logger.error('全部重新生成加班人選失敗:', error);
-      setApiError(`全部重新生成加班人選時發生錯誤: ${error.message || '未知錯誤'}`);
-      setOpenSnackbar(true);
+      showError(`全部重新生成加班人選時發生錯誤: ${error.message || '未知錯誤'}`);
+      updateDialog('openSnackbar', true);
     } finally {
-      setIsGeneratingRandom(false);
+      updateUI({ isGeneratingRandom: false });
       shouldCancelGenerationRef.current = false;
     }
   };
@@ -1530,7 +1738,7 @@ const OvertimeStaff = () => {
       while (!isBalanced && attempts < MAX_OVERTIME_GENERATION_ATTEMPTS && !shouldCancelGenerationRef.current) {
         attempts++;
         // 更新嘗試次數，確保UI更新
-        setGenerationAttempts(attempts);
+        updateConfig('generationAttempts', attempts);
         
         // 更頻繁地檢查取消狀態並更新UI
         if (attempts % 50 === 0) {
@@ -1623,34 +1831,33 @@ const OvertimeStaff = () => {
       // 檢查是否被取消
       if (shouldCancelGenerationRef.current) {
         console.log('生成已被用戶取消');
-        setSuccessMessage('已成功取消隨機生成');
-        setOpenSnackbar(true);
-        setIsGeneratingRandom(false);
+        showSuccess('已成功取消隨機生成');
+        updateDialog('openSnackbar', true);
         shouldCancelGenerationRef.current = false;
         return;
       }
       
       if (!isBalanced) {
-        setSuccessMessage(`已嘗試 ${MAX_OVERTIME_GENERATION_ATTEMPTS} 次生成尚未指定加班人員，但無法達到完全平衡。請嘗試全部重新生成或手動調整。`);
-        setOpenSnackbar(true);
+        showSuccess(`已嘗試 ${MAX_OVERTIME_GENERATION_ATTEMPTS} 次生成尚未指定加班人員，但無法達到完全平衡。請嘗試全部重新生成或手動調整。`);
+        updateDialog('openSnackbar', true);
       } else {
-        setSuccessMessage(`已成功生成尚未指定加班人員！在第 ${attempts} 次嘗試達到平衡分配。請記得保存變更`);
-        setOpenSnackbar(true);
+        showSuccess(`已成功生成尚未指定加班人員！在第 ${attempts} 次嘗試達到平衡分配。請記得保存變更`);
+        updateDialog('openSnackbar', true);
       }
       
-      // 更新標記狀態
-      setMarkings(newMarkings);
-      setGenerationAttempts(attempts);
-      setOpenSnackbar(true);
+              // 更新標記狀態
+        updateData('markings', newMarkings);
+        updateConfig('generationAttempts', attempts);
+        updateDialog('openSnackbar', true);
       
       // 生成後更新統計數據
       generateStatistics();
     } catch (error) {
       console.error('生成尚未指定加班人員失敗:', error);
-      setApiError(`生成尚未指定加班人員時發生錯誤: ${error.message || '未知錯誤'}`);
-      setOpenSnackbar(true);
+      showError(`生成尚未指定加班人員時發生錯誤: ${error.message || '未知錯誤'}`);
+      updateDialog('openSnackbar', true);
     } finally {
-      setIsGeneratingRandom(false);
+      updateUI({ isGeneratingRandom: false });
       shouldCancelGenerationRef.current = false;
     }
   };
@@ -1658,22 +1865,21 @@ const OvertimeStaff = () => {
   // 重設加班表
   const resetOvertimeSchedule = () => {
     if (!canEdit) {
-      setApiError('只有護理長和管理員可以重設加班記錄');
-      setOpenSnackbar(true);
+      showError('只有護理長和管理員可以重設加班記錄');
       return;
     }
     
-    setOpenResetConfirmDialog(true);
+    updateDialog('openResetConfirmDialog', true);
   };
   
   // 確認重設加班表
   const confirmResetOvertimeSchedule = async () => {
-    setOpenResetConfirmDialog(false);
-    setIsResetting(true);
+    updateDialog('openResetConfirmDialog', false);
+    updateUI({ isResetting: true });
     
     try {
       // 清空前端的標記狀態
-      setMarkings({});
+      updateData('resetMarkings');
       
       // 清空相關緩存
       const year = selectedDate.getFullYear();
@@ -1684,8 +1890,7 @@ const OvertimeStaff = () => {
       // 更新緩存鍵格式
       clearCache(`overtimeRecords_${startDate}_${endDate}`);
       
-      setSuccessMessage('加班表已在前端重設，請記得按保存加班記錄按鈕以更新資料庫');
-      setOpenSnackbar(true);
+      showSuccess('加班表已在前端重設，請記得按保存加班記錄按鈕以更新資料庫');
     } catch (error) {
       console.error('重設加班表失敗:', error);
       
@@ -1695,10 +1900,9 @@ const OvertimeStaff = () => {
         errorMsg = error.message;
       }
       
-      setApiError(errorMsg);
-      setOpenSnackbar(true);
+      showError(errorMsg);
     } finally {
-      setIsResetting(false);
+      updateUI({ isResetting: false });
     }
   };
 
@@ -1757,33 +1961,29 @@ const OvertimeStaff = () => {
   // 處理選擇加班人員
   const handleStaffSelection = (staffId, date, mark, isRemoval = false) => {
     // 清除任何現有錯誤
-    setApiError('');
+    updateMessage('clear');
     
     // 如果是移除操作，直接處理
     if (isRemoval) {
-      setMarkings(prev => {
-        const newMarkings = { ...prev };
-        
-        // 確保該日期的對象存在
-        if (!newMarkings[date]) {
-          return newMarkings;
-        }
-        
-        // 移除該護理師的標記
-        if (newMarkings[date][staffId]) {
-          delete newMarkings[date][staffId];
-          
-          // 如果該日期下沒有標記了，刪除整個日期對象
-          if (Object.keys(newMarkings[date]).length === 0) {
-            delete newMarkings[date];
-          }
-        }
-        
-        return newMarkings;
-      });
+      const newMarkings = { ...markings };
       
-      setSuccessMessage(`已移除護理師ID${staffId}在${date}的加班標記`);
-      setOpenSnackbar(true);
+      // 確保該日期的對象存在
+      if (!newMarkings[date]) {
+        return;
+      }
+      
+      // 移除該護理師的標記
+      if (newMarkings[date][staffId]) {
+        delete newMarkings[date][staffId];
+        
+        // 如果該日期下沒有標記了，刪除整個日期對象
+        if (Object.keys(newMarkings[date]).length === 0) {
+          delete newMarkings[date];
+        }
+      }
+      
+      updateData('markings', newMarkings);
+      showSuccess(`已移除護理師ID${staffId}在${date}的加班標記`);
       
       return;
     }
@@ -1791,57 +1991,52 @@ const OvertimeStaff = () => {
     // 檢查此記錄是否有效（非移除操作時才檢查）
     if (!isValidRecord(staffId, date, mark)) {
       console.error('無效的加班記錄');
-      setApiError(`無效的加班記錄：護理師ID${staffId}在${date}不能被指定為${mark}班加班。`);
-      setOpenSnackbar(true);
+      showError(`無效的加班記錄：護理師ID${staffId}在${date}不能被指定為${mark}班加班。`);
       return;
     }
     
     // 更新標記
-    setMarkings(prev => {
-      const newMarkings = { ...prev };
+    const newMarkings = { ...markings };
+    
+    // 確保該日期的對象存在
+    if (!newMarkings[date]) {
+      newMarkings[date] = {};
+    }
+    
+    // 處理標記的設置和清除
+    if (mark) {
+      // 檢查此日期是否已有人被分配相同的加班標記
+      const isMarkTaken = Object.entries(newMarkings[date]).some(
+        ([id, existingMark]) => existingMark === mark && id !== staffId.toString()
+      );
       
-      // 確保該日期的對象存在
-      if (!newMarkings[date]) {
-        newMarkings[date] = {};
+      if (isMarkTaken) {
+        // 如果標記已被佔用，不進行更新並設置錯誤
+        setTimeout(() => {
+          showError(`${date}已有人被分配為${mark}班加班。請先移除現有的標記，或選擇不同的加班類型。`);
+        }, 0);
+        
+        return; // 不更新狀態
       }
       
-      // 處理標記的設置和清除
-      if (mark) {
-        // 檢查此日期是否已有人被分配相同的加班標記
-        const isMarkTaken = Object.entries(newMarkings[date]).some(
-          ([id, existingMark]) => existingMark === mark && id !== staffId.toString()
-        );
+      // 設置新標記
+      newMarkings[date][staffId] = mark;
+    } else {
+      // 清除標記
+      if (newMarkings[date][staffId]) {
+        delete newMarkings[date][staffId];
         
-        if (isMarkTaken) {
-          // 如果標記已被佔用，不進行更新並設置錯誤
-          setTimeout(() => {
-            setApiError(`${date}已有人被分配為${mark}班加班。請先移除現有的標記，或選擇不同的加班類型。`);
-            setOpenSnackbar(true);
-          }, 0);
-          
-          return prev; // 返回原狀態，不更新
-        }
-        
-        // 設置新標記
-        newMarkings[date][staffId] = mark;
-      } else {
-        // 清除標記
-        if (newMarkings[date][staffId]) {
-          delete newMarkings[date][staffId];
-          
-          // 如果該日期下沒有標記了，刪除整個日期對象
-          if (Object.keys(newMarkings[date]).length === 0) {
-            delete newMarkings[date];
-          }
+        // 如果該日期下沒有標記了，刪除整個日期對象
+        if (Object.keys(newMarkings[date]).length === 0) {
+          delete newMarkings[date];
         }
       }
-      
-      return newMarkings;
-    });
+    }
+    
+    updateData('markings', newMarkings);
     
     // 顯示成功消息
-    setSuccessMessage(`已將護理師ID${staffId}在${date}的加班標記設為${mark}`);
-    setOpenSnackbar(true);
+    showSuccess(`已將護理師ID${staffId}在${date}的加班標記設為${mark}`);
     
     // 重新計算統計數據
     generateStatistics();
@@ -1923,7 +2118,7 @@ const OvertimeStaff = () => {
     const markingsJson = JSON.stringify(markings);
     const originalMarkingsJson = JSON.stringify(originalMarkings);
     
-    setHasUnsavedChanges(markingsJson !== originalMarkingsJson);
+    updateUI({ hasUnsavedChanges: markingsJson !== originalMarkingsJson });
   }, [markings, originalMarkings]);
 
   // 渲染性能監控 - 組件掛載時記錄開始時間
@@ -2008,7 +2203,7 @@ const OvertimeStaff = () => {
             <Button 
               variant="outlined" 
               color="info"
-              onClick={() => setShowUnmarkedStaff(!showUnmarkedStaff)}
+              onClick={() => updateConfig('toggleUnmarkedStaff')}
               sx={{ ml: 1 }}
             >
               {showUnmarkedStaff ? '隱藏未加班人員' : '顯示未加班人員'}
@@ -2058,7 +2253,7 @@ const OvertimeStaff = () => {
               onChange={(e) => {
                 const newValue = parseFloat(e.target.value);
                 if (!isNaN(newValue) && newValue >= 0.1 && newValue <= 5.0) {
-                  setScoreLimit(newValue);
+                  updateConfig('scoreLimit', newValue);
                 }
               }}
               inputProps={{ min: 0.1, max: 5.0, step: 0.1 }}
@@ -2212,7 +2407,7 @@ const OvertimeStaff = () => {
       {/* 確認隨機生成對話框 */}
       <Dialog
         open={openConfirmDialog}
-        onClose={() => setOpenConfirmDialog(false)}
+        onClose={() => updateDialog('openConfirmDialog', false)}
       >
         <DialogTitle>確認隨機生成</DialogTitle>
         <DialogContent>
@@ -2221,7 +2416,7 @@ const OvertimeStaff = () => {
           </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpenConfirmDialog(false)} color="primary">
+          <Button onClick={() => updateDialog('openConfirmDialog', false)} color="primary">
             取消
           </Button>
           <Button onClick={generatePartialRandomAssignments} color="info" autoFocus>
@@ -2268,7 +2463,7 @@ const OvertimeStaff = () => {
       {/* 確認重設對話框 */}
       <Dialog
         open={openResetConfirmDialog}
-        onClose={() => setOpenResetConfirmDialog(false)}
+        onClose={() => updateDialog('openResetConfirmDialog', false)}
       >
         <DialogTitle>確認重設加班表</DialogTitle>
         <DialogContent>
@@ -2277,7 +2472,7 @@ const OvertimeStaff = () => {
           </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpenResetConfirmDialog(false)} color="primary">
+          <Button onClick={() => updateDialog('openResetConfirmDialog', false)} color="primary">
             取消
           </Button>
           <Button onClick={confirmResetOvertimeSchedule} color="error" autoFocus>
@@ -2290,7 +2485,7 @@ const OvertimeStaff = () => {
       <Snackbar
         open={openSnackbar}
         autoHideDuration={6000}
-        onClose={() => setOpenSnackbar(false)}
+        onClose={() => updateDialog('openSnackbar', false)}
         message={successMessage || formatErrorMessage(apiError)}
         ContentProps={{
           sx: {

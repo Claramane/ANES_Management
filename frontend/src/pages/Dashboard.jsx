@@ -13,6 +13,8 @@ import {
   ListItem,
   ListItemText,
   ListItemIcon,
+  ListItemAvatar,
+  Avatar,
   Chip,
   Alert,
   CircularProgress,
@@ -41,6 +43,8 @@ import { useScheduleStore } from '../store/scheduleStore';
 import { format, startOfToday, getDate, getMonth, getYear, eachDayOfInterval, parseISO, startOfMonth, endOfMonth, getDay, isToday } from 'date-fns';
 import { zhTW } from 'date-fns/locale';
 import { cachedScheduleDetailsRequest } from '../utils/scheduleCache';
+import { SHIFT_COLORS } from '../constants/shiftSwapConstants';
+import useHeartbeat from '../hooks/useHeartbeat';
 
 // 班次顏色和名稱的映射，可以根據需要擴展
 const shiftDetails = {
@@ -111,18 +115,7 @@ const getAreaStyle = (areaCode) => {
   return { bg: '#f0f0f0', text: '#757575', border: '#bdbdbd' };
 };
 
-// 定義班別顏色（月曆用）
-const SHIFT_COLORS = {
-  'D': '#4caf50', // 白班
-  'A': '#c6c05f', // A班
-  'N': '#2196f3', // 大夜
-  'K': '#8AA6C1', // K班
-  'C': '#a9d0ab', // C班
-  'F': '#d8bd89', // F班
-  'E': '#ff9800', // 小夜
-  'B': '#e7b284', // B班
-  'O': '#9e9e9e'  // 休假
-};
+// 班別顏色已在 NurseCalendar 組件中定義，這裡移除重複定義
 
 // 狀態顏色配置
 const STATUS_COLORS = {
@@ -146,28 +139,87 @@ const getCategoryStyle = (category) => {
   return categoryColors[category] || categoryColors.default;
 };
 
-// 添加日曆單元格的CSS
-const calendarCellStyle = {
-  position: 'relative',
-  height: '100%',
-  minHeight: '70px',
-  padding: '4px',
-  border: '1px solid #e0e0e0',
-  overflow: 'hidden',
-  cursor: 'default',
-  '&:hover': {
-    backgroundColor: '#f5f5f5',
-  },
-  '&.selected': {
-    backgroundColor: '#e3f2fd',
-    border: '2px solid #2196f3',
-  },
-  '&.today': {
-    backgroundColor: '#e8f5e9',
+// 🚀 直接複製 ShiftSwap 的完整月曆實現，包括 CSS 樣式
+const calendarStyles = `
+  .calendar-container {
+    margin-top: 20px;
   }
-};
+  
+  .calendar-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+  }
+  
+  .calendar-table th {
+    padding: 8px;
+    text-align: center;
+    background-color: #f5f5f5;
+    border: 1px solid #ddd;
+    width: 14.285714%;
+    font-weight: bold;
+  }
+  
+  .calendar-table td {
+    border: 1px solid #ddd;
+    padding: 0;
+    vertical-align: top;
+    height: 90px;
+    width: 14.285714%;
+    position: relative;
+    transition: all 0.2s ease;
+  }
+  
+  @media (max-width: 600px) {
+    .calendar-table td {
+      height: 70px;
+    }
+    .calendar-table th {
+      padding: 6px 4px;
+      font-size: 14px;
+    }
+  }
+  
+  .empty-cell {
+    background-color: #f9f9f9;
+  }
+  
+  .expired-cell {
+    background-color: #fafafa;
+    opacity: 0.6;
+  }
+  
+  .expired-cell:hover {
+    background-color: #fafafa !important;
+    cursor: not-allowed !important;
+  }
+  
+  .cell-content {
+    padding: 5px;
+    height: 100%;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .today {
+    background-color: #e3f2fd;
+  }
+  
+  .selected {
+    background-color: #e8f5e9;
+    transform: scale(1.05);
+    box-shadow: none;
+    z-index: 10;
+  }
+  
+  td:hover:not(.expired-cell) {
+    background-color: #f0f0f0;
+    cursor: pointer;
+  }
+`;
 
-// 渲染日曆單元格內容的組件 - 已優化版本
+// 🚀 直接使用 ShiftSwap 成功的日曆單元格組件
 const RenderCalendarCell = ({ day }) => {
   if (!day.date) return null;
   
@@ -241,7 +293,7 @@ const RenderCalendarCell = ({ day }) => {
           </Box>
         )}
         
-        {/* 加班信息 - 已優化，移除"加班"文字和班別外框 */}
+        {/* 加班信息 */}
         {day.overtime && (
           <Box sx={{ 
             ...commonTagStyle,
@@ -269,12 +321,15 @@ function Dashboard() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const { 
-    monthlySchedule, 
-    isLoading: scheduleLoading, 
-    fetchMonthlySchedule,
     selectedDate, // 獲取存儲中的選定日期
     updateSelectedDate // 獲取更新日期的函數
   } = useScheduleStore();
+  
+  // 啟用心跳功能
+  useHeartbeat();
+  
+  // 🗑️ 不再使用 store 的班表數據，改用 ShiftSwap 模式直接獲取
+  // monthlySchedule, isLoading: scheduleLoading, fetchMonthlySchedule - 已移除
 
   const [todayWork, setTodayWork] = useState({ shift: null, areaCode: null, details: null });
   const [monthlyCalendarData, setMonthlyCalendarData] = useState([]); // 新增月曆數據狀態
@@ -290,8 +345,8 @@ function Dashboard() {
   const [announcementsError, setAnnouncementsError] = useState(null);
   const [swapsError, setSwapsError] = useState(null);
 
-  // 新增防重複請求的狀態
-  const [isAreaAssignmentLoading, setIsAreaAssignmentLoading] = useState(false);
+  // 🗑️ 舊的狀態變數已被 ShiftSwap 模式替代
+  // const [isAreaAssignmentLoading, setIsAreaAssignmentLoading] = useState(false); - 已移除
 
   // 新增加班數據狀態
   const [overtimeData, setOvertimeData] = useState(null);
@@ -302,10 +357,52 @@ function Dashboard() {
 
   const [showPasskeyDialog, setShowPasskeyDialog] = useState(false);
 
+  // 新增在線用戶狀態
+  const [onlineUsers, setOnlineUsers] = useState([]);
+  const [onlineUsersLoading, setOnlineUsersLoading] = useState(true);
+  const [onlineUsersError, setOnlineUsersError] = useState(null);
+
   const today = useMemo(() => startOfToday(), []);
   const todayDate = useMemo(() => getDate(today), [today]); // 日 (1-31)
   const currentMonth = useMemo(() => getMonth(today), [today]); // 月 (0-11)
   const currentYear = useMemo(() => getYear(today), [today]); // 年
+  
+  // 🚀 添加 ShiftSwap 中使用的變數
+  const weekDays = ['一', '二', '三', '四', '五', '六', '日'];
+
+  // 判斷用戶是否正在上班的函數
+  const isUserCurrentlyWorking = (userShift) => {
+    if (!userShift || ['O', 'V', 'R', ''].includes(userShift)) {
+      return false; // 休假班不算上班
+    }
+
+    const now = new Date();
+    const currentHour = now.getHours();
+    const currentMinute = now.getMinutes();
+    const currentTime = currentHour + currentMinute / 60; // 轉為小數表示
+
+    // 根據班別判斷工作時間
+    switch (userShift) {
+      case 'A': // 8-16
+        return currentTime >= 8 && currentTime < 16;
+      case 'B': // 8-17
+        return currentTime >= 8 && currentTime < 17;
+      case 'N': // 14-22
+        return currentTime >= 14 && currentTime < 22;
+      case 'D': // 22-08 (跨日班)
+        return currentTime >= 22 || currentTime < 8;
+      case 'E': // 8-12
+        return currentTime >= 8 && currentTime < 12;
+      case 'K': // 9-17
+        return currentTime >= 9 && currentTime < 17;
+      case 'C': // 10-18
+        return currentTime >= 10 && currentTime < 18;
+      case 'F': // 12-20
+        return currentTime >= 12 && currentTime < 20;
+      default:
+        return false;
+    }
+  };
 
   // Effect 1: 檢查並可能更新 selectedDate (只在需要時運行)
   useEffect(() => {
@@ -321,51 +418,279 @@ function Dashboard() {
   // 依賴項應只包含觸發檢查/更新的條件
   }, [user, selectedDate, currentMonth, currentYear, updateSelectedDate, today]); 
 
-  // Effect 2: 獲取數據 (當 selectedDate 準備好時運行)
+  // 🚀 使用 ShiftSwap 模式：一次性獲取所有數據
   useEffect(() => {
-    // 確保 user 加載且 selectedDate 是當前月份
-    if (!user || getMonth(selectedDate) !== currentMonth || getYear(selectedDate) !== currentYear) {
-       // 如果日期還沒對，或者 user 不存在，則不 fetch
-       // 可以在這裡設置 isLoading 為 true 如果需要的話
-       setIsLoading(true); // 當日期不對時，也視為加載中
+    if (!user) return;
+
+    const needsUpdate = getMonth(selectedDate) !== currentMonth || getYear(selectedDate) !== currentYear;
+    
+    if (needsUpdate) {
+      console.log('Dashboard: selectedDate 需要更新到當前月份');
+      updateSelectedDate(today);
        return;
     }
 
-    console.log('Dashboard Effect 2: selectedDate 正確，觸發 fetchMonthlySchedule');
-    // 觸發 fetch 前確保 isLoading 為 true
-    // fetchMonthlySchedule 內部應該會處理自己的 loading 狀態 (scheduleLoading)
-    // 但我們仍然可以先設置 setIsLoading(true) 以覆蓋可能的舊狀態
+    // 當用戶和日期都正確時，獲取完整的月度數據
+    console.log('Dashboard: 開始獲取完整的月度數據 (ShiftSwap 模式)');
+    fetchCompleteMonthData();
+  }, [user, selectedDate, currentMonth, currentYear, updateSelectedDate, today]);
+
+  // 🚀 完全複製 ShiftSwap 的數據獲取邏輯
+  const fetchCompleteMonthData = async () => {
+    if (!user) return;
+    
     setIsLoading(true); 
-    fetchMonthlySchedule(); // 根據正確的日期獲取數據
+    try {
+      const year = selectedDate.getFullYear();
+      const month = selectedDate.getMonth() + 1;
+      
+      console.log(`Dashboard: 獲取 ${year}年${month}月 的完整數據`);
+      
+      // 🚀 使用 ShiftSwap 相同的 API 調用方式
+      // 1. 獲取月班表
+      const monthlyResponse = await apiService.schedule.getMonthlySchedule(year, month);
+      console.log('Dashboard 月班表API響應:', monthlyResponse.data);
+      
+      // 2. 獲取工作分配（使用緩存）
+      const weeklyResponse = await cachedScheduleDetailsRequest(apiService, 'dashboard', year, month);
+      console.log('Dashboard 工作分配API響應:', weeklyResponse.data);
+      
+      // 3. 獲取加班記錄
+      const startDateStr = format(startOfMonth(selectedDate), 'yyyy-MM-dd');
+      const endDateStr = format(endOfMonth(selectedDate), 'yyyy-MM-dd');
+      const overtimeResponse = await apiService.overtime.getMyRecords(startDateStr, endDateStr);
+      console.log('Dashboard 加班記錄API響應:', overtimeResponse.data);
+      
+      // 格式化加班數據
+      const formattedOvertimeData = {
+        records: Array.isArray(overtimeResponse.data) ? overtimeResponse.data : []
+      };
+      
+      // 🚀 使用 ShiftSwap 相同的數據處理方式
+      generateShiftSwapCalendarData(
+        selectedDate,
+        monthlyResponse.data || {},
+        weeklyResponse.data || {},
+        formattedOvertimeData
+      );
+      
+      // 處理今日工作信息
+      processTodayWorkFromShiftSwapData(monthlyResponse.data, weeklyResponse.data, formattedOvertimeData);
+      
+    } catch (error) {
+      console.error('Dashboard: 獲取月度數據時出錯:', error);
+      setMonthlyCalendarData([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-  // 依賴項只包含觸發 fetch 的條件
-  // 注意：移除了 fetchMonthlySchedule，假設 store 處理其引用穩定性
-  // 如果 fetchMonthlySchedule 本身會變，可能需要加回來，但要注意無限循環
-  }, [user, selectedDate, currentMonth, currentYear, fetchMonthlySchedule]); // 重新加入 fetchMonthlySchedule，假設 zustand 保證其穩定
-
-  // Effect 3: 處理加載的數據 (當 schedule 數據變化時運行)
-  useEffect(() => {
-    // 這個 effect 用於處理 fetch 回來的數據
-    if (!scheduleLoading) {
-       // 只有當 scheduleLoading 結束時才處理數據並設置 isLoading 為 false
-       processScheduleData(); 
+  // 🚀 完全複製 ShiftSwap 的 generateCalendarData 函數
+  const generateShiftSwapCalendarData = (date, scheduleData, assignmentData, overtimeData) => {
+    try {
+      console.log("===== Dashboard: 開始生成ShiftSwap月曆數據 =====");
+      
+      const startDate = startOfMonth(date);
+      const endDate = endOfMonth(date);
+      const days = eachDayOfInterval({ start: startDate, end: endDate });
+      
+      // 初始化日曆數據結構
+      const calendar = [];
+      let week = [];
+      
+      // 填充月份開始前的空白單元格
+      // 調整 getDay 結果：週一=0, 週二=1, ..., 週日=6
+      const firstDay = (getDay(startDate) + 6) % 7;
+      for (let i = 0; i < firstDay; i++) {
+        week.push({ date: null });
+      }
+      
+      // 安全獲取用戶ID
+      const userId = user?.id || '';
+      if (!userId) {
+        console.warn("Dashboard: 用戶ID為空，無法獲取班表數據");
+      }
+      
+      // 紀錄找到的班別數量，用於診斷
+      let foundShiftsCount = 0;
+      
+      console.log("Dashboard 用戶ID:", userId);
+      
+      // 獲取年月
+      const year = format(date, 'yyyy');
+      const month = format(date, 'M'); // 不帶前導零的月份
+      
+      console.log(`Dashboard 嘗試獲取 ${year}年${month}月的班表數據`);
+      console.log("Dashboard scheduleData類型:", typeof scheduleData);
+      console.log("Dashboard scheduleData結構:", JSON.stringify(scheduleData).substring(0, 300) + "...");
+      
+      let userShifts = [];
+      
+      // 正確解析API返回的數據結構
+      if (scheduleData && scheduleData.data && scheduleData.data[year] && scheduleData.data[year][month]) {
+        console.log(`Dashboard 找到 ${year}年${month}月的班表數據，開始處理...`);
+        
+        const nurseSchedules = scheduleData.data[year][month].schedule || [];
+        console.log(`Dashboard 班表中包含 ${nurseSchedules.length} 個護理師資料`);
+        
+        // 尋找當前用戶的班表
+        const userSchedule = nurseSchedules.find(nurse => String(nurse.id) === String(userId));
+        
+        if (userSchedule) {
+          console.log(`Dashboard 找到用戶 ${userId} (${userSchedule.name}) 的班表數據`);
+          userShifts = userSchedule.shifts || [];
+          console.log(`Dashboard 用戶班表天數: ${userShifts.length}`);
+          console.log(`Dashboard 班表內容: ${userShifts.join(', ')}`);
     } else {
-      // 如果 scheduleLoading 開始了，確保本地 isLoading 也是 true
-      setIsLoading(true);
+          console.warn(`Dashboard 在 ${nurseSchedules.length} 名護理師中未找到ID=${userId}的用戶班表`);
+          console.log("Dashboard 所有護理師ID:", nurseSchedules.map(nurse => nurse.id).join(", "));
+        }
+      } else {
+        console.warn("Dashboard 無法從數據中提取用戶班表");
+      }
+      
+      // 如果沒有找到用戶班表，記錄警告但繼續使用空班表
+      if (!userShifts || userShifts.length === 0) {
+        console.warn("Dashboard 未找到用戶班表數據，將使用空班表");
+        userShifts = Array(31).fill('O'); // 默認全部休假
+      }
+      
+      // 處理月份中的每一天
+      days.forEach((day, index) => {
+        const dateString = format(day, 'yyyy-MM-dd');
+        
+        // 初始化為休假，如果找不到數據
+        let shift = 'O';
+        let mission = '';
+        let overtime = '';
+        let overtimeShift = '';
+        let hasOvertime = false;
+        
+        try {
+          // 從班表數據中獲取當天的班別
+          if (userShifts && userShifts.length > 0) {
+            // 日期索引，從0開始
+            const dayOfMonth = parseInt(format(day, 'd')) - 1;
+            
+            if (dayOfMonth >= 0 && dayOfMonth < userShifts.length) {
+              shift = userShifts[dayOfMonth] || 'O';
+              foundShiftsCount++;
+              console.log(`Dashboard ${dateString}: 班別=${shift}`);
+            }
+          }
+          
+          // 獲取工作分配
+          const matchingRecord = assignmentData && Array.isArray(assignmentData.data) 
+            ? assignmentData.data.find(record => 
+                record.date === dateString && String(record.user_id) === String(userId)
+              )
+            : null;
+            
+          if (matchingRecord && matchingRecord.area_code) {
+            mission = matchingRecord.area_code;
+            console.log(`Dashboard ${dateString}: 找到工作分配: ${mission}`);
+          }
+          
+          // 獲取加班記錄
+          if (overtimeData && overtimeData.records) {
+            const dayOvertime = overtimeData.records.find(record => 
+              record.date === dateString
+            );
+            
+            if (dayOvertime) {
+              // 獲取加班班種
+              overtimeShift = dayOvertime.overtime_shift || '';
+              overtime = `加班${overtimeShift ? `(${overtimeShift})` : ''}`;
+              hasOvertime = true;
+              console.log(`Dashboard 找到 ${dateString} 的加班記錄: ${overtimeShift}`);
+            }
+          }
+        } catch (err) {
+          console.warn(`Dashboard 處理 ${dateString} 的班表數據時出錯:`, err.message);
+        }
+        
+        // 添加日期項到當前週
+        week.push({ 
+          date: day, 
+          shift, 
+          mission, 
+          overtime,
+          overtimeShift,
+          isOvertimeDay: hasOvertime
+        });
+        
+        // 如果是一週的最後一天或是月份的最後一天
+        // 調整判斷條件：週日對應6
+        if ((getDay(day) + 6) % 7 === 6 || format(day, 'yyyy-MM-dd') === format(endDate, 'yyyy-MM-dd')) {
+          calendar.push([...week]);
+          week = [];
+        }
+      });
+      
+      // 調試日曆數據
+      console.log(`Dashboard 生成了 ${calendar.length} 週的日曆數據，找到 ${foundShiftsCount} 天的班別數據`);
+      
+      setMonthlyCalendarData(calendar);
+      return calendar;
+    } catch (err) {
+      console.error('Dashboard: 生成月曆數據時出錯:', err);
+      setMonthlyCalendarData([]);
+      return [];
     }
-  }, [monthlySchedule, scheduleLoading, user, todayDate]); // 依賴 scheduleLoading 很重要
+  };
 
-  // Effect 3.5: 當加班數據更新時重新生成月曆數據
-  useEffect(() => {
-    // 只有當班表數據和用戶都存在，且不在加載狀態時才重新生成月曆
-    if (!scheduleLoading && monthlySchedule && monthlySchedule.length > 0 && user && overtimeData) {
-      console.log('加班數據更新，重新生成月曆數據');
-      const calendarData = generateCalendarData(selectedDate, monthlySchedule, null, overtimeData);
-      setMonthlyCalendarData(calendarData);
+  // 處理今日工作信息（使用 ShiftSwap 數據格式）
+  const processTodayWorkFromShiftSwapData = (scheduleData, assignmentData, overtimeData) => {
+    try {
+      if (!user) {
+        setTodayWork({ shift: '', areaCode: null, details: getShiftInfo('') });
+        return;
+      }
+
+      const year = today.getFullYear();
+      const month = today.getMonth() + 1;
+      const dayIndex = todayDate - 1;
+      const userId = user.id;
+      const todayDateString = format(today, 'yyyy-MM-dd');
+
+      let shiftType = 'O';
+      let areaCode = null;
+
+      // 從班表數據獲取今日班別
+      if (scheduleData && scheduleData.data && scheduleData.data[year] && scheduleData.data[year][month]) {
+        const nurseSchedules = scheduleData.data[year][month].schedule || [];
+        const userSchedule = nurseSchedules.find(nurse => String(nurse.id) === String(userId));
+        
+        if (userSchedule && userSchedule.shifts) {
+          shiftType = userSchedule.shifts[dayIndex] || 'O';
+          console.log(`Dashboard 今日班別: ${shiftType}`);
+        }
+      }
+
+      // 從工作分配數據獲取今日工作區域
+      if (assignmentData && Array.isArray(assignmentData.data)) {
+        const todayAssignment = assignmentData.data.find(record => 
+          record.date === todayDateString && String(record.user_id) === String(userId)
+        );
+        
+        if (todayAssignment && todayAssignment.area_code) {
+          areaCode = todayAssignment.area_code;
+          console.log(`Dashboard 今日工作區域: ${areaCode}`);
+        }
+      }
+
+      setTodayWork({ 
+        shift: shiftType, 
+        areaCode: areaCode,
+        details: getShiftInfo(shiftType) 
+      });
+    } catch (error) {
+      console.error('Dashboard: 處理今日工作信息時出錯:', error);
+      setTodayWork({ shift: '', areaCode: null, details: getShiftInfo('') });
     }
-  }, [overtimeData, monthlySchedule, user, selectedDate, scheduleLoading]);
+  };
 
-  // 生成月曆數據的函數
+  // 生成月曆數據的函數（舊版本，保留以防需要）
   const generateCalendarData = (date, scheduleData, assignmentData, overtimeData) => {
     try {
       console.log("===== 開始生成Dashboard月曆數據 =====");
@@ -488,44 +813,8 @@ function Dashboard() {
     }
   };
 
-  // 處理排班數據的函數
-  const processScheduleData = () => {
-    if (!user || !monthlySchedule || monthlySchedule.length === 0) {
-      // 如果用戶信息或班表數據不存在，則不進行處理
-      // 可能需要根據 scheduleLoading 狀態決定是否顯示加載中
-      if (!scheduleLoading) {
-        setIsLoading(false);
-        // 可以選擇設置一個 '無數據' 的狀態
-        setTodayWork({ shift: '', areaCode: null, details: getShiftInfo('') });
-        // 無班表數據時設置空的月曆數據
-        setMonthlyCalendarData([]);
-      }
-      return;
-    }
-
-    const userSchedule = monthlySchedule.find(nurse => nurse.id === user.id);
-
-    if (userSchedule && userSchedule.shifts && userSchedule.area_codes) {
-      const shiftIndex = todayDate - 1; // 陣列索引從0開始
-      const shiftType = userSchedule.shifts[shiftIndex];
-      const areaCode = userSchedule.area_codes[shiftIndex];
-      
-      setTodayWork({ 
-        shift: shiftType, 
-        areaCode: areaCode,
-        details: getShiftInfo(shiftType) 
-      });
-    } else {
-      // 如果找不到用戶或數據不完整
-      setTodayWork({ shift: '', areaCode: null, details: getShiftInfo('') });
-    }
-    setIsLoading(false);
-
-    // 立即生成月曆數據，不等待加班數據
-    // 如果加班數據還沒準備好，月曆會在加班數據更新時重新生成
-    const calendarData = generateCalendarData(selectedDate, monthlySchedule, null, overtimeData);
-    setMonthlyCalendarData(calendarData);
-  };
+  // 🗑️ 舊的數據處理函數已被 ShiftSwap 模式替代
+  // const processScheduleData = () => { ... } - 已移除
 
   // 獲取最新公告的函數
   const fetchLatestAnnouncements = async () => {
@@ -579,6 +868,82 @@ function Dashboard() {
       setSwapsError(err.response?.data?.message || err.message || '無法加載換班請求');
     } finally {
       setSwapsLoading(false);
+    }
+  };
+
+  // 獲取在線用戶的函數
+  const fetchOnlineUsers = async () => {
+    if (!user) return;
+    
+    try {
+      setOnlineUsersLoading(true);
+      
+      const response = await apiService.user.getOnlineUsers();
+      
+      if (response.data) {
+        // 獲取所有在線用戶的今日班表信息
+        const usersWithShifts = await Promise.all(
+          response.data.map(async (onlineUser) => {
+            try {
+              // 獲取該用戶的今日班表
+              const year = today.getFullYear();
+              const month = today.getMonth() + 1;
+              const dayIndex = getDate(today) - 1;
+              
+              // 從已加載的班表數據中獲取該用戶的班表
+              let userShift = 'O';
+              if (monthlyCalendarData.length > 0) {
+                // 從月曆數據中找到今日的班表
+                const todayData = monthlyCalendarData
+                  .flat()
+                  .find(day => day.date && format(day.date, 'yyyy-MM-dd') === format(today, 'yyyy-MM-dd'));
+                
+                if (todayData && String(onlineUser.id) === String(user.id)) {
+                  userShift = todayData.shift || 'O';
+                }
+              }
+              
+              // 如果是其他用戶，需要單獨獲取其班表
+              if (String(onlineUser.id) !== String(user.id)) {
+                try {
+                  const scheduleResponse = await apiService.schedule.getMonthlySchedule(year, month);
+                  if (scheduleResponse.data && scheduleResponse.data.data && 
+                      scheduleResponse.data.data[year] && scheduleResponse.data.data[year][month]) {
+                    const nurseSchedules = scheduleResponse.data.data[year][month].schedule || [];
+                    const userSchedule = nurseSchedules.find(nurse => String(nurse.id) === String(onlineUser.id));
+                    
+                    if (userSchedule && userSchedule.shifts && userSchedule.shifts[dayIndex]) {
+                      userShift = userSchedule.shifts[dayIndex];
+                    }
+                  }
+                } catch (error) {
+                  console.log(`無法獲取用戶 ${onlineUser.full_name} 的班表:`, error);
+                }
+              }
+              
+              return {
+                ...onlineUser,
+                todayShift: userShift,
+                isWorking: isUserCurrentlyWorking(userShift)
+              };
+            } catch (error) {
+              console.log(`處理用戶 ${onlineUser.full_name} 時出錯:`, error);
+              return {
+                ...onlineUser,
+                todayShift: 'O',
+                isWorking: false
+              };
+            }
+          })
+        );
+        
+        setOnlineUsers(usersWithShifts);
+      }
+    } catch (err) {
+      console.error("獲取在線用戶失敗:", err);
+      setOnlineUsersError(err.response?.data?.message || err.message || '無法加載在線用戶');
+    } finally {
+      setOnlineUsersLoading(false);
     }
   };
 
@@ -663,117 +1028,26 @@ function Dashboard() {
     }
   }, [user, selectedDate]); // 加入selectedDate依賴，確保月份變更時重新獲取加班數據
 
-  // Effect 4: 獲取工作分配數據（首次載入強制刷新，後續使用快取）
+  // 獲取在線用戶，依賴月曆數據
   useEffect(() => {
-    // 只有當月班表加載完成且不在加載狀態時獲取，並且沒有正在進行的請求
-    if (!scheduleLoading && monthlySchedule && monthlySchedule.length > 0 && !isAreaAssignmentLoading) {
-      // 首次載入或月份變更時強制刷新，確保獲取最新的工作分配資料
-      const isFirstLoad = !monthlyCalendarData || monthlyCalendarData.length === 0;
-      fetchWorkAreaAssignments(isFirstLoad);
+    if (user && monthlyCalendarData.length > 0) {
+      fetchOnlineUsers();
     }
-  }, [monthlySchedule, scheduleLoading, user, selectedDate, isAreaAssignmentLoading]);
+  }, [user, monthlyCalendarData]);
 
-  // 獲取工作分配數據（優化版本，使用緩存）
-  const fetchWorkAreaAssignments = async (forceRefresh = false) => {
-    if (!user || isAreaAssignmentLoading) return;
-    
-    try {
-      setIsAreaAssignmentLoading(true);
-      
-      // 獲取當前年月
-      const year = selectedDate.getFullYear();
-      const month = selectedDate.getMonth() + 1; // 0-indexed，需 +1
-      
-      console.log(`正在獲取 ${year}年${month}月 的工作分配數據... ${forceRefresh ? '(強制刷新)' : ''}`);
-      
-      // 使用帶緩存的API請求，但允許強制刷新
-      const result = await cachedScheduleDetailsRequest(apiService, 'dashboard', year, month, forceRefresh);
-      
-      if (result.fromCache) {
-        console.log('使用緩存數據');
-      } else {
-        console.log('從API獲取最新數據');
-      }
-      
-      if (result.data && result.data.success) {
-        const details = result.data.data || [];
-        console.log(`成功獲取工作分配數據，共 ${details.length} 條記錄`);
-        
-        // 建立日期到工作分配的映射
-        const areaAssignments = {};
-        
-        // 篩選當前用戶的排班記錄並建立映射
-        details.forEach(item => {
-          if (String(item.user_id) === String(user.id)) {
-            const dateObj = new Date(item.date);
-            const day = dateObj.getDate();
-            
-            // 保存工作分配信息
-            areaAssignments[day] = item.area_code;
-          }
-        });
-        
-        console.log(`找到用戶 ${user.id} 的 ${Object.keys(areaAssignments).length} 個工作分配`);
-        
-        // 更新monthlySchedule中的area_codes
-        const updatedSchedule = monthlySchedule.map(nurse => {
-          if (String(nurse.id) === String(user.id)) {
-            // 創建更新後的area_codes數組
-            const updatedAreaCodes = [...(nurse.area_codes || Array(31).fill(null))];
-            
-            // 更新area_codes
-            Object.entries(areaAssignments).forEach(([day, areaCode]) => {
-              const index = parseInt(day) - 1; // 轉為0-based索引
-              if (index >= 0 && index < updatedAreaCodes.length) {
-                updatedAreaCodes[index] = areaCode;
-              }
-            });
-            
-            // 返回更新後的護理師數據
-            return {
-              ...nurse,
-              area_codes: updatedAreaCodes
-            };
-          }
-          return nurse;
-        });
-        
-        // 使用更新後的數據處理班表
-        processScheduleDataWithAreaCodes(updatedSchedule);
-      } else {
-        console.warn('獲取工作分配數據失敗:', result.data?.message || '未知錯誤');
-      }
-    } catch (err) {
-      console.error('獲取工作分配數據時出錯:', err);
-    } finally {
-      setIsAreaAssignmentLoading(false);
-    }
-  };
+  // 定時更新在線用戶狀態（每1分鐘）
+  useEffect(() => {
+    if (!user) return;
 
-  // 使用更新後的數據處理班表
-  const processScheduleDataWithAreaCodes = (updatedSchedule) => {
-    if (!user || !updatedSchedule || updatedSchedule.length === 0) {
-      return;
-    }
-    
-    const userSchedule = updatedSchedule.find(nurse => nurse.id === user.id);
-    
-    if (userSchedule && userSchedule.shifts && userSchedule.area_codes) {
-      const shiftIndex = todayDate - 1; // 陣列索引從0開始
-      const shiftType = userSchedule.shifts[shiftIndex];
-      const areaCode = userSchedule.area_codes[shiftIndex];
-      
-      setTodayWork({ 
-        shift: shiftType, 
-        areaCode: areaCode,
-        details: getShiftInfo(shiftType) 
-      });
-      
-      // 生成月曆數據
-      const calendarData = generateCalendarData(selectedDate, updatedSchedule, null, overtimeData);
-      setMonthlyCalendarData(calendarData);
-    }
-  };
+    const interval = setInterval(() => {
+      fetchOnlineUsers();
+    }, 60000); // 1分鐘更新一次（因為現在有心跳功能）
+
+    return () => clearInterval(interval);
+  }, [user, monthlyCalendarData]);
+
+  // 🗑️ 舊的複雜 Effect 和函數已被 ShiftSwap 模式替代
+  // Effect 4, fetchWorkAreaAssignments, processScheduleDataWithAreaCodes - 已移除
 
   // 檢查是否需要顯示 Passkey 提示框
   useEffect(() => {
@@ -886,6 +1160,8 @@ function Dashboard() {
                 </CardContent>
               </Card>
             </Grid>
+
+
             
             {/* 本月班表卡片 - 右下，填滿剩餘空間 */}
             <Grid item xs={12} sx={{ flex: 1, display: 'flex' }}>
@@ -898,64 +1174,46 @@ function Dashboard() {
                   
                   {monthlyCalendarData.length > 0 ? (
                     <Box sx={{ width: '100%', overflowX: 'auto', flex: 1 }}>
-                      {/* 日曆表格 */}
-                      <Box component="table" sx={{ 
-                        width: '100%', 
-                        height: '100%',
-                        borderCollapse: 'collapse',
-                        border: '1px solid #e0e0e0'
-                      }}>
-                        {/* 表頭 */}
-                        <Box component="thead">
-                          <Box component="tr">
-                            {['一', '二', '三', '四', '五', '六', '日'].map(day => (
-                              <Box 
-                                component="th" 
-                                key={day}
-                                sx={{
-                                  padding: '8px',
-                                  textAlign: 'center',
-                                  backgroundColor: '#f5f5f5',
-                                  border: '1px solid #e0e0e0',
-                                  fontSize: '14px',
-                                  fontWeight: 'bold',
-                                  width: '14.28%'
-                                }}
-                              >
-                                {day}
-                              </Box>
-                            ))}
-                          </Box>
-                        </Box>
-                        
-                        {/* 表格主體 */}
-                        <Box component="tbody">
-                          {monthlyCalendarData.map((week, weekIndex) => (
-                            <Box component="tr" key={weekIndex}>
-                              {week.map((dayData, dayIndex) => (
-                                <Box 
-                                  component="td" 
-                                  key={dayIndex}
-                                  sx={{
-                                    ...calendarCellStyle,
-                                    height: '90px',
-                                    ...(dayData.date && isToday(dayData.date) && { 
-                                      backgroundColor: '#e8f5e9',
-                                      border: '2px solid #4caf50'
-                                    }),
-                                    ...((!dayData.date) && { 
-                                      backgroundColor: '#f9f9f9',
-                                      opacity: 0.5
-                                    })
-                                  }}
-                                >
-                                  {dayData.date && <RenderCalendarCell day={dayData} />}
-                                </Box>
+                      {/* 🚀 完全複製 ShiftSwap 的月曆表格實現 */}
+                      <style>{calendarStyles}</style>
+                      <div className="calendar-container">
+                        <table className="calendar-table">
+                          <thead>
+                            <tr>
+                              {weekDays.map(day => (
+                                <th key={day}>{day}</th>
                               ))}
-                            </Box>
-                          ))}
-                        </Box>
-                      </Box>
+                            </tr>
+                          </thead>
+                          <tbody>
+                          {monthlyCalendarData.map((week, weekIndex) => (
+                              <tr key={weekIndex}>
+                                {week.map((day, dayIndex) => {
+                                  // 檢查日期是否過期
+                                  const isExpired = day.date && day.date < today;
+                                  
+                                  return (
+                                    <td 
+                                  key={dayIndex}
+                                      className={`
+                                        ${!day.date ? 'empty-cell' : ''}
+                                        ${day.date && isToday(day.date) ? 'today' : ''}
+                                        ${isExpired ? 'expired-cell' : ''} 
+                                      `}
+                                      style={{
+                                        cursor: isExpired ? 'not-allowed' : 'default',
+                                        opacity: isExpired ? 0.5 : 1
+                                      }}
+                                    >
+                                      {day.date && <RenderCalendarCell day={day} />}
+                                    </td>
+                                  );
+                                })}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     </Box>
                   ) : (
                     <Typography variant="body1" color="text.secondary">
@@ -972,6 +1230,109 @@ function Dashboard() {
                     查看詳細班表
                   </Button>
                 </CardActions>
+              </Card>
+            </Grid>
+
+            {/* 在線用戶卡片 - 手機版：本月班表下方 */}
+            <Grid item xs={12} sx={{ 
+              height: 'auto',
+              display: { xs: 'block', md: 'none' }  // 只在手機版顯示
+            }}>
+              <Card sx={{ height: 'fit-content', boxShadow: 'none', border: '1px solid #e0e0e0' }}>
+                <CardContent>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                    <Badge 
+                      badgeContent={onlineUsers.length} 
+                      color="success" 
+                      sx={{ mr: 1 }}
+                    >
+                      <WorkIcon color="primary" />
+                    </Badge>
+                    <Typography variant="h6">目前在線</Typography>
+                  </Box>
+                  
+                  {onlineUsersLoading ? (
+                    <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+                      <CircularProgress size={24} />
+                    </Box>
+                  ) : onlineUsersError ? (
+                    <Alert severity="error" sx={{ mb: 1 }}>
+                      {onlineUsersError}
+                    </Alert>
+                  ) : onlineUsers.length > 0 ? (
+                    <List sx={{ p: 0, maxHeight: 200, overflowY: 'auto' }}>
+                      {onlineUsers.map((onlineUser, index) => (
+                        <React.Fragment key={onlineUser.id}>
+                          <ListItem sx={{ px: 0, py: 0.5 }}>
+                            <ListItemAvatar>
+                              <Avatar 
+                                sx={{ 
+                                  width: 32, 
+                                  height: 32, 
+                                  fontSize: '0.8rem',
+                                  backgroundColor: onlineUser.isWorking ? '#f44336' : '#9e9e9e', // 上班時間顯示紅色
+                                  color: 'white'
+                                }}
+                              >
+                                {onlineUser.full_name?.charAt(0) || onlineUser.username?.charAt(0) || '?'}
+                              </Avatar>
+                            </ListItemAvatar>
+                            <ListItemText
+                              primary={
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                  <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                                    {onlineUser.full_name || onlineUser.username}
+                                  </Typography>
+                                  <Chip 
+                                    label={onlineUser.todayShift || 'O'} 
+                                    size="small" 
+                                    sx={{ 
+                                      backgroundColor: SHIFT_COLORS[onlineUser.todayShift] || '#9e9e9e', // 手機版班表顏色 Chip
+                                      color: onlineUser.todayShift === 'O' ? 'black' : 'white',
+                                      height: '18px',
+                                      minWidth: '18px',
+                                      fontSize: '10px',
+                                      '& .MuiChip-label': {
+                                        padding: '0 4px',
+                                        fontSize: '10px',
+                                        fontWeight: 'bold'
+                                      }
+                                    }}
+                                  />
+                                  <Chip 
+                                    label={onlineUser.isWorking ? '上班中' : '非上班時間'} 
+                                    size="small" 
+                                    sx={{ 
+                                      backgroundColor: onlineUser.isWorking ? '#f44336' : '#9e9e9e', // 上班時間顯示紅色
+                                      color: 'white',
+                                      height: '18px',
+                                      fontSize: '10px',
+                                      '& .MuiChip-label': {
+                                        padding: '0 4px',
+                                        fontSize: '10px',
+                                        fontWeight: 'bold'
+                                      }
+                                    }}
+                                  />
+                                </Box>
+                              }
+                              secondary={
+                                <Typography variant="caption" color="text.secondary">
+                                  {onlineUser.identity || '未設定身份'} • 最後活動: {onlineUser.last_login_time ? format(parseISO(onlineUser.last_login_time), 'HH:mm') : '未知'}
+                                </Typography>
+                              }
+                            />
+                          </ListItem>
+                          {index < onlineUsers.length - 1 && <Divider />}
+                        </React.Fragment>
+                      ))}
+                    </List>
+                  ) : (
+                    <Typography variant="body2" color="text.secondary">
+                      目前沒有其他用戶在線
+                    </Typography>
+                  )}
+                </CardContent>
               </Card>
             </Grid>
           </Grid>
@@ -1046,6 +1407,109 @@ function Dashboard() {
                     查看所有公告
                   </Button>
                 </CardActions>
+              </Card>
+            </Grid>
+
+            {/* 在線用戶卡片 - 桌面版：最新公告下方 */}
+            <Grid item xs={12} sx={{ 
+              height: 'auto',
+              display: { xs: 'none', md: 'block' }  // 只在桌面版顯示
+            }}>
+              <Card sx={{ height: 'fit-content', boxShadow: 'none', border: '1px solid #e0e0e0' }}>
+                <CardContent>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                    <Badge 
+                      badgeContent={onlineUsers.length} 
+                      color="success" 
+                      sx={{ mr: 1 }}
+                    >
+                      <WorkIcon color="primary" />
+                    </Badge>
+                    <Typography variant="h6">目前在線</Typography>
+                  </Box>
+                  
+                  {onlineUsersLoading ? (
+                    <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+                      <CircularProgress size={24} />
+                    </Box>
+                  ) : onlineUsersError ? (
+                    <Alert severity="error" sx={{ mb: 1 }}>
+                      {onlineUsersError}
+                    </Alert>
+                  ) : onlineUsers.length > 0 ? (
+                    <List sx={{ p: 0, maxHeight: 200, overflowY: 'auto' }}>
+                      {onlineUsers.map((onlineUser, index) => (
+                        <React.Fragment key={onlineUser.id}>
+                          <ListItem sx={{ px: 0, py: 0.5 }}>
+                            <ListItemAvatar>
+                              <Avatar 
+                                sx={{ 
+                                  width: 32, 
+                                  height: 32, 
+                                  fontSize: '0.8rem',
+                                  backgroundColor: onlineUser.isWorking ? '#f44336' : '#9e9e9e', // 上班時間顯示紅色
+                                  color: 'white'
+                                }}
+                              >
+                                {onlineUser.full_name?.charAt(0) || onlineUser.username?.charAt(0) || '?'}
+                              </Avatar>
+                            </ListItemAvatar>
+                            <ListItemText
+                              primary={
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                  <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                                    {onlineUser.full_name || onlineUser.username}
+                                  </Typography>
+                                  <Chip 
+                                    label={onlineUser.todayShift || 'O'} 
+                                    size="small" 
+                                    sx={{ 
+                                      backgroundColor: SHIFT_COLORS[onlineUser.todayShift] || '#9e9e9e', // 桌面版班表顏色 Chip
+                                      color: onlineUser.todayShift === 'O' ? 'black' : 'white',
+                                      height: '18px',
+                                      minWidth: '18px',
+                                      fontSize: '10px',
+                                      '& .MuiChip-label': {
+                                        padding: '0 4px',
+                                        fontSize: '10px',
+                                        fontWeight: 'bold'
+                                      }
+                                    }}
+                                  />
+                                  <Chip 
+                                    label={onlineUser.isWorking ? '上班中' : '非上班時間'} 
+                                    size="small" 
+                                    sx={{ 
+                                      backgroundColor: onlineUser.isWorking ? '#f44336' : '#9e9e9e', // 上班時間顯示紅色
+                                      color: 'white',
+                                      height: '18px',
+                                      fontSize: '10px',
+                                      '& .MuiChip-label': {
+                                        padding: '0 4px',
+                                        fontSize: '10px',
+                                        fontWeight: 'bold'
+                                      }
+                                    }}
+                                  />
+                                </Box>
+                              }
+                              secondary={
+                                <Typography variant="caption" color="text.secondary">
+                                  {onlineUser.identity || '未設定身份'} • 最後活動: {onlineUser.last_login_time ? format(parseISO(onlineUser.last_login_time), 'HH:mm') : '未知'}
+                                </Typography>
+                              }
+                            />
+                          </ListItem>
+                          {index < onlineUsers.length - 1 && <Divider />}
+                        </React.Fragment>
+                      ))}
+                    </List>
+                  ) : (
+                    <Typography variant="body2" color="text.secondary">
+                      目前沒有其他用戶在線
+                    </Typography>
+                  )}
+                </CardContent>
               </Card>
             </Grid>
 
