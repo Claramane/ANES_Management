@@ -881,61 +881,56 @@ function Dashboard() {
       const response = await apiService.user.getOnlineUsers();
       
       if (response.data) {
-        // 獲取所有在線用戶的今日班表信息
-        const usersWithShifts = await Promise.all(
-          response.data.map(async (onlineUser) => {
-            try {
-              // 獲取該用戶的今日班表
-              const year = today.getFullYear();
-              const month = today.getMonth() + 1;
-              const dayIndex = getDate(today) - 1;
-              
-              // 從已加載的班表數據中獲取該用戶的班表
-              let userShift = 'O';
-              if (monthlyCalendarData.length > 0) {
-                // 從月曆數據中找到今日的班表
-                const todayData = monthlyCalendarData
-                  .flat()
-                  .find(day => day.date && format(day.date, 'yyyy-MM-dd') === format(today, 'yyyy-MM-dd'));
-                
-                if (todayData && String(onlineUser.id) === String(user.id)) {
-                  userShift = todayData.shift || 'O';
-                }
+        // 獲取當月班表資料（用於批量獲取所有用戶班表）
+        const year = today.getFullYear();
+        const month = today.getMonth() + 1;
+        const dayIndex = getDate(today) - 1;
+        
+        let scheduleData = null;
+        try {
+          const scheduleResponse = await apiService.schedule.getMonthlySchedule(year, month);
+          if (scheduleResponse.data && scheduleResponse.data.data && 
+              scheduleResponse.data.data[year] && scheduleResponse.data.data[year][month]) {
+            scheduleData = scheduleResponse.data.data[year][month].schedule || [];
+          }
+        } catch (error) {
+          console.log('無法獲取月班表資料，將使用默認班表:', error);
+        }
+        
+        // 處理所有在線用戶的班表信息
+        const usersWithShifts = response.data.map((onlineUser) => {
+          let userShift = 'O'; // 默認休假
+          
+          try {
+            // 從班表數據中查找該用戶的今日班表
+            if (scheduleData) {
+              const userSchedule = scheduleData.find(nurse => String(nurse.id) === String(onlineUser.id));
+              if (userSchedule && userSchedule.shifts && userSchedule.shifts[dayIndex]) {
+                userShift = userSchedule.shifts[dayIndex];
               }
-              
-              // 如果是其他用戶，需要單獨獲取其班表
-              if (String(onlineUser.id) !== String(user.id)) {
-                try {
-                  const scheduleResponse = await apiService.schedule.getMonthlySchedule(year, month);
-                  if (scheduleResponse.data && scheduleResponse.data.data && 
-                      scheduleResponse.data.data[year] && scheduleResponse.data.data[year][month]) {
-                    const nurseSchedules = scheduleResponse.data.data[year][month].schedule || [];
-                    const userSchedule = nurseSchedules.find(nurse => String(nurse.id) === String(onlineUser.id));
-                    
-                    if (userSchedule && userSchedule.shifts && userSchedule.shifts[dayIndex]) {
-                      userShift = userSchedule.shifts[dayIndex];
-                    }
-                  }
-                } catch (error) {
-                  console.log(`無法獲取用戶 ${onlineUser.full_name} 的班表:`, error);
-                }
-              }
-              
-              return {
-                ...onlineUser,
-                todayShift: userShift,
-                isWorking: isUserCurrentlyWorking(userShift)
-              };
-            } catch (error) {
-              console.log(`處理用戶 ${onlineUser.full_name} 時出錯:`, error);
-              return {
-                ...onlineUser,
-                todayShift: 'O',
-                isWorking: false
-              };
             }
-          })
-        );
+            
+            // 如果是當前登入用戶，且有月曆數據，優先使用月曆數據
+            if (String(onlineUser.id) === String(user.id) && monthlyCalendarData.length > 0) {
+              const todayData = monthlyCalendarData
+                .flat()
+                .find(day => day.date && format(day.date, 'yyyy-MM-dd') === format(today, 'yyyy-MM-dd'));
+              
+              if (todayData && todayData.shift) {
+                userShift = todayData.shift;
+              }
+            }
+          } catch (error) {
+            console.log(`處理用戶 ${onlineUser.full_name} 的班表時出錯:`, error);
+            // 使用默認值 'O'，確保用戶仍然顯示在線狀態
+          }
+          
+          return {
+            ...onlineUser,
+            todayShift: userShift,
+            isWorking: isUserCurrentlyWorking(userShift)
+          };
+        });
         
         setOnlineUsers(usersWithShifts);
       }
@@ -1028,23 +1023,24 @@ function Dashboard() {
     }
   }, [user, selectedDate]); // 加入selectedDate依賴，確保月份變更時重新獲取加班數據
 
-  // 獲取在線用戶，依賴月曆數據
+  // 獲取在線用戶 - 初始加載
   useEffect(() => {
-    if (user && monthlyCalendarData.length > 0) {
+    if (user) {
+      // 立即獲取一次在線用戶，不等待月曆數據
       fetchOnlineUsers();
     }
-  }, [user, monthlyCalendarData]);
+  }, [user]);
 
-  // 定時更新在線用戶狀態（每1分鐘）
+  // 定時更新在線用戶狀態（每20秒）
   useEffect(() => {
     if (!user) return;
 
     const interval = setInterval(() => {
       fetchOnlineUsers();
-    }, 60000); // 1分鐘更新一次（因為現在有心跳功能）
+    }, 20000); // 20秒更新一次，提升實時性
 
     return () => clearInterval(interval);
-  }, [user, monthlyCalendarData]);
+  }, [user]); // 移除monthlyCalendarData依賴，避免不必要的定時器重建
 
   // 🗑️ 舊的複雜 Effect 和函數已被 ShiftSwap 模式替代
   // Effect 4, fetchWorkAreaAssignments, processScheduleDataWithAreaCodes - 已移除
