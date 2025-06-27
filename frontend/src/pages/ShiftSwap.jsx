@@ -2687,31 +2687,31 @@ const ShiftSwap = () => {
                       label="想換到的工作區域"
                       onChange={(e) => setSwapFormData(prev => ({ ...prev, toMission: e.target.value }))}
                     >
-                      <MenuItem value=""><em>不指定 (由接受者決定)</em></MenuItem>
-                      <MenuItem value="OR1">OR1 - 手術室1</MenuItem>
-                      <MenuItem value="OR2">OR2 - 手術室2</MenuItem>
-                      <MenuItem value="OR3">OR3 - 手術室3</MenuItem>
-                      <MenuItem value="OR5">OR5 - 手術室5</MenuItem>
-                      <MenuItem value="OR6">OR6 - 手術室6</MenuItem>
-                      <MenuItem value="OR7">OR7 - 手術室7</MenuItem>
-                      <MenuItem value="OR8">OR8 - 手術室8</MenuItem>
-                      <MenuItem value="OR9">OR9 - 手術室9</MenuItem>
-                      <MenuItem value="OR11">OR11 - 手術室11</MenuItem>
-                      <MenuItem value="OR13">OR13 - 手術室13</MenuItem>
-                      <MenuItem value="DR">DR - 恢復室</MenuItem>
-                      <MenuItem value="3F1">3F1 - 三樓1</MenuItem>
-                      <MenuItem value="3F2">3F2 - 三樓2</MenuItem>
-                      <MenuItem value="3F_Recovery">3F_Recovery - 三樓恢復室</MenuItem>
-                      <MenuItem value="CC">CC - 疼痛控制中心</MenuItem>
-                      <MenuItem value="F1">F1 - 會診室1</MenuItem>
-                      <MenuItem value="F2">F2 - 會診室2</MenuItem>
-                      <MenuItem value="P">P - 備用</MenuItem>
-                      <MenuItem value="PAR1">PAR1 - 麻醉準備區1</MenuItem>
-                      <MenuItem value="PAR2">PAR2 - 麻醉準備區2</MenuItem>
-                      <MenuItem value="C">C - 備料區</MenuItem>
-                      <MenuItem value="HC1">HC1 - 一般照護1</MenuItem>
-                      <MenuItem value="HC2">HC2 - 一般照護2</MenuItem>
-                      <MenuItem value="HC3">HC3 - 一般照護3</MenuItem>
+                      <MenuItem value=""><em>不指定</em></MenuItem>
+                      <MenuItem value="OR1">OR1</MenuItem>
+                      <MenuItem value="OR2">OR2</MenuItem>
+                      <MenuItem value="OR3">OR3</MenuItem>
+                      <MenuItem value="OR5">OR5</MenuItem>
+                      <MenuItem value="OR6">OR6</MenuItem>
+                      <MenuItem value="OR7">OR7</MenuItem>
+                      <MenuItem value="OR8">OR8</MenuItem>
+                      <MenuItem value="OR9">OR9</MenuItem>
+                      <MenuItem value="OR11">OR11</MenuItem>
+                      <MenuItem value="OR13">OR13</MenuItem>
+                      <MenuItem value="DR">DR</MenuItem>
+                      <MenuItem value="3F1">3F1</MenuItem>
+                      <MenuItem value="3F2">3F2</MenuItem>
+                      <MenuItem value="3F3">3F3</MenuItem>
+                      <MenuItem value="CC">CC</MenuItem>
+                      <MenuItem value="F1">F1</MenuItem>
+                      <MenuItem value="F2">F2</MenuItem>
+                      <MenuItem value="P">P</MenuItem>
+                      <MenuItem value="PAR1">PAR1</MenuItem>
+                      <MenuItem value="PAR2">PAR2</MenuItem>
+                      <MenuItem value="C">C</MenuItem>
+                      <MenuItem value="HC1">HC1</MenuItem>
+                      <MenuItem value="HC2">HC2</MenuItem>
+                      <MenuItem value="HC3">HC3</MenuItem>
                     </Select>
                   </FormControl>
                 </Box>
