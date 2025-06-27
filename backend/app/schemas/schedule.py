@@ -1,6 +1,7 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, validator
 from typing import Optional, List, Dict, Any
 from datetime import datetime, date
+from ..utils.timezone import utc_to_taiwan
 
 # 基本月度排班表模式
 class MonthlyScheduleBase(BaseModel):
@@ -29,6 +30,13 @@ class MonthlySchedule(MonthlyScheduleBase):
 
     class Config:
         from_attributes = True
+
+    # 自動轉換UTC時間為台灣時間
+    @validator('created_at', 'updated_at', pre=False, always=True)
+    def convert_utc_to_taiwan(cls, v):
+        if v is None:
+            return v
+        return utc_to_taiwan(v)
 
 # 基本班表版本模式
 class ScheduleVersionBase(BaseModel):

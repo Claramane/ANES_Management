@@ -80,4 +80,73 @@ def get_timezone_info() -> dict:
         "timezone": "Asia/Taipei",
         "offset": "+08:00",
         "time_difference_hours": time_diff.total_seconds() / 3600
-    } 
+    }
+
+def utc_to_taiwan(utc_datetime: Optional[datetime]) -> Optional[datetime]:
+    """
+    將UTC時間轉換為台灣時間
+    
+    Args:
+        utc_datetime: UTC時間
+        
+    Returns:
+        datetime: 台灣時間，如果輸入為None則返回None
+    """
+    if utc_datetime is None:
+        return None
+    
+    # 如果已經有時區資訊，先轉為UTC
+    if utc_datetime.tzinfo is not None:
+        utc_datetime = utc_datetime.astimezone(pytz.UTC).replace(tzinfo=None)
+    
+    # 將UTC時間標記為UTC時區
+    utc_tz_datetime = pytz.UTC.localize(utc_datetime)
+    
+    # 轉換為台灣時區
+    taiwan_tz_datetime = utc_tz_datetime.astimezone(TAIWAN_TZ)
+    
+    # 返回不帶時區資訊的datetime
+    return taiwan_tz_datetime.replace(tzinfo=None)
+
+def taiwan_to_utc(taiwan_datetime: Optional[datetime]) -> Optional[datetime]:
+    """
+    將台灣時間轉換為UTC時間
+    
+    Args:
+        taiwan_datetime: 台灣時間
+        
+    Returns:
+        datetime: UTC時間，如果輸入為None則返回None
+    """
+    if taiwan_datetime is None:
+        return None
+    
+    # 如果已經有時區資訊，先轉為台灣時區
+    if taiwan_datetime.tzinfo is not None:
+        taiwan_datetime = taiwan_datetime.astimezone(TAIWAN_TZ).replace(tzinfo=None)
+    
+    # 將台灣時間標記為台灣時區
+    taiwan_tz_datetime = TAIWAN_TZ.localize(taiwan_datetime)
+    
+    # 轉換為UTC時區
+    utc_tz_datetime = taiwan_tz_datetime.astimezone(pytz.UTC)
+    
+    # 返回不帶時區資訊的datetime
+    return utc_tz_datetime.replace(tzinfo=None)
+
+def format_taiwan_time(utc_datetime: Optional[datetime], format_str: str = '%Y-%m-%d %H:%M:%S') -> Optional[str]:
+    """
+    將UTC時間格式化為台灣時間字串
+    
+    Args:
+        utc_datetime: UTC時間
+        format_str: 格式化字串
+        
+    Returns:
+        str: 格式化後的台灣時間字串，如果輸入為None則返回None
+    """
+    if utc_datetime is None:
+        return None
+    
+    taiwan_time = utc_to_taiwan(utc_datetime)
+    return taiwan_time.strftime(format_str) if taiwan_time else None 

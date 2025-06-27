@@ -271,6 +271,54 @@ async def debug_online_users_info(
             detail=f"獲取調適資訊失敗: {str(e)}"
         )
 
+@router.get("/debug/timezone-test")
+async def debug_timezone_test(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """調適端點：測試時區轉換功能"""
+    from datetime import datetime, timedelta
+    from sqlalchemy import func, text
+    from ..utils.timezone import utc_to_taiwan, taiwan_to_utc, format_taiwan_time, get_timezone_info
+    
+    try:
+        # 獲取資料庫當前時間
+        db_time_result = db.execute(text("SELECT NOW() as db_time")).fetchone()
+        db_utc_time = db_time_result[0]
+        
+        # 測試時區轉換
+        taiwan_time = utc_to_taiwan(db_utc_time)
+        back_to_utc = taiwan_to_utc(taiwan_time) if taiwan_time else None
+        formatted_taiwan = format_taiwan_time(db_utc_time)
+        
+        # 獲取時區資訊
+        timezone_info = get_timezone_info()
+        
+        # 測試用戶資料的時間轉換
+        test_user = db.query(User).filter(User.id == current_user.id).first()
+        
+        return {
+            "database_utc_time": db_utc_time,
+            "converted_taiwan_time": taiwan_time,
+            "back_to_utc_time": back_to_utc,
+            "formatted_taiwan_time": formatted_taiwan,
+            "timezone_info": timezone_info,
+            "current_user_times": {
+                "last_login_time_raw": test_user.last_login_time,
+                "last_activity_time_raw": test_user.last_activity_time,
+                "created_at_raw": test_user.created_at,
+                "updated_at_raw": test_user.updated_at
+            },
+            "schema_conversion_note": "User Schema 會自動將這些時間轉換為台灣時間"
+        }
+        
+    except Exception as e:
+        logger.error(f"時區測試失敗: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"時區測試失敗: {str(e)}"
+        )
+
 @router.put("/users/{user_id}", response_model=UserSchema)
 async def update_user(
     user_id: int,

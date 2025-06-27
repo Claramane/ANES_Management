@@ -1,6 +1,7 @@
 from pydantic import BaseModel, validator
 from typing import Optional, List
 from datetime import datetime, date
+from ..utils.timezone import utc_to_taiwan
 
 # 基本換班請求模式
 class ShiftSwapRequestBase(BaseModel):
@@ -50,6 +51,13 @@ class ShiftSwapRequest(ShiftSwapRequestBase):
     class Config:
         from_attributes = True
 
+    # 自動轉換UTC時間為台灣時間
+    @validator('created_at', 'updated_at', 'accepted_at', pre=False, always=True)
+    def convert_utc_to_taiwan(cls, v):
+        if v is None:
+            return v
+        return utc_to_taiwan(v)
+
 # 完整換班資訊（包含關聯數據）
 class ShiftSwapRequestFull(ShiftSwapRequest):
     requestor: Optional[dict] = None
@@ -93,6 +101,13 @@ class ShiftRule(ShiftRuleBase):
 
     class Config:
         from_attributes = True
+
+    # 自動轉換UTC時間為台灣時間
+    @validator('created_at', 'updated_at', pre=False, always=True)
+    def convert_utc_to_taiwan(cls, v):
+        if v is None:
+            return v
+        return utc_to_taiwan(v)
 
 # 驗證換班請求
 class ValidateSwapRequest(BaseModel):

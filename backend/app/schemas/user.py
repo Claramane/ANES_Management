@@ -1,6 +1,7 @@
 from pydantic import BaseModel, EmailStr, Field, validator
 from typing import Optional, List
 from datetime import datetime, date
+from ..utils.timezone import utc_to_taiwan
 
 # 基本用戶模式
 class UserBase(BaseModel):
@@ -59,6 +60,13 @@ class User(UserBase):
 
     class Config:
         from_attributes = True
+    
+    # 自動轉換UTC時間為台灣時間
+    @validator('last_login_time', 'last_activity_time', 'created_at', 'updated_at', 'deactivated_at', pre=False, always=True)
+    def convert_utc_to_taiwan(cls, v):
+        if v is None:
+            return v
+        return utc_to_taiwan(v)
 
 # 令牌數據
 class Token(BaseModel):
