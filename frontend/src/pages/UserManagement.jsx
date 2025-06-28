@@ -456,6 +456,42 @@ const UserManagement = () => {
     
     return { years, months };
   };
+
+  // 格式化最後登入信息
+  const formatLastLogin = (lastLoginTime, lastLoginIp) => {
+    if (!lastLoginTime) {
+      return '從未登入';
+    }
+    
+    try {
+      const loginDate = new Date(lastLoginTime);
+      const now = new Date();
+      const diffMs = now - loginDate;
+      const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+      const diffDays = Math.floor(diffHours / 24);
+      
+      let timeText = '';
+      if (diffDays > 0) {
+        timeText = `${diffDays}天前`;
+      } else if (diffHours > 0) {
+        timeText = `${diffHours}小時前`;
+      } else {
+        const diffMinutes = Math.floor(diffMs / (1000 * 60));
+        timeText = diffMinutes > 0 ? `${diffMinutes}分鐘前` : '剛剛';
+      }
+      
+      const ipText = lastLoginIp || '未知IP';
+      
+      return (
+        <Box sx={{ fontSize: '0.875rem' }}>
+          <div>{timeText}</div>
+          <div style={{ color: '#666', fontSize: '0.8rem' }}>{ipText}</div>
+        </Box>
+      );
+    } catch (error) {
+      return '時間格式錯誤';
+    }
+  };
   
   // 編輯模式切換函數
   const handleEditModeToggle = async () => {
@@ -541,6 +577,7 @@ const UserManagement = () => {
                     <TableCell>員工編號</TableCell>
                     <TableCell>姓名</TableCell>
                     <TableCell>狀態</TableCell>
+                    <TableCell>最後上線</TableCell>
                     <TableCell>電子郵件</TableCell>
                     <TableCell>入職日期</TableCell>
                     <TableCell>身份</TableCell>
@@ -574,6 +611,9 @@ const UserManagement = () => {
                               <CheckCircleIcon sx={{ color: '#4caf50', fontSize: 24 }} />
                             </Tooltip>
                           )}
+                        </TableCell>
+                        <TableCell>
+                          {formatLastLogin(user.last_login_time, user.last_login_ip)}
                         </TableCell>
                         <TableCell>
                           {editMode && user.role !== 'head_nurse' && user.role !== 'admin' && user.is_active !== false ? (
@@ -670,7 +710,7 @@ const UserManagement = () => {
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={editMode ? 8 : 6} align="center">
+                      <TableCell colSpan={editMode ? 9 : 7} align="center">
                         沒有找到用戶
                       </TableCell>
                     </TableRow>
