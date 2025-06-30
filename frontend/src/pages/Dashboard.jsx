@@ -45,6 +45,8 @@ import { zhTW } from 'date-fns/locale';
 import { cachedScheduleDetailsRequest } from '../utils/scheduleCache';
 import { SHIFT_COLORS } from '../constants/shiftSwapConstants';
 import useHeartbeat from '../hooks/useHeartbeat';
+import { doctorScheduleService } from '../utils/api';
+import { formatDoctorName, getDoctorMapping } from '../utils/doctorUtils';
 
 // 班次顏色和名稱的映射，可以根據需要擴展
 const shiftDetails = {
@@ -139,6 +141,19 @@ const getCategoryStyle = (category) => {
   return categoryColors[category] || categoryColors.default;
 };
 
+// 醫師班表區域代碼對應的顏色映射
+const DOCTOR_AREA_COLOR_MAPPING = {
+  '控台醫師': '#c5706b',      // 紅色系
+  '手術室': '#6b9d6b',          // 綠色系  
+  '外圍(3F)': '#6b8fb8',      // 藍色系
+  '外圍(高階)': '#8a729b',    // 紫色系
+  '外圍(TAE)': '#b8866b',     // 棕色系
+  '值班': '#d4935a',          // 橘色系
+  '加班': '#c5804a',          // 深橘色系
+  '代班': '#7a5d80',          // 深紫色系
+  '未分類': '#9e9e9e'         // 灰色系
+};
+
 // 🚀 直接複製 ShiftSwap 的完整月曆實現，包括 CSS 樣式
 const calendarStyles = `
   .calendar-container {
@@ -218,6 +233,126 @@ const calendarStyles = `
     cursor: pointer;
   }
 `;
+
+// 醫師班表日曆單元格渲染組件
+const RenderDoctorCalendarCell = ({ day }) => {
+  if (!day.date) return null;
+  
+  // 判斷是否為過期日期
+  const isPastDate = day.date < startOfToday();
+  
+  return (
+    <div 
+      style={{ 
+        display: 'flex', 
+        flexDirection: 'column',
+        height: '100%',
+        width: '100%',
+        opacity: isPastDate ? 0.5 : 1,
+        overflow: 'hidden',
+        padding: '0.5px',
+      }}
+    >
+      {/* 日期顯示在最上方 */}
+      <Box sx={{ 
+        textAlign: 'right',
+        padding: { xs: '2px 4px', sm: '3px 6px' },
+        fontWeight: 'bold',
+        fontSize: { xs: '12px', sm: '16px' },
+        width: '100%',
+        opacity: isPastDate ? 0.6 : 1,
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
+      }}>
+        {format(day.date, 'd')}
+      </Box>
+      
+      {/* 事件顯示 */}
+      <Box sx={{ 
+        display: 'flex', 
+        flexDirection: 'column',
+        gap: { xs: '0.5px', sm: '1px' },
+        overflow: 'hidden',
+        flex: 1,
+        width: '100%',
+        mt: { xs: 0.1, sm: 0.25 },
+        maxHeight: { xs: 'calc(100% - 16px)', sm: 'calc(100% - 16px)' },
+      }}>
+        {day.events && day.events.map((event, index) => {
+          let eventText = event.summary || event.title || '';
+          let backgroundColor = '#9e9e9e';
+          let textColor = 'white';
+          
+          // 根據summary的內容決定顏色
+          if (eventText.includes('值班')) {
+            backgroundColor = DOCTOR_AREA_COLOR_MAPPING['值班'];
+          } else if (eventText.includes('加班')) {
+            backgroundColor = DOCTOR_AREA_COLOR_MAPPING['加班'];
+          } else if (eventText.includes('代班')) {
+            backgroundColor = DOCTOR_AREA_COLOR_MAPPING['代班'];
+          } else if (eventText.includes('/A')) {
+            backgroundColor = DOCTOR_AREA_COLOR_MAPPING['控台醫師'];
+          } else if (eventText.includes('/B') || eventText.includes('/E')) {
+            backgroundColor = DOCTOR_AREA_COLOR_MAPPING['手術室'];
+          } else if (eventText.includes('/C')) {
+            backgroundColor = DOCTOR_AREA_COLOR_MAPPING['外圍(3F)'];
+          } else if (eventText.includes('/D') && !eventText.match(/\/D\s+\w/)) {
+            backgroundColor = DOCTOR_AREA_COLOR_MAPPING['外圍(高階)'];
+          } else if (eventText.includes('/F')) {
+            backgroundColor = DOCTOR_AREA_COLOR_MAPPING['外圍(TAE)'];
+          } else if (eventText.match(/\/D\s+\w/)) {
+            backgroundColor = DOCTOR_AREA_COLOR_MAPPING['手術室'];
+          }
+          
+          return (
+            <Box 
+              key={index}
+              sx={{ 
+                fontSize: { xs: '11px', sm: '13px' },
+                padding: { xs: '1px 2px', sm: '2px 4px' },
+                borderRadius: '3px',
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                boxSizing: 'border-box',
+                marginTop: '1px',
+                opacity: isPastDate ? 0.4 : 1,
+                minHeight: { xs: '16px', sm: '20px' },
+                maxWidth: '100%',
+                backgroundColor: backgroundColor,
+                color: textColor,
+                fontWeight: 500,
+                lineHeight: 1.1,
+                boxShadow: 'none',
+                transition: 'all 0.2s ease',
+                flexShrink: 0,
+                '&:hover': {
+                  transform: isPastDate ? 'none' : 'scale(1.02)',
+                  boxShadow: 'none'
+                }
+              }}
+              title={eventText}
+            >
+              <span style={{ 
+                overflow: 'hidden', 
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                width: '100%',
+                display: 'block',
+              }}>
+                {eventText}
+              </span>
+            </Box>
+          );
+        })}
+      </Box>
+    </div>
+  );
+};
 
 // 🚀 直接使用 ShiftSwap 成功的日曆單元格組件
 const RenderCalendarCell = ({ day }) => {
@@ -344,6 +479,12 @@ function Dashboard() {
   const [swapsLoading, setSwapsLoading] = useState(true);
   const [announcementsError, setAnnouncementsError] = useState(null);
   const [swapsError, setSwapsError] = useState(null);
+
+  // 醫師班表相關狀態
+  const [doctorScheduleData, setDoctorScheduleData] = useState(null);
+  const [doctorCalendarData, setDoctorCalendarData] = useState([]);
+  const [doctorMapping, setDoctorMapping] = useState({});
+  const [isDoctorScheduleLoading, setIsDoctorScheduleLoading] = useState(false);
 
   // 🗑️ 舊的狀態變數已被 ShiftSwap 模式替代
   // const [isAreaAssignmentLoading, setIsAreaAssignmentLoading] = useState(false); - 已移除
@@ -982,6 +1123,143 @@ function Dashboard() {
     }
   };
 
+  // 獲取醫師班表數據的函數
+  const fetchDoctorScheduleData = async () => {
+    if (!user) return;
+    
+    try {
+      setIsDoctorScheduleLoading(true);
+      
+      const year = selectedDate.getFullYear();
+      const month = selectedDate.getMonth() + 1;
+      
+      // 獲取當月醫師班表
+      const startDate = format(startOfMonth(selectedDate), 'yyyyMMdd');
+      const endDate = format(endOfMonth(selectedDate), 'yyyyMMdd');
+      
+      const response = await doctorScheduleService.getEventsInDateRange(startDate, endDate);
+      const responseData = response.data || {};
+      
+      // 處理今日班表資料
+      const today = format(new Date(), 'yyyyMMdd');
+      const todaySchedule = responseData.schedules?.find(schedule => schedule.date === today);
+      setDoctorScheduleData(todaySchedule);
+      
+      // 處理月曆數據
+      const eventsData = [];
+      if (responseData.schedules && Array.isArray(responseData.schedules)) {
+        responseData.schedules.forEach(daySchedule => {
+          const dayDate = daySchedule.date;
+          
+          // 處理值班資訊
+          if (daySchedule.值班) {
+            eventsData.push({
+              title: `${daySchedule.值班}值班`,
+              summary: `${daySchedule.值班}值班`,
+              start: { date: dayDate },
+              type: '值班',
+              doctor_name: daySchedule.值班,
+              area_code: '值班'
+            });
+          }
+          
+          // 處理白班資訊
+          if (daySchedule.白班 && Array.isArray(daySchedule.白班)) {
+            daySchedule.白班.forEach(shift => {
+              eventsData.push({
+                title: shift.summary,
+                summary: shift.summary,
+                start: { date: dayDate },
+                time: shift.time,
+                type: '白班',
+                name: shift.name,
+                area_code: shift.area_code,
+                id: shift.id
+              });
+            });
+          }
+          
+          // 處理排班注記
+          if (daySchedule.排班注記 && Array.isArray(daySchedule.排班注記)) {
+            daySchedule.排班注記.forEach(note => {
+              eventsData.push({
+                title: note.summary,
+                summary: note.summary,
+                start: { date: dayDate },
+                time: note.time,
+                type: '排班注記'
+              });
+            });
+          }
+        });
+      }
+      
+      // 生成醫師月曆數據
+      generateDoctorCalendarData(selectedDate, eventsData);
+      
+    } catch (err) {
+      console.error('獲取醫師班表失敗:', err);
+    } finally {
+      setIsDoctorScheduleLoading(false);
+    }
+  };
+
+  // 生成醫師月曆數據
+  const generateDoctorCalendarData = (date, eventsData) => {
+    try {
+      const startDate = startOfMonth(date);
+      const endDate = endOfMonth(date);
+      const days = eachDayOfInterval({ start: startDate, end: endDate });
+      
+      const calendar = [];
+      let week = [];
+      
+      const firstDay = (getDay(startDate) + 6) % 7;
+      for (let i = 0; i < firstDay; i++) {
+        week.push({ date: null });
+      }
+      
+      days.forEach(day => {
+        const dayString = format(day, 'yyyy-MM-dd');
+        
+        const dayEvents = eventsData.filter(event => {
+          let eventDate = null;
+          
+          if (event.start && event.start.date) {
+            const dateStr = event.start.date;
+            if (dateStr && dateStr.length === 8) {
+              eventDate = `${dateStr.slice(0,4)}-${dateStr.slice(4,6)}-${dateStr.slice(6,8)}`;
+            }
+          }
+          
+          // 過濾掉范守仁的事件
+          const isDateMatch = eventDate === dayString;
+          const isNotFanShouwei = !event.name || event.name !== '范守仁';
+          const isNotFanShouweiInSummary = !event.summary || !event.summary.includes('范守仁');
+          
+          return isDateMatch && isNotFanShouwei && isNotFanShouweiInSummary;
+        });
+        
+        week.push({
+          date: day,
+          events: dayEvents,
+          eventsCount: dayEvents.length
+        });
+        
+        if ((getDay(day) + 6) % 7 === 6 || format(day, 'yyyy-MM-dd') === format(endDate, 'yyyy-MM-dd')) {
+          calendar.push([...week]);
+          week = [];
+        }
+      });
+      
+      setDoctorCalendarData(calendar);
+      
+    } catch (err) {
+      console.error('生成醫師月曆數據時出錯:', err);
+      setDoctorCalendarData([]);
+    }
+  };
+
   // 判斷換班請求是否符合用戶條件的輔助函數
   const isSwapMatchingUserCriteria = (swap, user) => {
     // 檢查是否過期
@@ -1014,14 +1292,26 @@ function Dashboard() {
     return true;
   };
 
+  // 初始化醫師資料映射
+  useEffect(() => {
+    const mapping = getDoctorMapping();
+    setDoctorMapping(mapping);
+  }, []);
+
   // 在使用者登入後獲取公告和換班請求
   useEffect(() => {
     if (user) {
       fetchLatestAnnouncements();
       fetchShiftSwapRequests();
-      fetchOvertimeData();
+      
+      // 根據用戶角色決定載入哪種班表
+      if (user.role === 'doctor' || user.role === 'admin') {
+        fetchDoctorScheduleData();
+      } else {
+        fetchOvertimeData();
+      }
     }
-  }, [user, selectedDate]); // 加入selectedDate依賴，確保月份變更時重新獲取加班數據
+  }, [user, selectedDate]); // 加入selectedDate依賴，確保月份變更時重新獲取班表數據
 
   // 獲取在線用戶 - 初始加載
   useEffect(() => {
@@ -1066,6 +1356,94 @@ function Dashboard() {
 
   const formattedToday = format(today, 'yyyy年MM月dd日 EEEE', { locale: zhTW });
 
+  // 新增：計算醫師今日班表資訊
+  const doctorTodayScheduleInfo = useMemo(() => {
+    if (!doctorScheduleData) {
+      return {
+        todayDutyDoctor: [{ name: '無', active: true, isDuty: true }],
+        todayConsoleDoctor: [{ name: '無資料', active: true }],
+        todayORDoctors: [{ name: '無資料', active: true }],
+        todayPeripheral3F: [{ name: '無資料', active: true }],
+        todayPeripheralAdvanced: [{ name: '無資料', active: true }],
+        todayPeripheralTAE: [{ name: '無資料', active: true }],
+        offDutyDoctors: []
+      };
+    }
+    
+    // 提取值班醫師
+    const todayDutyDoctor = doctorScheduleData.值班 ? [{ 
+      name: doctorScheduleData.值班, 
+      active: true, 
+      isDuty: true
+    }] : [{ name: '無', active: true, isDuty: true }];
+    
+    // 從白班中根據area_code分類醫師
+    let todayConsoleDoctor = [];
+    let todayORDoctors = [];
+    let todayPeripheral3F = [];
+    let todayPeripheralAdvanced = [];
+    let todayPeripheralTAE = [];
+    let offDutyDoctors = [];
+    
+    if (doctorScheduleData.白班 && Array.isArray(doctorScheduleData.白班)) {
+      doctorScheduleData.白班.forEach((shift, index) => {
+        const doctorData = {
+          ...shift,
+        };
+        
+        const isOffDuty = shift.status === 'off_duty' || shift.status === 'off';
+        
+        if (isOffDuty) {
+          offDutyDoctors.push({
+            ...doctorData,
+            originalAreaCode: shift.area_code
+          });
+        } else {
+          const areaCode = shift.area_code;
+          
+          if (areaCode === '控台醫師') {
+            todayConsoleDoctor.push(doctorData);
+          } else if (areaCode === '手術室') {
+            todayORDoctors.push(doctorData);
+          } else if (areaCode === '外圍(3F)') {
+            todayPeripheral3F.push(doctorData);
+          } else if (areaCode === '外圍(高階)') {
+            todayPeripheralAdvanced.push(doctorData);
+          } else if (areaCode === '外圍(TAE)') {
+            todayPeripheralTAE.push(doctorData);
+          }
+        }
+      });
+    }
+    
+    // 如果沒有資料，填入預設值
+    if (todayConsoleDoctor.length === 0) {
+      todayConsoleDoctor = [{ name: '無', active: true }];
+    }
+    if (todayORDoctors.length === 0) {
+      todayORDoctors = [{ name: '無', active: true }];
+    }
+    if (todayPeripheral3F.length === 0) {
+      todayPeripheral3F = [{ name: '無', active: true }];
+    }
+    if (todayPeripheralAdvanced.length === 0) {
+      todayPeripheralAdvanced = [{ name: '無', active: true }];
+    }
+    if (todayPeripheralTAE.length === 0) {
+      todayPeripheralTAE = [{ name: '無', active: true }];
+    }
+    
+    return {
+      todayDutyDoctor,
+      todayConsoleDoctor,
+      todayORDoctors,
+      todayPeripheral3F,
+      todayPeripheralAdvanced,
+      todayPeripheralTAE,
+      offDutyDoctors
+    };
+  }, [doctorScheduleData]);
+
   // 處理公告詳情相關函數
   const handleOpenAnnouncementDetail = (announcement) => {
     setSelectedAnnouncement(announcement);
@@ -1104,7 +1482,7 @@ function Dashboard() {
         {/* 右側容器 - 小螢幕時先顯示 */}
         <Grid item xs={12} md={6} sx={{ order: { xs: 1, md: 2 } }}>
           <Grid container spacing={3} sx={{ height: '100%' }}>
-            {/* 今日班表卡片 - 右上 */}
+            {/* 今日班表卡片 - 根據用戶角色顯示不同內容 */}
             <Grid item xs={12} sx={{ height: 'auto' }}>
               <Card sx={{ height: 'fit-content', boxShadow: 'none', border: '1px solid #e0e0e0' }}>
                 <CardContent>
@@ -1113,45 +1491,267 @@ function Dashboard() {
                     <Typography variant="h6">今日班表</Typography>
                   </Box>
                   
-                  {todayWork.details ? (
-                    <Box sx={{ mt: 2 }}>
-                      <Chip 
-                        label={todayWork.shift && !['O', 'V', ''].includes(todayWork.shift) ? `${todayWork.shift}班` : todayWork.details?.name || '未排班'} 
-                        color="primary" 
-                        className={`shift-${todayWork.shift}`} 
-                        sx={{ fontWeight: 'bold', mb: 1 }}
-                      />
-                      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                        <Typography variant="body1" sx={{ mr: 1 }}>
-                          <strong>工作分配:</strong>
-                        </Typography>
-                        {todayWork.areaCode ? (
-                          <Chip 
-                            label={todayWork.areaCode}
-                            size="small"
+                  {/* 醫師和管理員顯示醫師班表 */}
+                  {(user?.role === 'doctor' || user?.role === 'admin') ? (
+                    isDoctorScheduleLoading ? (
+                      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 2 }}>
+                        <CircularProgress size={20} sx={{ mr: 1 }} />
+                        <Typography variant="body2">載入醫師班表中...</Typography>
+                      </Box>
+                    ) : (
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                        {/* 值班醫師 */}
+                        {doctorTodayScheduleInfo.todayDutyDoctor.map((doctor, index) => 
+                          doctor.name !== '無' && (
+                            <Card
+                              key={`duty-${index}`}
+                              sx={{
+                                boxShadow: 'none',
+                                border: '1px solid #e0e0e0',
+                                backgroundColor: DOCTOR_AREA_COLOR_MAPPING['值班'],
+                                color: 'white',
+                                borderRadius: 0,
+                                transition: 'all 0.2s ease'
+                              }}
+                            >
+                              <CardContent sx={{ p: { xs: 1, sm: 1.5 }, '&:last-child': { pb: { xs: 1, sm: 1.5 } } }}>
+                                <Typography variant="body1" sx={{ fontSize: { xs: '14px', sm: '16px' }, fontWeight: 'medium' }}>
+                                  {formatDoctorName(doctor.name, doctorMapping)}
+                                </Typography>
+                                <Typography variant="body2" sx={{ fontSize: { xs: '11px', sm: '12px' }, opacity: 0.9 }}>
+                                  今日值班醫師
+                                </Typography>
+                              </CardContent>
+                            </Card>
+                          )
+                        )}
+                        
+                        {/* 控台醫師 */}
+                        {doctorTodayScheduleInfo.todayConsoleDoctor.map((doctor, index) => 
+                          doctor.name !== '無' && doctor.name !== '無資料' && (
+                            <Card
+                              key={`console-${index}`}
+                              sx={{
+                                boxShadow: 'none',
+                                border: '1px solid #e0e0e0',
+                                backgroundColor: DOCTOR_AREA_COLOR_MAPPING['控台醫師'],
+                                color: 'white',
+                                borderRadius: 0,
+                                opacity: (doctor.status === 'off' || doctor.status === 'off_duty' || doctor.is_in_meeting) ? 0.5 : 1,
+                                transition: 'all 0.2s ease'
+                              }}
+                            >
+                              <CardContent sx={{ p: { xs: 1, sm: 1.5 }, '&:last-child': { pb: { xs: 1, sm: 1.5 } } }}>
+                                <Typography variant="body1" sx={{ fontSize: { xs: '14px', sm: '16px' }, fontWeight: 'medium' }}>
+                                  {formatDoctorName(doctor.name, doctorMapping)}
+                                  {doctor.status === 'off' && '（請假）'}
+                                  {doctor.status === 'off_duty' && '（已下班）'}
+                                  {doctor.is_in_meeting && '（開會中）'}
+                                </Typography>
+                                <Typography variant="body2" sx={{ fontSize: { xs: '11px', sm: '12px' }, opacity: 0.9 }}>
+                                  今日控台醫師
+                                </Typography>
+                              </CardContent>
+                            </Card>
+                          )
+                        )}
+                        
+                        {/* 手術室醫師 */}
+                        {doctorTodayScheduleInfo.todayORDoctors.map((doctor, index) => 
+                          doctor.name !== '無' && doctor.name !== '無資料' && (
+                            <Card
+                              key={`or-${index}`}
+                              sx={{
+                                boxShadow: 'none',
+                                border: '1px solid #e0e0e0',
+                                backgroundColor: DOCTOR_AREA_COLOR_MAPPING['手術室'],
+                                color: 'white',
+                                borderRadius: 0,
+                                opacity: (doctor.status === 'off' || doctor.status === 'off_duty' || doctor.is_in_meeting) ? 0.5 : 1,
+                                transition: 'all 0.2s ease'
+                              }}
+                            >
+                              <CardContent sx={{ p: { xs: 1, sm: 1.5 }, '&:last-child': { pb: { xs: 1, sm: 1.5 } } }}>
+                                <Typography variant="body1" sx={{ fontSize: { xs: '14px', sm: '16px' }, fontWeight: 'medium' }}>
+                                  {formatDoctorName(doctor.name, doctorMapping)}
+                                  {doctor.status === 'off' && '（請假）'}
+                                  {doctor.status === 'off_duty' && '（已下班）'}
+                                  {doctor.is_in_meeting && '（開會中）'}
+                                </Typography>
+                                <Typography variant="body2" sx={{ fontSize: { xs: '11px', sm: '12px' }, opacity: 0.9 }}>
+                                  手術室
+                                </Typography>
+                              </CardContent>
+                            </Card>
+                          )
+                        )}
+                        
+                        {/* 外圍醫師 */}
+                        {doctorTodayScheduleInfo.todayPeripheral3F.map((doctor, index) => 
+                          doctor.name !== '無' && doctor.name !== '無資料' && (
+                            <Card
+                              key={`3f-${index}`}
+                              sx={{
+                                boxShadow: 'none',
+                                border: '1px solid #e0e0e0',
+                                backgroundColor: DOCTOR_AREA_COLOR_MAPPING['外圍(3F)'],
+                                color: 'white',
+                                borderRadius: 0,
+                                opacity: (doctor.status === 'off' || doctor.status === 'off_duty' || doctor.is_in_meeting) ? 0.5 : 1,
+                                transition: 'all 0.2s ease'
+                              }}
+                            >
+                              <CardContent sx={{ p: { xs: 1, sm: 1.5 }, '&:last-child': { pb: { xs: 1, sm: 1.5 } } }}>
+                                <Typography variant="body1" sx={{ fontSize: { xs: '14px', sm: '16px' }, fontWeight: 'medium' }}>
+                                  {formatDoctorName(doctor.name, doctorMapping)}
+                                  {doctor.status === 'off' && '（請假）'}
+                                  {doctor.status === 'off_duty' && '（已下班）'}
+                                  {doctor.is_in_meeting && '（開會中）'}
+                                </Typography>
+                                <Typography variant="body2" sx={{ fontSize: { xs: '11px', sm: '12px' }, opacity: 0.9 }}>
+                                  外圍(3F)
+                                </Typography>
+                              </CardContent>
+                            </Card>
+                          )
+                        )}
+                        
+                        {doctorTodayScheduleInfo.todayPeripheralAdvanced.map((doctor, index) => 
+                          doctor.name !== '無' && doctor.name !== '無資料' && (
+                            <Card
+                              key={`advanced-${index}`}
+                              sx={{
+                                boxShadow: 'none',
+                                border: '1px solid #e0e0e0',
+                                backgroundColor: DOCTOR_AREA_COLOR_MAPPING['外圍(高階)'],
+                                color: 'white',
+                                borderRadius: 0,
+                                opacity: (doctor.status === 'off' || doctor.status === 'off_duty' || doctor.is_in_meeting) ? 0.5 : 1,
+                                transition: 'all 0.2s ease'
+                              }}
+                            >
+                              <CardContent sx={{ p: { xs: 1, sm: 1.5 }, '&:last-child': { pb: { xs: 1, sm: 1.5 } } }}>
+                                <Typography variant="body1" sx={{ fontSize: { xs: '14px', sm: '16px' }, fontWeight: 'medium' }}>
+                                  {formatDoctorName(doctor.name, doctorMapping)}
+                                  {doctor.status === 'off' && '（請假）'}
+                                  {doctor.status === 'off_duty' && '（已下班）'}
+                                  {doctor.is_in_meeting && '（開會中）'}
+                                </Typography>
+                                <Typography variant="body2" sx={{ fontSize: { xs: '11px', sm: '12px' }, opacity: 0.9 }}>
+                                  外圍(高階)
+                                </Typography>
+                              </CardContent>
+                            </Card>
+                          )
+                        )}
+                        
+                        {doctorTodayScheduleInfo.todayPeripheralTAE.map((doctor, index) => 
+                          doctor.name !== '無' && doctor.name !== '無資料' && (
+                            <Card
+                              key={`tae-${index}`}
+                              sx={{
+                                boxShadow: 'none',
+                                border: '1px solid #e0e0e0',
+                                backgroundColor: DOCTOR_AREA_COLOR_MAPPING['外圍(TAE)'],
+                                color: 'white',
+                                borderRadius: 0,
+                                opacity: (doctor.status === 'off' || doctor.status === 'off_duty' || doctor.is_in_meeting) ? 0.5 : 1,
+                                transition: 'all 0.2s ease'
+                              }}
+                            >
+                              <CardContent sx={{ p: { xs: 1, sm: 1.5 }, '&:last-child': { pb: { xs: 1, sm: 1.5 } } }}>
+                                <Typography variant="body1" sx={{ fontSize: { xs: '14px', sm: '16px' }, fontWeight: 'medium' }}>
+                                  {formatDoctorName(doctor.name, doctorMapping)}
+                                  {doctor.status === 'off' && '（請假）'}
+                                  {doctor.status === 'off_duty' && '（已下班）'}
+                                  {doctor.is_in_meeting && '（開會中）'}
+                                </Typography>
+                                <Typography variant="body2" sx={{ fontSize: { xs: '11px', sm: '12px' }, opacity: 0.9 }}>
+                                  外圍(TAE)
+                                </Typography>
+                              </CardContent>
+                            </Card>
+                          )
+                        )}
+                        
+                        {/* 下班醫師 */}
+                        {doctorTodayScheduleInfo.offDutyDoctors.map((doctor, index) => (
+                          <Card
+                            key={`off-${index}`}
                             sx={{
-                              height: '24px',
-                              fontSize: '0.875rem',
-                              backgroundColor: getAreaStyle(todayWork.areaCode).bg,
-                              color: getAreaStyle(todayWork.areaCode).text,
-                              border: `1px solid ${getAreaStyle(todayWork.areaCode).border}`,
-                              '& .MuiChip-label': { px: 1 }
+                              boxShadow: 'none',
+                              border: '1px solid #e0e0e0',
+                              backgroundColor: '#9e9e9e',
+                              color: 'white',
+                              borderRadius: 0,
+                              opacity: 0.35,
+                              transition: 'all 0.2s ease'
                             }}
-                          />
-                        ) : (
-                          <Typography variant="body1" color="text.secondary">
-                            未分配區域
+                          >
+                            <CardContent sx={{ p: { xs: 1, sm: 1.5 }, '&:last-child': { pb: { xs: 1, sm: 1.5 } } }}>
+                              <Typography variant="body1" sx={{ fontSize: { xs: '14px', sm: '16px' }, fontWeight: 'medium' }}>
+                                {formatDoctorName(doctor.name, doctorMapping)}
+                                {doctor.status === 'off' && '（請假）'}
+                                {doctor.status === 'off_duty' && '（已下班）'}
+                                {doctor.is_in_meeting && '（開會中）'}
+                              </Typography>
+                              <Typography variant="body2" sx={{ fontSize: { xs: '11px', sm: '12px' }, opacity: 0.9 }}>
+                                {doctor.originalAreaCode || '未分類'}
+                              </Typography>
+                            </CardContent>
+                          </Card>
+                        ))}
+                        
+                        {/* 如果沒有任何醫師，顯示預設訊息 */}
+                        {!doctorScheduleData && (
+                          <Typography variant="body2" color="text.secondary">
+                            今日無醫師班表資料
                           </Typography>
                         )}
                       </Box>
-                      <Typography variant="body1">
-                        <strong>時間:</strong> {todayWork.details?.time || '-'}
-                      </Typography>
-                    </Box>
+                    )
                   ) : (
-                    <Typography variant="body1" color="text.secondary">
-                      今日無班表安排
-                    </Typography>
+                    /* 護理師顯示護理師班表 */
+                    todayWork.details ? (
+                      <Box sx={{ mt: 2 }}>
+                        <Chip 
+                          label={todayWork.shift && !['O', 'V', ''].includes(todayWork.shift) ? `${todayWork.shift}班` : todayWork.details?.name || '未排班'} 
+                          color="primary" 
+                          className={`shift-${todayWork.shift}`} 
+                          sx={{ fontWeight: 'bold', mb: 1 }}
+                        />
+                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                          <Typography variant="body1" sx={{ mr: 1 }}>
+                            <strong>工作分配:</strong>
+                          </Typography>
+                          {todayWork.areaCode ? (
+                            <Chip 
+                              label={todayWork.areaCode}
+                              size="small"
+                              sx={{
+                                height: '24px',
+                                fontSize: '0.875rem',
+                                backgroundColor: getAreaStyle(todayWork.areaCode).bg,
+                                color: getAreaStyle(todayWork.areaCode).text,
+                                border: `1px solid ${getAreaStyle(todayWork.areaCode).border}`,
+                                '& .MuiChip-label': { px: 1 }
+                              }}
+                            />
+                          ) : (
+                            <Typography variant="body1" color="text.secondary">
+                              未分配區域
+                            </Typography>
+                          )}
+                        </Box>
+                        <Typography variant="body1">
+                          <strong>時間:</strong> {todayWork.details?.time || '-'}
+                        </Typography>
+                      </Box>
+                    ) : (
+                      <Typography variant="body1" color="text.secondary">
+                        今日無班表安排
+                      </Typography>
+                    )
                   )}
                 </CardContent>
               </Card>
@@ -1159,7 +1759,7 @@ function Dashboard() {
 
 
             
-            {/* 本月班表卡片 - 右下，填滿剩餘空間 */}
+            {/* 本月班表卡片 - 根據用戶角色顯示不同內容 */}
             <Grid item xs={12} sx={{ flex: 1, display: 'flex' }}>
               <Card sx={{ width: '100%', display: 'flex', flexDirection: 'column', boxShadow: 'none', border: '1px solid #e0e0e0' }}>
                 <CardContent sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
@@ -1168,60 +1768,114 @@ function Dashboard() {
                     <Typography variant="h6">本月班表</Typography>
                   </Box>
                   
-                  {monthlyCalendarData.length > 0 ? (
-                    <Box sx={{ width: '100%', overflowX: 'auto', flex: 1 }}>
-                      {/* 🚀 完全複製 ShiftSwap 的月曆表格實現 */}
-                      <style>{calendarStyles}</style>
-                      <div className="calendar-container">
-                        <table className="calendar-table">
-                          <thead>
-                            <tr>
-                              {weekDays.map(day => (
-                                <th key={day}>{day}</th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody>
-                          {monthlyCalendarData.map((week, weekIndex) => (
-                              <tr key={weekIndex}>
-                                {week.map((day, dayIndex) => {
-                                  // 檢查日期是否過期
-                                  const isExpired = day.date && day.date < today;
-                                  
-                                  return (
-                                    <td 
-                                  key={dayIndex}
-                                      className={`
-                                        ${!day.date ? 'empty-cell' : ''}
-                                        ${day.date && isToday(day.date) ? 'today' : ''}
-                                        ${isExpired ? 'expired-cell' : ''} 
-                                      `}
-                                      style={{
-                                        cursor: isExpired ? 'not-allowed' : 'default',
-                                        opacity: isExpired ? 0.5 : 1
-                                      }}
-                                    >
-                                      {day.date && <RenderCalendarCell day={day} />}
-                                    </td>
-                                  );
-                                })}
+                  {/* 醫師和管理員顯示醫師月班表 */}
+                  {(user?.role === 'doctor' || user?.role === 'admin') ? (
+                    isDoctorScheduleLoading ? (
+                      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 4 }}>
+                        <CircularProgress />
+                        <Typography sx={{ ml: 2 }}>載入醫師班表中...</Typography>
+                      </Box>
+                    ) : doctorCalendarData.length > 0 ? (
+                      <Box sx={{ width: '100%', overflowX: 'auto', flex: 1 }}>
+                        <style>{calendarStyles}</style>
+                        <div className="calendar-container">
+                          <table className="calendar-table">
+                            <thead>
+                              <tr>
+                                {['一', '二', '三', '四', '五', '六', '日'].map(day => (
+                                  <th key={day}>{day}</th>
+                                ))}
                               </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </Box>
+                            </thead>
+                            <tbody>
+                              {doctorCalendarData.map((week, weekIndex) => (
+                                <tr key={weekIndex}>
+                                  {week.map((day, dayIndex) => {
+                                    const isExpired = day.date && day.date < today;
+                                    
+                                    return (
+                                      <td 
+                                        key={dayIndex}
+                                        className={`
+                                          ${!day.date ? 'empty-cell' : ''}
+                                          ${day.date && isToday(day.date) ? 'today' : ''}
+                                          ${isExpired ? 'expired-cell' : ''} 
+                                        `}
+                                        style={{
+                                          cursor: isExpired ? 'not-allowed' : 'default',
+                                          opacity: isExpired ? 0.5 : 1
+                                        }}
+                                      >
+                                        {day.date && <RenderDoctorCalendarCell day={day} />}
+                                      </td>
+                                    );
+                                  })}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </Box>
+                    ) : (
+                      <Typography variant="body1" color="text.secondary">
+                        無法載入本月醫師班表
+                      </Typography>
+                    )
                   ) : (
-                    <Typography variant="body1" color="text.secondary">
-                      無法載入本月班表
-                    </Typography>
+                    /* 護理師顯示護理師月班表 */
+                    monthlyCalendarData.length > 0 ? (
+                      <Box sx={{ width: '100%', overflowX: 'auto', flex: 1 }}>
+                        <style>{calendarStyles}</style>
+                        <div className="calendar-container">
+                          <table className="calendar-table">
+                            <thead>
+                              <tr>
+                                {weekDays.map(day => (
+                                  <th key={day}>{day}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                            {monthlyCalendarData.map((week, weekIndex) => (
+                                <tr key={weekIndex}>
+                                  {week.map((day, dayIndex) => {
+                                    const isExpired = day.date && day.date < today;
+                                    
+                                    return (
+                                      <td 
+                                    key={dayIndex}
+                                        className={`
+                                          ${!day.date ? 'empty-cell' : ''}
+                                          ${day.date && isToday(day.date) ? 'today' : ''}
+                                          ${isExpired ? 'expired-cell' : ''} 
+                                        `}
+                                        style={{
+                                          cursor: isExpired ? 'not-allowed' : 'default',
+                                          opacity: isExpired ? 0.5 : 1
+                                        }}
+                                      >
+                                        {day.date && <RenderCalendarCell day={day} />}
+                                      </td>
+                                    );
+                                  })}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </Box>
+                    ) : (
+                      <Typography variant="body1" color="text.secondary">
+                        無法載入本月班表
+                      </Typography>
+                    )
                   )}
                 </CardContent>
                 <CardActions>
                   <Button 
                     size="small" 
                     endIcon={<ArrowForwardIcon />}
-                    onClick={() => navigate('/weekly-schedule')}
+                    onClick={() => navigate((user?.role === 'doctor' || user?.role === 'admin') ? '/doctor-schedule' : '/weekly-schedule')}
                   >
                     查看詳細班表
                   </Button>
@@ -1295,21 +1949,24 @@ function Dashboard() {
                                       }
                                     }}
                                   />
-                                  <Chip 
-                                    label={onlineUser.isWorking ? '上班中' : '非上班時間'} 
-                                    size="small" 
-                                    sx={{ 
-                                      backgroundColor: onlineUser.isWorking ? '#f44336' : '#9e9e9e', // 上班時間顯示紅色
-                                      color: 'white',
-                                      height: '18px',
-                                      fontSize: '10px',
-                                      '& .MuiChip-label': {
-                                        padding: '0 4px',
+                                  {/* 只對非admin和非麻醉科醫師顯示工作時間狀態 */}
+                                  {onlineUser.role !== 'admin' && !onlineUser.identity?.includes('麻醉科醫師') && (
+                                    <Chip 
+                                      label={onlineUser.isWorking ? '上班中' : '非上班時間'} 
+                                      size="small" 
+                                      sx={{ 
+                                        backgroundColor: onlineUser.isWorking ? '#f44336' : '#9e9e9e', // 上班時間顯示紅色
+                                        color: 'white',
+                                        height: '18px',
                                         fontSize: '10px',
-                                        fontWeight: 'bold'
-                                      }
-                                    }}
-                                  />
+                                        '& .MuiChip-label': {
+                                          padding: '0 4px',
+                                          fontSize: '10px',
+                                          fontWeight: 'bold'
+                                        }
+                                      }}
+                                    />
+                                  )}
                                 </Box>
                               }
                               secondary={
@@ -1472,21 +2129,24 @@ function Dashboard() {
                                       }
                                     }}
                                   />
-                                  <Chip 
-                                    label={onlineUser.isWorking ? '上班中' : '非上班時間'} 
-                                    size="small" 
-                                    sx={{ 
-                                      backgroundColor: onlineUser.isWorking ? '#f44336' : '#9e9e9e', // 上班時間顯示紅色
-                                      color: 'white',
-                                      height: '18px',
-                                      fontSize: '10px',
-                                      '& .MuiChip-label': {
-                                        padding: '0 4px',
+                                  {/* 只對非admin和非麻醉科醫師顯示工作時間狀態 */}
+                                  {onlineUser.role !== 'admin' && !onlineUser.identity?.includes('麻醉科醫師') && (
+                                    <Chip 
+                                      label={onlineUser.isWorking ? '上班中' : '非上班時間'} 
+                                      size="small" 
+                                      sx={{ 
+                                        backgroundColor: onlineUser.isWorking ? '#f44336' : '#9e9e9e', // 上班時間顯示紅色
+                                        color: 'white',
+                                        height: '18px',
                                         fontSize: '10px',
-                                        fontWeight: 'bold'
-                                      }
-                                    }}
-                                  />
+                                        '& .MuiChip-label': {
+                                          padding: '0 4px',
+                                          fontSize: '10px',
+                                          fontWeight: 'bold'
+                                        }
+                                      }}
+                                    />
+                                  )}
                                 </Box>
                               }
                               secondary={
