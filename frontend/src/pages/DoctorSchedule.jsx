@@ -247,7 +247,7 @@ const DoctorSchedule = () => {
 
   // 新增：檢查是否有編輯權限的輔助函數
   const hasEditPermission = useCallback(() => {
-    return currentUser.role === 'admin' || currentUser.role === 'head_nurse';
+    return currentUser.role === 'admin' || currentUser.role === 'head_nurse' || currentUser.role === 'doctor';
   }, [currentUser.role]);
 
   // 區域代碼選項
