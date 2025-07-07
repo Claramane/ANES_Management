@@ -77,6 +77,25 @@ async def get_today_schedule(
         logger.error(f"獲取今日班表失敗: {str(e)}")
         raise HTTPException(status_code=500, detail="獲取今日班表失敗")
 
+@router.get("/public/today", response_model=Dict)
+async def get_public_today_schedule(
+    db: Session = Depends(get_db)
+):
+    """獲取今日班表 - 公開端點，不需要授權"""
+    try:
+        # 記錄當前時間用於調試
+        current_time = now()
+        logger.info(f"獲取今日班表請求（公開端點），當前時間: {current_time}")
+        
+        schedule = DoctorScheduleService.get_today_schedule(db)
+        if not schedule:
+            return {"message": "今日無班表資料", "data": None}
+        
+        return {"message": "獲取成功", "data": schedule}
+    except Exception as e:
+        logger.error(f"獲取今日班表失敗（公開端點）: {str(e)}")
+        raise HTTPException(status_code=500, detail="獲取今日班表失敗")
+
 @router.post("/update-from-external")
 async def update_schedules_from_external(
     start_date: str = Query(..., description="開始日期 YYYYMMDD"),
