@@ -1744,7 +1744,7 @@ const WeeklySchedule = () => {
     loadData();
   }, [fetchUsers]); // 只依賴fetchUsers，避免重複執行
 
-  // 處理班表和工作分配數據加載，整合到一個useEffect中
+  // 載入月班表數據
   useEffect(() => {
     // 確保日期有效
     if (!isValid(selectedDate)) return;
@@ -1752,77 +1752,101 @@ const WeeklySchedule = () => {
     // 設置標記防止重複請求
     let isMounted = true;
     
-    const loadScheduleData = async () => {
+    const loadMonthlySchedule = async () => {
       try {
-        console.log('開始加載班表數據...');
+        console.log('開始加載月班表數據...');
         
-        // 獲取當前年月
-        const year = selectedDate.getFullYear();
-        const month = selectedDate.getMonth() + 1;
-        
-        // 先獲取月班表數據
+        // 獲取月班表數據
         await fetchMonthlySchedule();
         
-        // 如果組件已卸載，不繼續執行
         if (!isMounted) return;
         
-        // 再獲取工作分配數據
-        try {
-          console.log('開始加載工作分配數據...');
-          
-          const result = await cachedScheduleDetailsRequest(apiService, 'weekly-schedule', year, month);
-          
-          // 如果組件已卸載，不繼續執行
-          if (!isMounted) return;
-          
-          if (result.fromCache) {
-            console.log('loadScheduleData: 使用緩存數據');
-          } else {
-            console.log('loadScheduleData: 從API獲取最新數據');
-          }
-          
-          if (result.data?.success) {
-            // 將工作分配資料更新到排班資料中
-            const monthlyData = [...useScheduleStore.getState().monthlySchedule];
-            const details = result.data.data || [];
-            
-            // 遍歷每個排班記錄，更新area_code
-            details.forEach(item => {
-              const nurseIndex = monthlyData.findIndex(nurse => nurse.id === item.user_id);
-              if (nurseIndex >= 0) {
-                const dateObj = new Date(item.date);
-                const day = dateObj.getDate() - 1; // 轉換為0-based索引
-                
-                if (!monthlyData[nurseIndex].area_codes) {
-                  monthlyData[nurseIndex].area_codes = Array(31).fill(null);
-                }
-                
-                if (day >= 0 && day < 31) {
-                  monthlyData[nurseIndex].area_codes[day] = item.area_code;
-                }
-              }
-            });
-            
-            // 更新store中的數據
-            useScheduleStore.setState({ monthlySchedule: monthlyData });
-            
-            console.log('工作分配數據加載完成');
-          }
-        } catch (areaCodeErr) {
-          console.error('獲取工作分配資料失敗:', areaCodeErr);
-        }
+        console.log('月班表數據加載完成');
       } catch (err) {
-        console.error('日期變更後獲取班表失敗:', err);
+        console.error('獲取月班表失敗:', err);
       }
     };
     
-    loadScheduleData();
+    loadMonthlySchedule();
     
     // 清理函數，組件卸載時設置標記
     return () => {
       isMounted = false;
     };
-  }, [selectedDate, fetchMonthlySchedule]); // 只在selectedDate或fetchMonthlySchedule變化時執行
+  }, [selectedDate, fetchMonthlySchedule]);
+
+  // 獨立載入工作分配數據 - 確保進入頁面就會載入 /api/schedules/details
+  useEffect(() => {
+    // 確保日期有效
+    if (!isValid(selectedDate)) return;
+    
+    // 設置標記防止重複請求
+    let isMounted = true;
+    
+    const loadWorkAssignments = async () => {
+      try {
+        console.log('開始加載工作分配數據...');
+        
+        // 獲取當前年月
+        const year = selectedDate.getFullYear();
+        const month = selectedDate.getMonth() + 1;
+        
+        // 載入工作分配數據
+        const result = await cachedScheduleDetailsRequest(apiService, 'weekly-schedule', year, month);
+        
+        // 如果組件已卸載，不繼續執行
+        if (!isMounted) return;
+        
+        if (result.fromCache) {
+          console.log('loadWorkAssignments: 使用緩存數據');
+        } else {
+          console.log('loadWorkAssignments: 從API獲取最新數據');
+        }
+        
+        if (result.data?.success) {
+          // 將工作分配資料更新到排班資料中
+          const monthlyData = [...useScheduleStore.getState().monthlySchedule];
+          const details = result.data.data || [];
+          
+          console.log(`收到 ${details.length} 條工作分配記錄`);
+          
+          // 遍歷每個排班記錄，更新area_code
+          details.forEach(item => {
+            const nurseIndex = monthlyData.findIndex(nurse => nurse.id === item.user_id);
+            if (nurseIndex >= 0) {
+              const dateObj = new Date(item.date);
+              const day = dateObj.getDate() - 1; // 轉換為0-based索引
+              
+              if (!monthlyData[nurseIndex].area_codes) {
+                monthlyData[nurseIndex].area_codes = Array(31).fill(null);
+              }
+              
+              if (day >= 0 && day < 31) {
+                monthlyData[nurseIndex].area_codes[day] = item.area_code;
+              }
+            }
+          });
+          
+          // 更新store中的數據
+          useScheduleStore.setState({ monthlySchedule: monthlyData });
+          
+          console.log('工作分配數據加載並更新完成');
+        } else {
+          console.warn('工作分配API響應格式不正確:', result.data);
+        }
+      } catch (areaCodeErr) {
+        console.error('獲取工作分配資料失敗:', areaCodeErr);
+        // 即使載入失敗，也不影響頁面的正常使用
+      }
+    };
+    
+    loadWorkAssignments();
+    
+    // 清理函數，組件卸載時設置標記
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedDate]); // 只依賴 selectedDate，確保每次日期變更都會載入工作分配
 
   // 當現週或編輯模式變化時，同步工作分配數據
   useEffect(() => {
