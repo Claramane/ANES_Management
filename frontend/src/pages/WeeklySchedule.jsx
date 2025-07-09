@@ -94,6 +94,9 @@ const ensureValidDate = (date) => {
 };
 
 const WeeklySchedule = () => {
+  console.log('🏥🏥🏥 WeeklySchedule 組件開始初始化 🏥🏥🏥');
+  console.log('⏰ 當前時間:', new Date().toISOString());
+  
   const { 
     monthlySchedule, 
     isLoading, 
@@ -103,6 +106,16 @@ const WeeklySchedule = () => {
     fetchMonthlySchedule,
     updateShift
   } = useScheduleStore();
+
+  console.log('📋📋📋 useScheduleStore 資料 📋📋📋:', {
+    hasMonthlySchedule: monthlySchedule?.length > 0,
+    monthlyScheduleLength: monthlySchedule?.length,
+    isLoading,
+    error,
+    storeSelectedDate,
+    storeSelectedDateType: typeof storeSelectedDate,
+    storeSelectedDateIsDate: storeSelectedDate instanceof Date
+  });
 
   const { nurseUsers, fetchUsers } = useUserStore();
   const { user } = useAuthStore();
@@ -122,17 +135,19 @@ const WeeklySchedule = () => {
   // 檢查是否有編輯權限
   const hasEditPermission = user?.role === 'head_nurse' || user?.role === 'admin';
   
+
+  
   // 確保選擇的日期是有效的
-  const selectedDate = useMemo(() => {
-    console.log('WeeklySchedule - storeSelectedDate:', storeSelectedDate,
-               'instanceof Date:', storeSelectedDate instanceof Date);
-    try {
-      return ensureValidDate(storeSelectedDate);
-    } catch (err) {
-      console.error('處理日期時出錯:', err);
-      return new Date();
-    }
-  }, [storeSelectedDate]);
+  let selectedDate;
+  try {
+    console.log('🔄🔄🔄 開始計算 selectedDate 🔄🔄🔄');
+    console.log('📅 storeSelectedDate:', storeSelectedDate);
+    selectedDate = storeSelectedDate && storeSelectedDate instanceof Date ? storeSelectedDate : new Date();
+    console.log('✅✅✅ selectedDate 計算完成 ✅✅✅:', selectedDate);
+  } catch (err) {
+    console.error('❌❌❌ selectedDate 計算錯誤 ❌❌❌:', err);
+    selectedDate = new Date();
+  }
 
   // 獲取當前選擇月份的天數
   const daysInMonth = useMemo(() => {
@@ -1744,109 +1759,114 @@ const WeeklySchedule = () => {
     loadData();
   }, [fetchUsers]); // 只依賴fetchUsers，避免重複執行
 
-  // 載入月班表數據
+  // 載入月班表數據，然後載入工作分配 - 加入防抖和載入狀態管理
   useEffect(() => {
     // 確保日期有效
     if (!isValid(selectedDate)) return;
     
     // 設置標記防止重複請求
     let isMounted = true;
+    let isLoadingRef = { current: false };
     
-    const loadMonthlySchedule = async () => {
+    const loadScheduleDataSequentially = async () => {
+      // 防止重複載入
+      if (isLoadingRef.current) {
+        console.log('⏸️ 已有載入程序進行中，跳過重複載入');
+        return;
+      }
+      
+      isLoadingRef.current = true;
+      
       try {
-        console.log('開始加載月班表數據...');
+        console.log('🔄 開始按順序加載班表數據...');
         
-        // 獲取月班表數據
+        // 第一步：獲取月班表數據（現在會保留已有的 area_codes）
+        console.log('📋 1. 載入月班表數據（保留已有工作分配）...');
         await fetchMonthlySchedule();
         
         if (!isMounted) return;
+        console.log('✅ 1. 月班表數據加載完成（已保留工作分配）');
         
-        console.log('月班表數據加載完成');
-      } catch (err) {
-        console.error('獲取月班表失敗:', err);
-      }
-    };
-    
-    loadMonthlySchedule();
-    
-    // 清理函數，組件卸載時設置標記
-    return () => {
-      isMounted = false;
-    };
-  }, [selectedDate, fetchMonthlySchedule]);
-
-  // 獨立載入工作分配數據 - 確保進入頁面就會載入 /api/schedules/details
-  useEffect(() => {
-    // 確保日期有效
-    if (!isValid(selectedDate)) return;
-    
-    // 設置標記防止重複請求
-    let isMounted = true;
-    
-    const loadWorkAssignments = async () => {
-      try {
-        console.log('開始加載工作分配數據...');
-        
-        // 獲取當前年月
+        // 第二步：載入最新的工作分配數據
+        console.log('📊 2. 載入最新工作分配數據...');
         const year = selectedDate.getFullYear();
         const month = selectedDate.getMonth() + 1;
         
-        // 載入工作分配數據
-        const result = await cachedScheduleDetailsRequest(apiService, 'weekly-schedule', year, month);
-        
-        // 如果組件已卸載，不繼續執行
-        if (!isMounted) return;
-        
-        if (result.fromCache) {
-          console.log('loadWorkAssignments: 使用緩存數據');
-        } else {
-          console.log('loadWorkAssignments: 從API獲取最新數據');
-        }
-        
-        if (result.data?.success) {
-          // 將工作分配資料更新到排班資料中
-          const monthlyData = [...useScheduleStore.getState().monthlySchedule];
-          const details = result.data.data || [];
+        try {
+          const response = await apiService.schedule.getScheduleDetails(year, month);
           
-          console.log(`收到 ${details.length} 條工作分配記錄`);
+          if (!isMounted) return;
           
-          // 遍歷每個排班記錄，更新area_code
-          details.forEach(item => {
-            const nurseIndex = monthlyData.findIndex(nurse => nurse.id === item.user_id);
-            if (nurseIndex >= 0) {
+          if (response.data?.success) {
+            console.log('✅ 2. 工作分配 API 成功:', response.data);
+            
+            // 🔥 批量更新 monthlySchedule 中的 area_codes
+            const currentSchedule = useScheduleStore.getState().monthlySchedule;
+            const updatedSchedule = [...currentSchedule];
+            const details = response.data.data || [];
+            
+            console.log(`📊 收到 ${details.length} 條工作分配記錄，批量更新到 store`);
+            
+            // 建立日期到工作分配的映射表，提高效率
+            const workAssignmentMap = new Map();
+            details.forEach(item => {
               const dateObj = new Date(item.date);
-              const day = dateObj.getDate() - 1; // 轉換為0-based索引
-              
-              if (!monthlyData[nurseIndex].area_codes) {
-                monthlyData[nurseIndex].area_codes = Array(31).fill(null);
+              const day = dateObj.getDate();
+              const key = `${item.user_id}-${day}`;
+              workAssignmentMap.set(key, item.area_code);
+            });
+            
+            // 批量更新所有護理師的工作分配
+            let updateCount = 0;
+            updatedSchedule.forEach((nurse, nurseIndex) => {
+              if (!nurse.area_codes) {
+                nurse.area_codes = Array(31).fill(null);
               }
               
-              if (day >= 0 && day < 31) {
-                monthlyData[nurseIndex].area_codes[day] = item.area_code;
+              for (let day = 1; day <= 31; day++) {
+                const key = `${nurse.id}-${day}`;
+                if (workAssignmentMap.has(key)) {
+                  const dayIndex = day - 1;
+                  nurse.area_codes[dayIndex] = workAssignmentMap.get(key);
+                  updateCount++;
+                }
               }
-            }
-          });
-          
-          // 更新store中的數據
-          useScheduleStore.setState({ monthlySchedule: monthlyData });
-          
-          console.log('工作分配數據加載並更新完成');
-        } else {
-          console.warn('工作分配API響應格式不正確:', result.data);
+            });
+            
+            console.log(`✅ 批量更新完成，共更新 ${updateCount} 個工作分配`);
+            
+            // 🔥 一次性更新 store 中的數據，避免多次渲染
+            useScheduleStore.setState({ monthlySchedule: updatedSchedule });
+            console.log('🎯 順序載入完成：月班表 + 工作分配 已更新到 store');
+          }
+        } catch (areaCodeErr) {
+          console.error('❌ 載入工作分配數據失敗:', areaCodeErr);
+          // 即使工作分配載入失敗，月班表仍可正常使用
         }
-      } catch (areaCodeErr) {
-        console.error('獲取工作分配資料失敗:', areaCodeErr);
-        // 即使載入失敗，也不影響頁面的正常使用
+        
+      } catch (err) {
+        console.error('獲取班表數據失敗:', err);
+      } finally {
+        isLoadingRef.current = false;
       }
     };
     
-    loadWorkAssignments();
+    // 加入小延遲，避免快速切換日期時的重複載入
+    const timeoutId = setTimeout(() => {
+      if (isMounted) {
+        loadScheduleDataSequentially();
+      }
+    }, 100);
     
     // 清理函數，組件卸載時設置標記
     return () => {
       isMounted = false;
+      clearTimeout(timeoutId);
+      isLoadingRef.current = false;
     };
-  }, [selectedDate]); // 只依賴 selectedDate，確保每次日期變更都會載入工作分配
+  }, [selectedDate, fetchMonthlySchedule]);
+
+
 
   // 當現週或編輯模式變化時，同步工作分配數據
   useEffect(() => {

@@ -661,13 +661,18 @@ export const useScheduleStore = create(
                   shifts = Array(31).fill('');
                 }
                 
-                // 為每個護理師創建初始的area_codes數組，暫時為null
-                const area_codes = Array(shifts.length).fill(null);
+                // 🔥 關鍵修改：保留已有的 area_codes，避免覆蓋工作分配數據
+                const currentSchedule = get().monthlySchedule;
+                const existingNurse = currentSchedule.find(n => n.id === nurse.id);
+                const area_codes = existingNurse?.area_codes || Array(shifts.length).fill(null);
+                
+                console.log(`護理師 ${nurse.name} (ID: ${nurse.id}) - 保留已有的工作分配數據:`, 
+                          existingNurse?.area_codes ? '是' : '否');
                 
                 return {
                   ...nurse,
                   shifts: shifts,
-                  area_codes: area_codes, // 添加空的area_codes以保持數據結構一致
+                  area_codes: area_codes, // 保留已有的 area_codes，避免覆蓋
                   special_type: nurse.special_type || null // 確保 special_type 字段存在
                 };
               });
