@@ -46,6 +46,7 @@ import { SHIFT_COLORS } from '../constants/shiftSwapConstants';
 import useHeartbeat from '../hooks/useHeartbeat';
 import { doctorScheduleService } from '../utils/api';
 import { formatDoctorName, getDoctorMapping } from '../utils/doctorUtils';
+import NurseCalendar from '../components/common/NurseCalendar';
 
 // 班次顏色和名稱的映射，可以根據需要擴展
 const shiftDetails = {
@@ -153,85 +154,7 @@ const DOCTOR_AREA_COLOR_MAPPING = {
   '未分類': '#9e9e9e'         // 灰色系
 };
 
-// 🚀 直接複製 ShiftSwap 的完整月曆實現，包括 CSS 樣式
-const calendarStyles = `
-  .calendar-container {
-    margin-top: 20px;
-  }
-  
-  .calendar-table {
-    width: 100%;
-    border-collapse: collapse;
-    table-layout: fixed;
-  }
-  
-  .calendar-table th {
-    padding: 8px;
-    text-align: center;
-    background-color: #f5f5f5;
-    border: 1px solid #ddd;
-    width: 14.285714%;
-    font-weight: bold;
-  }
-  
-  .calendar-table td {
-    border: 1px solid #ddd;
-    padding: 0;
-    vertical-align: top;
-    height: 90px;
-    width: 14.285714%;
-    position: relative;
-    transition: all 0.2s ease;
-  }
-  
-  @media (max-width: 600px) {
-    .calendar-table td {
-      height: 70px;
-    }
-    .calendar-table th {
-      padding: 6px 4px;
-      font-size: 14px;
-    }
-  }
-  
-  .empty-cell {
-    background-color: #f9f9f9;
-  }
-  
-  .expired-cell {
-    background-color: #fafafa;
-    opacity: 0.6;
-  }
-  
-  .expired-cell:hover {
-    background-color: #fafafa !important;
-    cursor: not-allowed !important;
-  }
-  
-  .cell-content {
-    padding: 5px;
-    height: 100%;
-    position: relative;
-    display: flex;
-    flex-direction: column;
-  }
-  
-  .today {
-    background-color: #e3f2fd;
-  }
-  
-  .selected {
-    background-color: #e8f5e9;
-    transform: scale(1.05);
-    box-shadow: none;
-    z-index: 10;
-  }
-  
-  td:hover:not(.expired-cell) {
-    background-color: #f0f0f0;
-    cursor: pointer;
-  }
-`;
+
 
 // 醫師班表日曆單元格渲染組件
 const RenderDoctorCalendarCell = ({ day }) => {
@@ -354,102 +277,7 @@ const RenderDoctorCalendarCell = ({ day }) => {
 };
 
 // 🚀 直接使用 ShiftSwap 成功的日曆單元格組件
-const RenderCalendarCell = ({ day }) => {
-  if (!day.date) return null;
-  
-  const commonTagStyle = {
-    fontSize: '10px',
-    padding: '2px 4px',
-    borderRadius: '0 4px 4px 4px',
-    width: '100%',
-    display: 'flex',
-    alignItems: 'center',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-    boxSizing: 'border-box',
-    marginTop: '2px'
-  };
-  
-  return (
-    <div className="cell-content" style={{ 
-      display: 'flex', 
-      flexDirection: 'column',
-      height: '100%',
-      width: '100%'
-    }}>
-      {/* 日期顯示在最上方 */}
-      <Box sx={{ 
-        textAlign: 'right',
-        padding: '2px 4px',
-        fontWeight: 'bold',
-        fontSize: '12px',
-        width: '100%'
-      }}>
-        {format(day.date, 'd')}
-      </Box>
-      
-      {/* 班別顯示在第二行 */}
-      {day.shift && (
-        <Box sx={{ 
-          backgroundColor: SHIFT_COLORS[day.shift] || '#9e9e9e',
-          color: day.shift === 'O' ? 'black' : 'white',
-          fontWeight: 'bold',
-          fontSize: '11px',
-          padding: '2px 4px',
-          borderRadius: '4px',
-          width: '100%',
-          textAlign: 'left',
-          marginTop: '2px'
-        }}>
-          {day.shift}
-        </Box>
-      )}
-      
-      <Box sx={{ 
-        display: 'flex', 
-        flexDirection: 'column',
-        gap: '2px',
-        overflow: 'hidden',
-        flex: 1,
-        width: '100%',
-        mt: 0.5
-      }}>
-        {/* 工作區域 */}
-        {day.mission && (
-          <Box sx={{ 
-            ...commonTagStyle,
-            backgroundColor: '#4dabf5',
-            color: 'white',
-          }}>
-            <ViewWeekIcon sx={{ fontSize: '10px', mr: 0.3 }} />
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{day.mission}</span>
-          </Box>
-        )}
-        
-        {/* 加班信息 */}
-        {day.overtime && (
-          <Box sx={{ 
-            ...commonTagStyle,
-            backgroundColor: '#ff8a65',
-            color: 'white',
-          }}>
-            <WorkIcon sx={{ fontSize: '10px', mr: 0.3 }} />
-            {day.overtimeShift && (
-              <span style={{
-                color: 'white',
-                fontSize: '9px',
-                fontWeight: 'bold',
-              }}>
-                {day.overtimeShift}
-              </span>
-            )}
-          </Box>
-        )}
-      </Box>
-    </div>
-  );
-};
+
 
 function Dashboard() {
   const navigate = useNavigate();
@@ -506,9 +334,6 @@ function Dashboard() {
   const todayDate = useMemo(() => getDate(today), [today]); // 日 (1-31)
   const currentMonth = useMemo(() => getMonth(today), [today]); // 月 (0-11)
   const currentYear = useMemo(() => getYear(today), [today]); // 年
-  
-  // 🚀 添加 ShiftSwap 中使用的變數
-  const weekDays = ['一', '二', '三', '四', '五', '六', '日'];
 
   // 判斷用戶是否正在上班的函數
   const isUserCurrentlyWorking = (userShift) => {
@@ -1807,45 +1632,78 @@ function Dashboard() {
                         <Typography sx={{ ml: 2 }}>載入醫師班表中...</Typography>
                       </Box>
                     ) : doctorCalendarData.length > 0 ? (
-                    <Box sx={{ width: '100%', overflowX: 'auto', flex: 1 }}>
-                        <style>{calendarStyles}</style>
-                        <div className="calendar-container">
-                          <table className="calendar-table">
-                            <thead>
-                              <tr>
-                                {['一', '二', '三', '四', '五', '六', '日'].map(day => (
-                                  <th key={day}>{day}</th>
-                                ))}
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {doctorCalendarData.map((week, weekIndex) => (
-                                <tr key={weekIndex}>
-                                  {week.map((day, dayIndex) => {
-                                    const isExpired = day.date && day.date < today;
-                                    
-                                    return (
-                                      <td 
-                                        key={dayIndex}
-                                        className={`
-                                          ${!day.date ? 'empty-cell' : ''}
-                                          ${day.date && isToday(day.date) ? 'today' : ''}
-                                          ${isExpired ? 'expired-cell' : ''} 
-                                        `}
-                                        style={{
-                                          cursor: isExpired ? 'not-allowed' : 'default',
-                                          opacity: isExpired ? 0.5 : 1
-                                        }}
-                                      >
-                                        {day.date && <RenderDoctorCalendarCell day={day} />}
-                                      </td>
-                                    );
-                                  })}
-                                </tr>
+                      <Box sx={{ width: '100%', overflowX: 'auto', flex: 1 }}>
+                        <Box component="table" sx={{ 
+                          width: '100%', 
+                          height: '100%',
+                          borderCollapse: 'collapse',
+                          border: '1px solid #e0e0e0',
+                          tableLayout: 'fixed'
+                        }}>
+                          <Box component="thead">
+                            <Box component="tr">
+                              {['一', '二', '三', '四', '五', '六', '日'].map(day => (
+                                <Box 
+                                  component="th" 
+                                  key={day}
+                                  sx={{
+                                    padding: '8px',
+                                    textAlign: 'center',
+                                    backgroundColor: '#f5f5f5',
+                                    border: '1px solid #e0e0e0',
+                                    width: '14.285714%',
+                                    fontWeight: 'bold'
+                                  }}
+                                >
+                                  {day}
+                                </Box>
                               ))}
-                            </tbody>
-                          </table>
-                        </div>
+                            </Box>
+                          </Box>
+                          <Box component="tbody">
+                            {doctorCalendarData.map((week, weekIndex) => (
+                              <Box component="tr" key={weekIndex}>
+                                {week.map((day, dayIndex) => {
+                                  const isExpired = day.date && day.date < today;
+                                  
+                                  return (
+                                    <Box 
+                                      component="td" 
+                                      key={dayIndex}
+                                      sx={{
+                                        position: 'relative',
+                                        height: '90px',
+                                        minHeight: '70px',
+                                        padding: '4px',
+                                        border: '1px solid #e0e0e0',
+                                        overflow: 'hidden',
+                                        cursor: 'default',
+                                        '&:hover': {
+                                          backgroundColor: '#f5f5f5',
+                                        },
+                                        ...(day.date && isToday(day.date) && { 
+                                          backgroundColor: '#e8f5e9',
+                                          border: '2px solid #4caf50'
+                                        }),
+                                        ...(isExpired && {
+                                          backgroundColor: '#fafafa',
+                                          opacity: 0.6,
+                                          cursor: 'not-allowed'
+                                        }),
+                                        ...((!day.date) && { 
+                                          backgroundColor: '#f9f9f9',
+                                          opacity: 0.5
+                                        })
+                                      }}
+                                    >
+                                      {day.date && <RenderDoctorCalendarCell day={day} />}
+                                    </Box>
+                                  );
+                                })}
+                              </Box>
+                            ))}
+                          </Box>
+                        </Box>
                       </Box>
                     ) : (
                       <Typography variant="body1" color="text.secondary">
@@ -1856,49 +1714,19 @@ function Dashboard() {
                     /* 護理師顯示護理師月班表 */
                     monthlyCalendarData.length > 0 ? (
                       <Box sx={{ width: '100%', overflowX: 'auto', flex: 1 }}>
-                      <style>{calendarStyles}</style>
-                      <div className="calendar-container">
-                        <table className="calendar-table">
-                          <thead>
-                            <tr>
-                              {weekDays.map(day => (
-                                <th key={day}>{day}</th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody>
-                          {monthlyCalendarData.map((week, weekIndex) => (
-                              <tr key={weekIndex}>
-                                {week.map((day, dayIndex) => {
-                                  const isExpired = day.date && day.date < today;
-                                  
-                                  return (
-                                    <td 
-                                  key={dayIndex}
-                                      className={`
-                                        ${!day.date ? 'empty-cell' : ''}
-                                        ${day.date && isToday(day.date) ? 'today' : ''}
-                                        ${isExpired ? 'expired-cell' : ''} 
-                                      `}
-                                      style={{
-                                        cursor: isExpired ? 'not-allowed' : 'default',
-                                        opacity: isExpired ? 0.5 : 1
-                                      }}
-                                    >
-                                      {day.date && <RenderCalendarCell day={day} />}
-                                    </td>
-                                  );
-                                })}
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </Box>
-                  ) : (
-                    <Typography variant="body1" color="text.secondary">
-                      無法載入本月班表
-                    </Typography>
+                        <NurseCalendar 
+                          selectedDate={selectedDate}
+                          calendarData={monthlyCalendarData}
+                          isDateExpired={(day) => day.date && day.date < today}
+                          showTable={true}
+                          cellHeight={{ xs: '70px', sm: '90px' }}
+                          clickable={false}
+                        />
+                      </Box>
+                    ) : (
+                      <Typography variant="body1" color="text.secondary">
+                        無法載入本月班表
+                      </Typography>
                     )
                   )}
                 </CardContent>
