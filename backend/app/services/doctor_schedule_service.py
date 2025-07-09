@@ -600,6 +600,12 @@ class DoctorScheduleService:
         return schedules[0] if schedules else None
     
     @classmethod
+    def get_schedule_by_date(cls, db: Session, date: str) -> Optional[Dict]:
+        """獲取指定日期的班表資料"""
+        schedules = cls.get_schedules_by_date_range(db, date, date)
+        return schedules[0] if schedules else None
+    
+    @classmethod
     def update_doctor_area_code(cls, db: Session, doctor_id: int, new_area_code: str) -> bool:
         """更新醫師的區域代碼"""
         try:

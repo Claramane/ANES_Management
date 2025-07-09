@@ -96,6 +96,39 @@ async def get_public_today_schedule(
         logger.error(f"獲取今日班表失敗（公開端點）: {str(e)}")
         raise HTTPException(status_code=500, detail="獲取今日班表失敗")
 
+@router.get("/public/date/{date}", response_model=Dict)
+async def get_public_date_schedule(
+    date: str,
+    db: Session = Depends(get_db)
+):
+    """獲取指定日期的班表 - 公開端點，不需要授權"""
+    try:
+        # 驗證日期格式
+        if len(date) != 8:
+            raise HTTPException(status_code=400, detail="日期格式錯誤，請使用YYYYMMDD格式")
+        
+        # 驗證日期是否為有效日期
+        try:
+            from datetime import datetime
+            datetime.strptime(date, '%Y%m%d')
+        except ValueError:
+            raise HTTPException(status_code=400, detail="無效的日期，請使用YYYYMMDD格式")
+        
+        # 記錄請求日期用於調試
+        current_time = now()
+        logger.info(f"獲取指定日期班表請求（公開端點），請求日期: {date}，當前時間: {current_time}")
+        
+        schedule = DoctorScheduleService.get_schedule_by_date(db, date)
+        if not schedule:
+            return {"message": f"指定日期({date})無班表資料", "data": None}
+        
+        return {"message": "獲取成功", "data": schedule}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"獲取指定日期班表失敗（公開端點）: {str(e)}")
+        raise HTTPException(status_code=500, detail="獲取指定日期班表失敗")
+
 @router.post("/update-from-external")
 async def update_schedules_from_external(
     start_date: str = Query(..., description="開始日期 YYYYMMDD"),
