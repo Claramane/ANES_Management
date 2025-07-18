@@ -94,9 +94,6 @@ const ensureValidDate = (date) => {
 };
 
 const WeeklySchedule = () => {
-  console.log('🏥🏥🏥 WeeklySchedule 組件開始初始化 🏥🏥🏥');
-  console.log('⏰ 當前時間:', new Date().toISOString());
-  
   const { 
     monthlySchedule, 
     isLoading, 
@@ -106,16 +103,6 @@ const WeeklySchedule = () => {
     fetchMonthlySchedule,
     updateShift
   } = useScheduleStore();
-
-  console.log('📋📋📋 useScheduleStore 資料 📋📋📋:', {
-    hasMonthlySchedule: monthlySchedule?.length > 0,
-    monthlyScheduleLength: monthlySchedule?.length,
-    isLoading,
-    error,
-    storeSelectedDate,
-    storeSelectedDateType: typeof storeSelectedDate,
-    storeSelectedDateIsDate: storeSelectedDate instanceof Date
-  });
 
   const { nurseUsers, fetchUsers } = useUserStore();
   const { user } = useAuthStore();
@@ -129,23 +116,305 @@ const WeeklySchedule = () => {
   const [pmValues, setPmValues] = useState({}); // 新增PM值的狀態
   const [isSaving, setIsSaving] = useState(false);
   
+  // 鍵盤快速輸入相關狀態 - 使用 useRef 避免重渲染時丟失
+  const quickInputStateRef = useRef(null);
+  const quickInputTimeoutRef = useRef(null);
+  const numberBufferRef = useRef('');
+  const numberBufferTimeoutRef = useRef(null);
+  
+  // 長按檢測相關狀態
+  const longPressTimeoutRef = useRef(null);
+  const [longPressActive, setLongPressActive] = useState(null); // 儲存正在長按的按鈕信息
+  
+  // 用於觸發重渲染的狀態
+  const [quickInputActive, setQuickInputActive] = useState(false);
+  
   // 添加臨時日期狀態
   const [tempDate, setTempDate] = useState(null);
   
   // 檢查是否有編輯權限
   const hasEditPermission = user?.role === 'head_nurse' || user?.role === 'admin';
   
+  // 清除快速輸入狀態的函數
+  const clearQuickInputState = () => {
+    if (quickInputTimeoutRef.current) {
+      clearTimeout(quickInputTimeoutRef.current);
+      quickInputTimeoutRef.current = null;
+    }
+    
+    if (numberBufferTimeoutRef.current) {
+      clearTimeout(numberBufferTimeoutRef.current);
+      numberBufferTimeoutRef.current = null;
+    }
+    
+    if (longPressTimeoutRef.current) {
+      clearTimeout(longPressTimeoutRef.current);
+      longPressTimeoutRef.current = null;
+    }
+    
+    quickInputStateRef.current = null;
+    numberBufferRef.current = '';
+    setQuickInputActive(false);
+    setLongPressActive(null);
+  };
+  
+  // 啟動鍵盤監聽模式（長按觸發）
+  const startQuickInputListening = (nurseId, dayIndex, baseType) => {
+    console.log(`🚀 長按啟動快速輸入監聽: ${baseType}`);
+    
+    // 清除之前的監聽
+    clearQuickInputState();
+    
+    // 設置快速輸入狀態
+    quickInputStateRef.current = { nurseId, dayIndex, baseType };
+    setQuickInputActive(true);
+    
+    console.log(`⌨️ 開始監聽鍵盤輸入...放開滑鼠將結束監聽`);
+  };
+  
+  // 處理長按開始
+  const handleLongPressStart = (nurseId, dayIndex, baseType) => {
+    console.log(`👆 開始長按檢測: ${baseType}`);
+    
+    // 設置長按狀態以提供視覺反饋
+    setLongPressActive({ nurseId, dayIndex, baseType });
+    
+    // 200ms後認為是長按，啟動監聽模式
+    longPressTimeoutRef.current = setTimeout(() => {
+      console.log(`⏳ 長按成功，啟動監聽模式: ${baseType}`);
+      startQuickInputListening(nurseId, dayIndex, baseType);
+    }, 200);
+  };
+  
+  // 處理長按結束
+  const handleLongPressEnd = (nurseId, dayIndex, mission) => {
+    console.log(`👆 長按結束`);
+    
+    // 如果長按定時器還在運行，說明是短按
+    if (longPressTimeoutRef.current) {
+      clearTimeout(longPressTimeoutRef.current);
+      longPressTimeoutRef.current = null;
+      setLongPressActive(null);
+      
+      console.log(`👆 短按檢測到，執行循環邏輯: ${mission}`);
+      // 短按執行循環邏輯
+      handleMissionCycle(nurseId, dayIndex, mission);
+    } else {
+      // 長按模式結束，清除監聽
+      if (quickInputStateRef.current) {
+        console.log(`⌨️ 長按結束，停止監聽`);
+        clearQuickInputState();
+      }
+    }
+  };
+  
+  // 處理數字組合完成
+  const processNumberInput = (completeNumber) => {
+    if (!quickInputStateRef.current) return;
+    
+    const { nurseId, dayIndex, baseType } = quickInputStateRef.current;
+    const targetValue = `${baseType}${completeNumber}`;
+    
+    console.log(`🎯 快速輸入組合: ${targetValue}`);
+    
+    // 驗證是否為有效的工作分配值
+    if (isValidQuickInputCombination(baseType, completeNumber, nurseId, dayIndex)) {
+      // 檢查是否會重複分配（排除當前護理師）
+      const isAlreadyAssigned = currentWeekSchedule.some(nurse => {
+        if (nurse.id === nurseId) return false; // 排除當前護理師
+        
+        const otherMissionKey = `${nurse.id}-${currentWeek}-${dayIndex}`;
+        const otherMission = missionValues[otherMissionKey];
+        const otherPmMission = pmValues[otherMissionKey];
+        
+        return otherMission === targetValue || otherPmMission === targetValue;
+      });
+      
+      if (isAlreadyAssigned) {
+        console.log(`❌ 重複分配檢查失敗: ${targetValue} 已被其他護理師分配`);
+        return;
+      }
+      
+      // 直接設置值
+      const key = `${nurseId}-${currentWeek}-${dayIndex}`;
+      const newMissionValues = { ...missionValues };
+      newMissionValues[key] = targetValue;
+      setMissionValues(newMissionValues);
+      
+      console.log(`✅ 快速輸入成功: ${targetValue}`);
+    } else {
+      console.log(`❌ 無效的快速輸入: ${targetValue}`);
+    }
+  };
+  
+  // 檢查當前輸入是否可能還有更多字元（智能完成檢查）
+  const canHaveMoreInput = (baseType, currentBuffer) => {
+    if (baseType === 'OR') {
+      // OR支援的完整數字: 1,2,3,5,6,7,8,9,11,13
+      const validNumbers = ['1', '2', '3', '5', '6', '7', '8', '9', '11', '13'];
+      
+      // 檢查是否有任何有效數字以當前緩衝區開頭
+      const possibleExtensions = validNumbers.filter(num => 
+        num.startsWith(currentBuffer) && num.length > currentBuffer.length
+      );
+      
+      return possibleExtensions.length > 0;
+    } else if (baseType === 'HC' || baseType === 'F' || baseType === '3F') {
+      // HC, F, 3F只支援單位數，所以如果已經有一位數字就完成了
+      return false;
+    }
+    
+    return false;
+  };
+  
+  // 處理鍵盤數字輸入
+  const handleKeyPress = (event) => {
+    if (!quickInputStateRef.current) return;
+    
+    const key = event.key;
+    // 只處理數字鍵
+    if (!/^[0-9]$/.test(key)) return;
+    
+    console.log(`🔢 接收數字輸入: ${key}`);
+    
+    // 清除之前的數字組合計時器
+    if (numberBufferTimeoutRef.current) {
+      clearTimeout(numberBufferTimeoutRef.current);
+    }
+    
+    // 將新數字添加到緩衝區
+    const newBuffer = numberBufferRef.current + key;
+    numberBufferRef.current = newBuffer;
+    
+    console.log(`📝 數字緩衝區: "${newBuffer}"`);
+    
+    const { baseType } = quickInputStateRef.current;
+    
+    // 檢查是否還可能有更多輸入
+    const canContinue = canHaveMoreInput(baseType, newBuffer);
+    
+    if (!canContinue) {
+      // 無法繼續輸入，立即完成
+      console.log(`⚡ 智能完成: "${newBuffer}" (無更多可能輸入)`);
+      processNumberInput(newBuffer);
+      // 注意：不清除狀態，因為用戶可能還在長按，允許繼續輸入
+      numberBufferRef.current = ''; // 只清除緩衝區
+    } else {
+      // 可能還有更多輸入，設定0.5秒計時器
+      console.log(`⏳ 等待更多輸入: "${newBuffer}"`);
+      numberBufferTimeoutRef.current = setTimeout(() => {
+        console.log(`⏰ 數字輸入完成: "${newBuffer}"`);
+        
+        // 處理完整的數字輸入
+        processNumberInput(newBuffer);
+        
+        // 只清除緩衝區，保持監聽狀態
+        numberBufferRef.current = '';
+      }, 500);
+    }
+  };
+  
+  // 驗證快速輸入組合是否有效（支援多位數）
+  const isValidQuickInputCombination = (baseType, numberString, nurseId, dayIndex) => {
+    // 獲取當前星期幾
+    const currentDate = parseInt(getDateOfWeek(currentWeek - 1, dayIndex + 1));
+    if (!currentDate) return false;
+    
+    const date = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), currentDate);
+    const dayOfWeek = date.getDay();
+    
+    if (baseType === 'OR') {
+      // OR 支援的數字組合: 1,2,3,5,6,7,8,9,11,13
+      // 週一、週三、週五額外有 1
+      let validNumbers = ['2', '3', '5', '6', '7', '8', '9', '11', '13'];
+      if (dayOfWeek === 1 || dayOfWeek === 3 || dayOfWeek === 5) {
+        validNumbers.unshift('1');
+      }
+      
+      return validNumbers.includes(numberString);
+    } else if (baseType === 'HC') {
+      // HC 有效數字: 1,2,3
+      return ['1', '2', '3'].includes(numberString);
+    } else if (baseType === 'F') {
+      // F 有效數字: 1,2
+      return ['1', '2'].includes(numberString);
+    } else if (baseType === '3F') {
+      // 3F 支援的數字: 1,2,3 (3F1, 3F2, 3F3)
+      return ['1', '2', '3'].includes(numberString);
+    }
+    
+    return false;
+  };
+  
+  // 鍵盤事件監聽器
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      // 只在編輯模式下監聽
+      if (!editMode || !hasEditPermission) return;
+      
+      handleKeyPress(event);
+    };
+    
+    // 添加全局鍵盤監聽
+    document.addEventListener('keydown', handleKeyDown);
+    
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      if (quickInputTimeoutRef.current) {
+        clearTimeout(quickInputTimeoutRef.current);
+      }
+      if (numberBufferTimeoutRef.current) {
+        clearTimeout(numberBufferTimeoutRef.current);
+      }
+      if (longPressTimeoutRef.current) {
+        clearTimeout(longPressTimeoutRef.current);
+      }
+    };
+  }, [editMode, hasEditPermission, quickInputActive, missionValues, currentWeek]);
+  
+  // 從完整的工作分配值中提取基本類型
+  const extractBaseType = (mission) => {
+    if (!mission) return null;
+    
+    // 處理各種工作分配類型
+    if (mission.startsWith('OR')) return 'OR';
+    if (mission.startsWith('HC')) return 'HC';
+    if (mission.startsWith('F')) return 'F';
+    if (mission.startsWith('3F')) return '3F';
+    
+    // 其他類型返回原值
+    return mission;
+  };
+  
+  // 統一的按鈕點擊處理函數（現在都執行循環邏輯）
+  const handleMissionClick = (nurseId, dayIndex, mission) => {
+    // 首先中斷任何現有的監聽狀態
+    clearQuickInputState();
+    
+    // 查找該護理師該天的班次
+    const nurseData = currentWeekSchedule.find(n => n.id === nurseId);
+    if (!nurseData) return;
+    
+    const shift = nurseData.shifts[dayIndex];
+    
+    // 確保只有A班才能修改工作分區
+    if (shift !== 'A') {
+      console.log(`只有A班才能修改工作分區，當前班次為 ${shift}`);
+      return;
+    }
+    
+    // 執行循環邏輯
+    console.log(`🔄 執行循環邏輯: ${mission}`);
+    handleMissionCycle(nurseId, dayIndex, mission);
+  };
 
   
   // 確保選擇的日期是有效的
   let selectedDate;
   try {
-    console.log('🔄🔄🔄 開始計算 selectedDate 🔄🔄🔄');
-    console.log('📅 storeSelectedDate:', storeSelectedDate);
     selectedDate = storeSelectedDate && storeSelectedDate instanceof Date ? storeSelectedDate : new Date();
-    console.log('✅✅✅ selectedDate 計算完成 ✅✅✅:', selectedDate);
   } catch (err) {
-    console.error('❌❌❌ selectedDate 計算錯誤 ❌❌❌:', err);
+    console.error('selectedDate 計算錯誤:', err);
     selectedDate = new Date();
   }
 
@@ -946,6 +1215,55 @@ const WeeklySchedule = () => {
         return pmValue || 'PM';
       }
       
+      // F按鈕的智能顯示邏輯
+      if (buttonType === 'F') {
+        // 如果已經選中，顯示具體的工作分配
+        if (isButtonHighlighted(buttonType) && (currentMission?.startsWith('F') || currentMission === 'PCA' || currentMission === 'SEC' || currentMission === 'TAE')) {
+          return currentMission;
+        }
+        
+        // 如果沒有選中，檢查各個選項的分配狀況並智能顯示
+        const assignments = getCurrentDayAssignments(dayIndex);
+        const isF1Assigned = assignments['F1'] !== null;
+        const isF2Assigned = assignments['F2'] !== null;
+        const isTAEAssigned = assignments['TAE'] !== null;
+        const isPCAAssigned = assignments['PCA'] !== null;
+        const isSECAssigned = assignments['SEC'] !== null;
+        
+        // 獲取當前星期幾來判斷是否顯示TAE
+        const currentDate = parseInt(getDateOfWeek(currentWeek - 1, dayIndex + 1));
+        if (currentDate) {
+          const date = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), currentDate);
+          const dayOfWeek = date.getDay();
+          
+          // 週三週四才有TAE的智能邏輯
+          if (dayOfWeek === 3 || dayOfWeek === 4) {
+            // F1和F2都被分配時，顯示TAE
+            if (isF1Assigned && isF2Assigned && !isTAEAssigned) {
+              return 'TAE';
+            }
+            // TAE也被分配時，顯示PCA
+            if (isF1Assigned && isF2Assigned && isTAEAssigned && !isPCAAssigned) {
+              return 'PCA';
+            }
+            // PCA也被分配時，顯示SEC
+            if (isF1Assigned && isF2Assigned && isTAEAssigned && isPCAAssigned && !isSECAssigned) {
+              return 'SEC';
+            }
+          } else {
+            // 非週三週四，沒有TAE，直接檢查PCA和SEC
+            if (isF1Assigned && isF2Assigned && !isPCAAssigned) {
+              return 'PCA';
+            }
+            if (isF1Assigned && isF2Assigned && isPCAAssigned && !isSECAssigned) {
+              return 'SEC';
+            }
+          }
+        }
+        
+        return 'F';
+      }
+      
       if (!isButtonHighlighted(buttonType)) {
         return buttonType;
       }
@@ -957,8 +1275,6 @@ const WeeklySchedule = () => {
         return currentMission;
       } else if (buttonType === '3F' && currentMission?.startsWith('3F')) {
         return currentMission;
-      } else if (buttonType === 'F' && (currentMission?.startsWith('F') || currentMission === 'PCA' || currentMission === 'SEC' || currentMission === 'TAE')) {
-        return currentMission;
       } else if (buttonType === 'HC' && currentMission?.startsWith('HC')) {
         return currentMission;
       }
@@ -966,67 +1282,127 @@ const WeeklySchedule = () => {
       return currentMission || buttonType;
     };
 
+    // 檢查按鈕是否在長按或監聽狀態
+    const isButtonInActiveState = (buttonType) => {
+      // 檢查是否在長按狀態
+      if (longPressActive?.baseType === extractBaseType(buttonType) && 
+          longPressActive?.nurseId === nurseId && 
+          longPressActive?.dayIndex === dayIndex) {
+        return 'longPress';
+      }
+      
+      // 檢查是否在監聽狀態
+      if (quickInputStateRef.current?.baseType === extractBaseType(buttonType) && 
+          quickInputStateRef.current?.nurseId === nurseId && 
+          quickInputStateRef.current?.dayIndex === dayIndex) {
+        return 'listening';
+      }
+      
+      return null;
+    };
+
     // 創建按鈕的共用函式
-    const createButton = (buttonType, onClick) => (
-          <Button 
-        key={buttonType}
-            size="small"
-            variant="contained"
-        onClick={onClick}
-            sx={{
-              ...btnStyle,
-          backgroundColor: isButtonHighlighted(buttonType)
-            ? getButtonColor(buttonType, true).active.bg 
-            : getButtonColor(buttonType, false).inactive.bg,
-          color: isButtonHighlighted(buttonType)
-            ? getButtonColor(buttonType, true).active.text 
-            : getButtonColor(buttonType, false).inactive.text,
-          borderColor: isButtonHighlighted(buttonType)
-            ? getButtonColor(buttonType, true).active.border 
-            : getButtonColor(buttonType, false).inactive.border,
-        }}
-      >
-        {getButtonDisplayText(buttonType)}
-          </Button>
-        );
+    const createButton = (buttonType, onClick, supportsQuickInput = false) => {
+      const activeState = isButtonInActiveState(buttonType);
+      const baseType = extractBaseType(buttonType);
+      
+      // 長按事件處理
+      const longPressHandlers = supportsQuickInput ? {
+        onMouseDown: (e) => {
+          e.preventDefault();
+          handleLongPressStart(nurseId, dayIndex, baseType);
+        },
+        onMouseUp: (e) => {
+          e.preventDefault();
+          handleLongPressEnd(nurseId, dayIndex, buttonType);
+        },
+        onMouseLeave: (e) => {
+          e.preventDefault();
+          handleLongPressEnd(nurseId, dayIndex, buttonType);
+        },
+        onTouchStart: (e) => {
+          e.preventDefault();
+          handleLongPressStart(nurseId, dayIndex, baseType);
+        },
+        onTouchEnd: (e) => {
+          e.preventDefault();
+          handleLongPressEnd(nurseId, dayIndex, buttonType);
+        }
+      } : {
+        onClick: onClick
+      };
+      
+      return (
+        <Button 
+          key={buttonType}
+          size="small"
+          variant="contained"
+          {...longPressHandlers}
+          sx={{
+            ...btnStyle,
+            backgroundColor: activeState === 'longPress' ? '#ff9800' : // 長按中：橙色
+                           activeState === 'listening' ? '#4caf50' : // 監聽中：綠色
+                           isButtonHighlighted(buttonType)
+                             ? getButtonColor(buttonType, true).active.bg 
+                             : getButtonColor(buttonType, false).inactive.bg,
+            color: (activeState === 'longPress' || activeState === 'listening') ? 'white' :
+                   isButtonHighlighted(buttonType)
+                     ? getButtonColor(buttonType, true).active.text 
+                     : getButtonColor(buttonType, false).inactive.text,
+            borderColor: activeState === 'longPress' ? '#ff9800' : 
+                        activeState === 'listening' ? '#4caf50' :
+                        isButtonHighlighted(buttonType)
+                          ? getButtonColor(buttonType, true).active.border 
+                          : getButtonColor(buttonType, false).inactive.border,
+            // 添加動畫效果
+            transition: 'all 0.2s ease',
+            boxShadow: activeState ? '0 4px 8px rgba(0,0,0,0.3)' : 'none',
+          }}
+        >
+          {activeState === 'longPress' ? '長按中...' :
+           activeState === 'listening' ? '請輸入' :
+           getButtonDisplayText(buttonType)}
+        </Button>
+      );
+    };
 
     // 麻醉專科護理師/麻醉科Leader/護理長的按鈕邏輯
       if (identity === '麻醉專科護理師' || identity === '麻醉科Leader' || identity === '護理長') {
       const buttons = [];
       
-      // OR 按鈕 - 檢查是否應該隱藏
+      // OR 按鈕 - 檢查是否應該隱藏 (支援快速輸入)
       if (!shouldHideButton('OR')) {
-        buttons.push(createButton('OR', () => handleMissionCycle(nurseId, dayIndex, 'OR')));
+        buttons.push(createButton('OR', () => handleMissionClick(nurseId, dayIndex, 'OR'), true));
       }
       
       // DR 按鈕 - 檢查是否應該隱藏
       if (!shouldHideButton('DR')) {
-        buttons.push(createButton('DR', () => handleMissionCycle(nurseId, dayIndex, 'DR')));
+        buttons.push(createButton('DR', () => handleMissionClick(nurseId, dayIndex, 'DR')));
       }
       
       // C 按鈕 - 檢查是否應該隱藏
       if (!shouldHideButton('C')) {
-        buttons.push(createButton('C', () => handleMissionCycle(nurseId, dayIndex, 'C')));
+        buttons.push(createButton('C', () => handleMissionClick(nurseId, dayIndex, 'C')));
       }
       
       // CC 按鈕 - 檢查是否應該隱藏
       if (!shouldHideButton('CC')) {
-        buttons.push(createButton('CC', () => handleMissionCycle(nurseId, dayIndex, 'CC')));
+        buttons.push(createButton('CC', () => handleMissionClick(nurseId, dayIndex, 'CC')));
       }
       
-      // 3F 按鈕 - 檢查是否應該隱藏
+      // 3F 按鈕 - 檢查是否應該隱藏 (支援快速輸入)
       if (!shouldHideButton('3F')) {
-        buttons.push(createButton('3F', () => handleMissionCycle(nurseId, dayIndex, '3F')));
+        buttons.push(createButton('3F', () => handleMissionClick(nurseId, dayIndex, '3F'), true));
       }
       
-      // HC 按鈕 - 檢查是否應該隱藏
+      // HC 按鈕 - 檢查是否應該隱藏 (支援快速輸入)
       if (!shouldHideButton('HC')) {
-        buttons.push(createButton('HC', () => handleMissionCycle(nurseId, dayIndex, 'HC')));
+        buttons.push(createButton('HC', () => handleMissionClick(nurseId, dayIndex, 'HC'), true));
       }
       
-      // F 按鈕 - 檢查是否應該隱藏
+      // F 按鈕 - 檢查是否應該隱藏 (支援快速輸入)
       if (!shouldHideButton('F')) {
-        buttons.push(createButton('F', () => handleMissionCycle(nurseId, dayIndex, 'F')));
+        buttons.push(createButton('F', () => handleMissionClick(nurseId, dayIndex, 'F'), true));
       }
       
       // PM 按鈕 - 只在週一到週五顯示（dayOfWeek 1-5）
@@ -1059,27 +1435,27 @@ const WeeklySchedule = () => {
       
       // PAR 按鈕 - 檢查是否應該隱藏
       if (!shouldHideButton('PAR')) {
-        buttons.push(createButton('PAR', () => handleMissionCycle(nurseId, dayIndex, 'PAR')));
+        buttons.push(createButton('PAR', () => handleMissionClick(nurseId, dayIndex, 'PAR')));
       }
       
       // PCA 按鈕 - 檢查是否應該隱藏
       if (!shouldHideButton('PCA')) {
-        buttons.push(createButton('PCA', () => handleMissionCycle(nurseId, dayIndex, 'PCA')));
+        buttons.push(createButton('PCA', () => handleMissionClick(nurseId, dayIndex, 'PCA')));
       }
       
       // C 按鈕 - 檢查是否應該隱藏
       if (!shouldHideButton('C')) {
-        buttons.push(createButton('C', () => handleMissionCycle(nurseId, dayIndex, 'C')));
+        buttons.push(createButton('C', () => handleMissionClick(nurseId, dayIndex, 'C')));
       }
       
-      // 3F2 按鈕 - 檢查是否應該隱藏
+      // 3F2 按鈕 - 檢查是否應該隱藏 (支援快速輸入)
       if (!shouldHideButton('3F2')) {
-        buttons.push(createButton('3F2', () => handleMissionCycle(nurseId, dayIndex, '3F2')));
+        buttons.push(createButton('3F2', () => handleMissionClick(nurseId, dayIndex, '3F2'), true));
       }
       
-      // HC3 按鈕 - 檢查是否應該隱藏
+      // HC3 按鈕 - 檢查是否應該隱藏 (支援快速輸入)
       if (!shouldHideButton('HC3')) {
-        buttons.push(createButton('HC3', () => handleMissionCycle(nurseId, dayIndex, 'HC3')));
+        buttons.push(createButton('HC3', () => handleMissionClick(nurseId, dayIndex, 'HC3'), true));
       }
       
       return (
@@ -1106,6 +1482,9 @@ const WeeklySchedule = () => {
 
   // 處理工作分配循環邏輯
   const handleMissionCycle = (nurseId, dayIndex, mission) => {
+    // 首先中斷任何現有的監聽狀態
+    clearQuickInputState();
+    
     // 查找該護理師該天的班次
     const nurseData = currentWeekSchedule.find(n => n.id === nurseId);
     if (!nurseData) return;
@@ -1270,11 +1649,39 @@ const WeeklySchedule = () => {
         const availableOptions = options.filter(option => !assignedMissions.has(option));
         
         if (!currentMission || (!currentMission.startsWith('F') && currentMission !== 'PCA' && currentMission !== 'SEC' && currentMission !== 'TAE')) {
+          // 智能選擇邏輯：根據已分配狀況智能選擇下一個可用選項
+          if (assignedMissions.has('F1') && assignedMissions.has('F2')) {
+            // F1和F2都被分配了
+            if ((dayOfWeek === 3 || dayOfWeek === 4)) {
+              // 週三週四：F1,F2 → TAE → PCA → SEC
+              if (!assignedMissions.has('TAE')) return 'TAE';
+              if (!assignedMissions.has('PCA')) return 'PCA';
+              if (!assignedMissions.has('SEC')) return 'SEC';
+            } else {
+              // 非週三週四：F1,F2 → PCA → SEC
+              if (!assignedMissions.has('PCA')) return 'PCA';
+              if (!assignedMissions.has('SEC')) return 'SEC';
+            }
+          }
           return availableOptions.length > 0 ? availableOptions[0] : null;
         }
         
         const currentIndex = options.indexOf(currentMission);
         if (currentIndex === -1) {
+          // 智能選擇邏輯：根據已分配狀況智能選擇下一個可用選項
+          if (assignedMissions.has('F1') && assignedMissions.has('F2')) {
+            // F1和F2都被分配了
+            if ((dayOfWeek === 3 || dayOfWeek === 4)) {
+              // 週三週四：F1,F2 → TAE → PCA → SEC
+              if (!assignedMissions.has('TAE')) return 'TAE';
+              if (!assignedMissions.has('PCA')) return 'PCA';
+              if (!assignedMissions.has('SEC')) return 'SEC';
+            } else {
+              // 非週三週四：F1,F2 → PCA → SEC
+              if (!assignedMissions.has('PCA')) return 'PCA';
+              if (!assignedMissions.has('SEC')) return 'SEC';
+            }
+          }
           return availableOptions.length > 0 ? availableOptions[0] : null;
         }
         
@@ -1335,6 +1742,9 @@ const WeeklySchedule = () => {
 
   // 處理PM工作分配循環邏輯
   const handlePmCycle = (nurseId, dayIndex) => {
+    // 首先中斷任何現有的監聽狀態
+    clearQuickInputState();
+    
     // 查找該護理師該天的班次
     const nurseData = currentWeekSchedule.find(n => n.id === nurseId);
     if (!nurseData) return;
@@ -2200,12 +2610,6 @@ const WeeklySchedule = () => {
         )}
       </Box>
       
-      {isLoading && (
-        <Box sx={{ display: 'flex', justifyContent: 'center', my: 2 }}>
-          <CircularProgress />
-        </Box>
-      )}
-      
       {localError && (
         <Alert severity="error" sx={{ mb: 2 }}>
           {typeof localError === 'string' ? localError : 
@@ -2442,7 +2846,7 @@ const WeeklySchedule = () => {
                                         color={chipColor}
                                         size="small"
                                         onClick={editMode && hasEditPermission ? 
-                                          () => handleMissionCycle(nurse, dayIndex, mission)
+                                          () => handleMissionClick(nurse.id, dayIndex, mission)
                                           : undefined}
                                         sx={{ 
                                           m: 0.3, 
