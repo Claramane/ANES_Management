@@ -108,87 +108,23 @@ export const scoreUtils = {
  */
 export class UserSelector {
   /**
-   * 為指定班別選擇最適合的人員
-   * @param {Array} availableUsers - 可用人員列表
-   * @param {Object} userScores - 用戶分數對象
-   * @param {string} shiftType - 班別類型
-   * @param {string} date - 日期
-   * @param {Object} allocations - 已分配記錄 {userId_date: shift}
-   * @param {number} minIntervalDays - 最小間隔天數
-   * @returns {Object|null} 選中的用戶
+   * 為指定班別選擇最適合的人員 (舊版API，保留相容性)
+   * 注意：新算法使用輪次分配，此方法僅供向後相容
+   * @deprecated 使用新的輪次分配算法
    */
   static selectBestUserForShift(availableUsers, userScores, shiftType, date, allocations, minIntervalDays = MIN_INTERVAL_DAYS) {
     if (!availableUsers || availableUsers.length === 0) {
       return null;
     }
-
-    const shiftScore = scoreUtils.calculateOvertimeScore(shiftType);
     
-    // 1. 按當前分數排序（分數越低越優先）
+    // 簡單的分數最低優先邏輯，保持向後相容
     const candidates = [...availableUsers].sort((a, b) => 
       userScores[a.id].currentScore - userScores[b.id].currentScore
     );
 
-    // 2. 在分數相近的人中進行進一步篩選
-    const lowestScore = userScores[candidates[0].id].currentScore;
-    const closeScoreCandidates = candidates.filter(u => 
-      userScores[u.id].currentScore <= lowestScore + SCORE_THRESHOLD
-    );
-
-    // 3. 對於重要班別（A、B），考慮間隔時間
-    if ((shiftType === 'A' || shiftType === 'B') && closeScoreCandidates.length > 1) {
-      return this._selectWithIntervalCheck(closeScoreCandidates, userScores, shiftType, date, allocations, minIntervalDays);
-    }
-
-    // 4. 對於其他班別或單一候選人，直接選擇分數最低的
     return candidates[0];
   }
 
-  /**
-   * 帶間隔檢查的選擇
-   * @private
-   */
-  static _selectWithIntervalCheck(candidates, userScores, shiftType, date, allocations, minIntervalDays) {
-    const intervalCandidates = [];
-
-    for (const user of candidates) {
-      // 找出該用戶該班別的所有日期
-      const userShiftDates = [];
-      Object.entries(allocations).forEach(([key, shift]) => {
-        const [userId, shiftDate] = key.split('_');
-        if (parseInt(userId) === user.id && shift === shiftType) {
-          userShiftDates.push(new Date(shiftDate));
-        }
-      });
-
-      if (userShiftDates.length === 0) {
-        // 沒有該班別，優先級最高
-        intervalCandidates.push({ user, interval: 999 });
-      } else {
-        // 計算與最近日期的間隔
-        const currentDate = new Date(date);
-        const minInterval = Math.min(...userShiftDates.map(shiftDate => 
-          dateUtils.getDaysDifference(currentDate, shiftDate)
-        ));
-        intervalCandidates.push({ user, interval: minInterval });
-      }
-    }
-
-    // 選擇間隔最大的人（但至少要滿足最小間隔要求）
-    const validCandidates = intervalCandidates.filter(item => 
-      item.interval >= minIntervalDays || item.interval === 999
-    );
-
-    if (validCandidates.length > 0) {
-      // 有滿足間隔要求的候選人，選擇間隔最大的
-      validCandidates.sort((a, b) => b.interval - a.interval);
-      return validCandidates[0].user;
-    } else {
-      // 沒有滿足間隔要求的候選人，選擇間隔最大的（即使不滿足要求）
-      intervalCandidates.sort((a, b) => b.interval - a.interval);
-      return intervalCandidates[0].user;
-    }
-  }
 }
 
 /**
@@ -289,92 +225,199 @@ export class UnifiedScoreAllocation {
   }
 
   /**
-   * 執行分配邏輯
+   * 執行分配邏輯 - 使用輪次分配確保公平性
    * @private
    */
   _performAllocation(overtimeData, userScores, newAllocations, preserveExisting) {
-    // === 階段1：平日分配（A, B, C, D, E, F各一人）===
-    const weekdays = Object.keys(overtimeData)
-      .filter(dateKey => !dateUtils.isSunday(dateKey) && !dateUtils.isSaturday(dateKey))
-      .sort();
-
-    this._allocateWeekdays(weekdays, overtimeData, userScores, newAllocations, preserveExisting);
-
-    // === 階段2：週六分配（僅A班）===
-    const saturdays = Object.keys(overtimeData)
-      .filter(dateKey => dateUtils.isSaturday(dateKey))
-      .sort();
-
-    this._allocateSaturdays(saturdays, overtimeData, userScores, newAllocations, preserveExisting);
+    // 收集所有需要分配的日期和班別
+    const allShiftDemands = this._collectShiftDemands(overtimeData, newAllocations, preserveExisting);
+    
+    // 按班別重要性順序進行輪次分配
+    const shiftOrder = ['A', 'B', 'C', 'D', 'E', 'F'];
+    
+    for (const shiftType of shiftOrder) {
+      this._allocateShiftInRounds(shiftType, allShiftDemands, userScores, newAllocations, overtimeData);
+    }
   }
 
   /**
-   * 分配平日班別
+   * 收集所有班別需求
    * @private
    */
-  _allocateWeekdays(weekdays, overtimeData, userScores, newAllocations, preserveExisting) {
-    weekdays.forEach(dateKey => {
+  _collectShiftDemands(overtimeData, newAllocations, preserveExisting) {
+    const demands = { A: [], B: [], C: [], D: [], E: [], F: [] };
+    
+    Object.keys(overtimeData).forEach(dateKey => {
       const dayData = overtimeData[dateKey];
-      const availableStaff = dayData.staffList.filter(staff => 
-        staff.identity !== '麻醉科Leader'
-      );
-
-      this.logger.debug(`${dateKey} 班別分配：`);
-
-      const shiftsToAllocate = preserveExisting ? 
-        this._getMissingShifts(dateKey, newAllocations) : 
-        SHIFT_ALLOCATION_ORDER;
-
-      shiftsToAllocate.forEach(shiftType => {
-        // 找出當天還沒分配班別的人員
-        const availableUsers = availableStaff.filter(staff => 
-          !newAllocations[`${staff.id}_${dateKey}`]
-        );
-
-        if (availableUsers.length === 0) {
-          this.logger.debug(`  ${shiftType}班：無可用人員`);
-          return;
+      const isWeekend = dateUtils.isWeekend(dateKey);
+      const isSunday = dateUtils.isSunday(dateKey);
+      
+      // 週日不需要加班
+      if (isSunday) return;
+      
+      // 週六只需要A班
+      if (dateUtils.isSaturday(dateKey)) {
+        // 檢查是否已經分配A班
+        if (!preserveExisting || !this._hasShiftAssigned(dateKey, 'A', newAllocations)) {
+          demands.A.push({ 
+            date: dateKey, 
+            availableUsers: dayData.staffList.filter(staff => staff.identity !== '麻醉科Leader')
+          });
         }
-
-        // 使用統一的選擇邏輯
-        const selectedUser = UserSelector.selectBestUserForShift(
-          availableUsers, userScores, shiftType, dateKey, newAllocations
-        );
-
-        if (selectedUser) {
-          this._assignShift(selectedUser, shiftType, dateKey, userScores, newAllocations);
+        return;
+      }
+      
+      // 平日需要A-F班
+      SHIFT_ALLOCATION_ORDER.forEach(shiftType => {
+        if (!preserveExisting || !this._hasShiftAssigned(dateKey, shiftType, newAllocations)) {
+          demands[shiftType].push({ 
+            date: dateKey, 
+            availableUsers: dayData.staffList.filter(staff => {
+              // 麻醉科Leader只能分配E或F班
+              if (staff.identity === '麻醉科Leader') {
+                return shiftType === 'E' || shiftType === 'F';
+              }
+              return true;
+            })
+          });
         }
       });
     });
+    
+    this.logger.info(`班別需求統計: A=${demands.A.length}, B=${demands.B.length}, C=${demands.C.length}, D=${demands.D.length}, E=${demands.E.length}, F=${demands.F.length}`);
+    return demands;
   }
 
   /**
-   * 分配週六班別
+   * 輪次分配指定班別
    * @private
    */
-  _allocateSaturdays(saturdays, overtimeData, userScores, newAllocations, preserveExisting) {
-    saturdays.forEach(dateKey => {
-      // 如果保留現有分配且已有A班分配，跳過
-      if (preserveExisting && this._hasShiftAssigned(dateKey, 'A', newAllocations)) {
-        return;
+  _allocateShiftInRounds(shiftType, allShiftDemands, userScores, newAllocations, overtimeData) {
+    const demands = allShiftDemands[shiftType];
+    if (!demands || demands.length === 0) {
+      this.logger.debug(`${shiftType}班：無需求`);
+      return;
+    }
+
+    this.logger.info(`開始分配${shiftType}班，共${demands.length}個需求`);
+    
+    // 收集所有參與該班別分配的護理師
+    const allEligibleUsers = new Map();
+    demands.forEach(demand => {
+      demand.availableUsers.forEach(user => {
+        allEligibleUsers.set(user.id, user);
+      });
+    });
+    
+    const eligibleUsersList = Array.from(allEligibleUsers.values());
+    this.logger.debug(`${shiftType}班可分配護理師: ${eligibleUsersList.map(u => u.name).join(', ')}`);
+    
+    // 輪次分配
+    let round = 1;
+    const remainingDemands = [...demands];
+    
+    while (remainingDemands.length > 0) {
+      this.logger.debug(`${shiftType}班第${round}輪分配，剩餘需求: ${remainingDemands.length}`);
+      
+      // 獲取符合條件的候選人（分數 <= 0 或者是第一輪）
+      const availableCandidates = eligibleUsersList.filter(user => {
+        const currentScore = userScores[user.id].currentScore;
+        const shiftScore = scoreUtils.calculateOvertimeScore(shiftType);
+        const potentialScore = currentScore + shiftScore;
+        
+        // 第一輪或者分配後不會超過0分
+        return round === 1 || potentialScore <= 0;
+      });
+      
+      if (availableCandidates.length === 0) {
+        this.logger.warn(`${shiftType}班第${round}輪：沒有符合條件的候選人，剩餘${remainingDemands.length}個需求未分配`);
+        break;
       }
-
-      const dayData = overtimeData[dateKey];
-      const availableUsers = dayData.staffList.filter(staff => 
-        staff.identity !== '麻醉科Leader'
+      
+      // 按當前分數排序（分數越低越優先）
+      availableCandidates.sort((a, b) => 
+        userScores[a.id].currentScore - userScores[b.id].currentScore
       );
+      
+      // 分配給分數最低的護理師們
+      const assignmentsThisRound = [];
+      let candidateIndex = 0;
+      
+      for (let i = 0; i < remainingDemands.length && candidateIndex < availableCandidates.length; i++) {
+        const demand = remainingDemands[i];
+        const candidate = availableCandidates[candidateIndex];
+        
+        // 檢查該候選人是否可以在該日期分配
+        const isAvailableForThisDate = demand.availableUsers.some(u => u.id === candidate.id);
+        const isAlreadyAssignedOnThisDate = newAllocations[`${candidate.id}_${demand.date}`];
+        
+        if (isAvailableForThisDate && !isAlreadyAssignedOnThisDate) {
+          // 檢查間隔（僅對A班和B班）
+          const intervalOk = (shiftType !== 'A' && shiftType !== 'B') || this._checkInterval(candidate, shiftType, demand.date, newAllocations);
+          
+          if (intervalOk) {
+            assignmentsThisRound.push({ demand, candidate, index: i });
+            candidateIndex++;
+          }
+        }
+        
+        // 如果當前候選人不適合，嘗試下一個候選人
+        if (assignmentsThisRound.length <= i) {
+          candidateIndex++;
+          i--; // 重試當前需求
+        }
+      }
+      
+      // 執行本輪分配
+      if (assignmentsThisRound.length === 0) {
+        this.logger.warn(`${shiftType}班第${round}輪：無法完成任何分配`);
+        break;
+      }
+      
+      // 按索引從大到小移除已分配的需求（避免索引錯位）
+      assignmentsThisRound.sort((a, b) => b.index - a.index);
+      
+      assignmentsThisRound.forEach(({ demand, candidate, index }) => {
+        this._assignShift(candidate, shiftType, demand.date, userScores, newAllocations);
+        remainingDemands.splice(index, 1);
+      });
+      
+      this.logger.debug(`${shiftType}班第${round}輪完成${assignmentsThisRound.length}個分配`);
+      round++;
+    }
+    
+    if (remainingDemands.length > 0) {
+      this.logger.warn(`${shiftType}班分配完成，但仍有${remainingDemands.length}個需求未分配`);
+    } else {
+      this.logger.success(`${shiftType}班分配完成，所有需求已滿足`);
+    }
+  }
 
-      this.logger.debug(`${dateKey} (週六) A班分配：`);
-
-      const selectedUser = UserSelector.selectBestUserForShift(
-        availableUsers, userScores, 'A', dateKey, newAllocations
-      );
-
-      if (selectedUser) {
-        this._assignShift(selectedUser, 'A', dateKey, userScores, newAllocations);
+  /**
+   * 檢查間隔時間是否滿足要求
+   * @private
+   */
+  _checkInterval(user, shiftType, currentDate, allocations) {
+    const userShiftDates = [];
+    Object.entries(allocations).forEach(([key, shift]) => {
+      const [userId, shiftDate] = key.split('_');
+      if (parseInt(userId) === user.id && shift === shiftType) {
+        userShiftDates.push(new Date(shiftDate));
       }
     });
+
+    if (userShiftDates.length === 0) {
+      return true; // 沒有該班別記錄，可以分配
+    }
+
+    const currentDateObj = new Date(currentDate);
+    const minInterval = Math.min(...userShiftDates.map(shiftDate => 
+      dateUtils.getDaysDifference(currentDateObj, shiftDate)
+    ));
+
+    return minInterval >= MIN_INTERVAL_DAYS;
   }
+
 
   /**
    * 分配班別給用戶
