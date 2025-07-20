@@ -15,6 +15,18 @@ import {
 } from '../constants/overtimeConstants';
 
 /**
+ * 隨機打散數組函數（Fisher-Yates算法）
+ */
+const shuffleArray = (array) => {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+};
+
+/**
  * 日期工具函數
  */
 export const dateUtils = {
@@ -180,10 +192,10 @@ export class UnifiedScoreAllocation {
     const userScores = {};
     const allUsers = [];
     
-    // 收集所有用戶（包括麻醉科Leader，因為他們可以分配E、F班）
+    // 收集所有用戶（排除麻醉科Leader，因為他們不參與自動分配）
     Object.values(overtimeData).forEach(dayData => {
       dayData.staffList.forEach(staff => {
-        if (staff && staff.id && !allUsers.find(u => u.id === staff.id)) {
+        if (staff && staff.id && staff.identity !== '麻醉科Leader' && !allUsers.find(u => u.id === staff.id)) {
           allUsers.push(staff);
         }
       });
@@ -283,11 +295,8 @@ export class UnifiedScoreAllocation {
           demands[shiftType].push({ 
             date: dateKey, 
             availableUsers: dayData.staffList.filter(staff => {
-              // 麻醉科Leader只能分配E或F班
-              if (staff.identity === '麻醉科Leader') {
-                return shiftType === 'E' || shiftType === 'F';
-              }
-              return true;
+              // 麻醉科Leader不參與自動分配
+              return staff.identity !== '麻醉科Leader';
             })
           });
         }
@@ -325,10 +334,12 @@ export class UnifiedScoreAllocation {
     });
     
     const eligibleUsersList = Array.from(allEligibleUsers.values());
-    this.logger.debug(`${shiftType}班可分配護理師: ${eligibleUsersList.map(u => u.name || u.id).join(', ')}`);
+    this.logger.debug(`${shiftType}班可分配人員: ${eligibleUsersList.map(u => u.name || u.id).join(', ')}`);
     
-    // 檢查所有候選用戶是否都在 userScores 中
-    const missingUsers = eligibleUsersList.filter(user => !userScores[user.id]);
+    // 檢查所有候選用戶是否都在 userScores 中（麻醉科Leader不參與自動分配）
+    const missingUsers = eligibleUsersList.filter(user => 
+      !userScores[user.id] && user.identity !== '麻醉科Leader'
+    );
     if (missingUsers.length > 0) {
       this.logger.warn(`發現未初始化的用戶: ${missingUsers.map(u => u.name || u.id).join(', ')}`);
       // 為缺失的用戶添加基本分數初始化
@@ -346,13 +357,27 @@ export class UnifiedScoreAllocation {
     
     // 輪次分配
     let round = 1;
-    const remainingDemands = [...demands];
+    // 隨機打散需求順序，確保日期分配的隨機性
+    const remainingDemands = shuffleArray([...demands]);
+    this.logger.debug(`${shiftType}班需求已隨機打散，順序: ${remainingDemands.map(d => d.date).join(', ')}`);
     
     while (remainingDemands.length > 0) {
       this.logger.debug(`${shiftType}班第${round}輪分配，剩餘需求: ${remainingDemands.length}`);
       
+      // 每輪重新隨機打散剩餘需求，增加分配的隨機性
+      if (round > 1) {
+        const shuffledRemaining = shuffleArray(remainingDemands);
+        remainingDemands.splice(0, remainingDemands.length, ...shuffledRemaining);
+        this.logger.debug(`${shiftType}班第${round}輪需求重新打散`);
+      }
+      
       // 獲取符合條件的候選人（分數 <= 0 或者是第一輪）
       const availableCandidates = eligibleUsersList.filter(user => {
+        // 排除麻醉科Leader
+        if (user.identity === '麻醉科Leader') {
+          return false;
+        }
+        
         // 檢查用戶是否在 userScores 中存在
         if (!userScores[user.id]) {
           this.logger.warn(`用戶 ${user.name || user.id} 未在 userScores 中找到，跳過分配`);
@@ -372,12 +397,20 @@ export class UnifiedScoreAllocation {
         break;
       }
       
-      // 按當前分數排序（分數越低越優先）
+      // 按當前分數排序（分數越低越優先），相同分數時隨機排序
       availableCandidates.sort((a, b) => {
         // 額外安全檢查
         const scoreA = userScores[a.id]?.currentScore || 0;
         const scoreB = userScores[b.id]?.currentScore || 0;
-        return scoreA - scoreB;
+        
+        // 如果分數不同，按分數排序
+        const scoreDiff = scoreA - scoreB;
+        if (Math.abs(scoreDiff) > 0.01) { // 避免浮點數精度問題
+          return scoreDiff;
+        }
+        
+        // 分數相同時，隨機排序（避免ID固定順序偏差）
+        return Math.random() - 0.5;
       });
       
       // 分配給分數最低的護理師們
