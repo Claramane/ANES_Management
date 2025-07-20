@@ -180,10 +180,10 @@ export class UnifiedScoreAllocation {
     const userScores = {};
     const allUsers = [];
     
-    // 收集所有用戶
+    // 收集所有用戶（包括麻醉科Leader，因為他們可以分配E、F班）
     Object.values(overtimeData).forEach(dayData => {
       dayData.staffList.forEach(staff => {
-        if (staff.identity !== '麻醉科Leader' && !allUsers.find(u => u.id === staff.id)) {
+        if (staff && staff.id && !allUsers.find(u => u.id === staff.id)) {
           allUsers.push(staff);
         }
       });
@@ -199,7 +199,13 @@ export class UnifiedScoreAllocation {
     }
 
     // 初始化分數
+    this.logger.info(`正在初始化 ${allUsers.length} 個用戶的分數`);
     allUsers.forEach(user => {
+      if (!user || user.id === undefined || user.id === null) {
+        this.logger.warn(`跳過無效用戶:`, user);
+        return;
+      }
+      
       const baseScore = scoreUtils.calculateUserBaseScore(user, workDays);
       userScores[user.id] = {
         user: user,
@@ -207,9 +213,13 @@ export class UnifiedScoreAllocation {
         currentScore: baseScore,
         allocations: []
       };
+      
+      this.logger.debug(`初始化用戶 ${user.name || user.id} (身份: ${user.identity || 'N/A'}) 分數: ${baseScore.toFixed(2)}`);
+    });
 
-      // 如果保留現有分配，加入現有分配的分數
-      if (preserveExisting) {
+    // 如果保留現有分配，加入現有分配的分數
+    if (preserveExisting) {
+      allUsers.forEach(user => {
         Object.entries(newAllocations).forEach(([key, shift]) => {
           const [userId, dateKey] = key.split('_');
           if (parseInt(userId) === user.id) {
@@ -218,8 +228,8 @@ export class UnifiedScoreAllocation {
             userScores[user.id].allocations.push({ date: dateKey, shift: shift });
           }
         });
-      }
-    });
+      });
+    }
 
     return { userScores, allUsers };
   }
@@ -305,12 +315,34 @@ export class UnifiedScoreAllocation {
     const allEligibleUsers = new Map();
     demands.forEach(demand => {
       demand.availableUsers.forEach(user => {
-        allEligibleUsers.set(user.id, user);
+        // 確保用戶有有效的 ID
+        if (user && user.id !== undefined && user.id !== null) {
+          allEligibleUsers.set(user.id, user);
+        } else {
+          this.logger.warn(`發現無效用戶數據:`, user);
+        }
       });
     });
     
     const eligibleUsersList = Array.from(allEligibleUsers.values());
-    this.logger.debug(`${shiftType}班可分配護理師: ${eligibleUsersList.map(u => u.name).join(', ')}`);
+    this.logger.debug(`${shiftType}班可分配護理師: ${eligibleUsersList.map(u => u.name || u.id).join(', ')}`);
+    
+    // 檢查所有候選用戶是否都在 userScores 中
+    const missingUsers = eligibleUsersList.filter(user => !userScores[user.id]);
+    if (missingUsers.length > 0) {
+      this.logger.warn(`發現未初始化的用戶: ${missingUsers.map(u => u.name || u.id).join(', ')}`);
+      // 為缺失的用戶添加基本分數初始化
+      missingUsers.forEach(user => {
+        const baseScore = scoreUtils.calculateUserBaseScore(user, 18); // 假設18個工作天
+        userScores[user.id] = {
+          user: user,
+          baseScore: baseScore,
+          currentScore: baseScore,
+          allocations: []
+        };
+        this.logger.info(`為用戶 ${user.name || user.id} 初始化分數: ${baseScore.toFixed(2)}`);
+      });
+    }
     
     // 輪次分配
     let round = 1;
@@ -321,6 +353,12 @@ export class UnifiedScoreAllocation {
       
       // 獲取符合條件的候選人（分數 <= 0 或者是第一輪）
       const availableCandidates = eligibleUsersList.filter(user => {
+        // 檢查用戶是否在 userScores 中存在
+        if (!userScores[user.id]) {
+          this.logger.warn(`用戶 ${user.name || user.id} 未在 userScores 中找到，跳過分配`);
+          return false;
+        }
+        
         const currentScore = userScores[user.id].currentScore;
         const shiftScore = scoreUtils.calculateOvertimeScore(shiftType);
         const potentialScore = currentScore + shiftScore;
@@ -335,9 +373,12 @@ export class UnifiedScoreAllocation {
       }
       
       // 按當前分數排序（分數越低越優先）
-      availableCandidates.sort((a, b) => 
-        userScores[a.id].currentScore - userScores[b.id].currentScore
-      );
+      availableCandidates.sort((a, b) => {
+        // 額外安全檢查
+        const scoreA = userScores[a.id]?.currentScore || 0;
+        const scoreB = userScores[b.id]?.currentScore || 0;
+        return scoreA - scoreB;
+      });
       
       // 分配給分數最低的護理師們
       const assignmentsThisRound = [];
@@ -424,6 +465,17 @@ export class UnifiedScoreAllocation {
    * @private
    */
   _assignShift(user, shiftType, dateKey, userScores, newAllocations) {
+    // 檢查用戶數據完整性
+    if (!user || !user.id) {
+      this.logger.error(`無效用戶數據，無法分配班別:`, user);
+      return;
+    }
+
+    if (!userScores[user.id]) {
+      this.logger.error(`用戶 ${user.name || user.id} 不存在於 userScores 中，無法分配班別`);
+      return;
+    }
+
     // 分配班別
     newAllocations[`${user.id}_${dateKey}`] = shiftType;
 
@@ -432,7 +484,7 @@ export class UnifiedScoreAllocation {
     userScores[user.id].currentScore += shiftScore;
     userScores[user.id].allocations.push({ date: dateKey, shift: shiftType });
 
-    this.logger.debug(`  ${shiftType}班 → ${user.name} (+${shiftScore}分, 總分: ${userScores[user.id].currentScore.toFixed(2)})`);
+    this.logger.debug(`  ${shiftType}班 → ${user.name || user.id} (+${shiftScore}分, 總分: ${userScores[user.id].currentScore.toFixed(2)})`);
   }
 
   /**
