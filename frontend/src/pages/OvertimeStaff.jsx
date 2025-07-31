@@ -819,44 +819,42 @@ const OvertimeStaff = () => {
         // 獲取該員工當前的標記
         const currentMark = newMarkings[dateKey][staffId] || '';
         
-        // 計算下一個標記：按照 A→B→C→D→E→F→取消 的循環
+        // 獲取該日期已被占用的班別
+        const occupiedShifts = Object.entries(newMarkings[dateKey] || {})
+          .filter(([id, mark]) => id !== staffId && mark !== '')
+          .map(([, mark]) => mark);
+        
+        // 定義可用的班別序列（按優先順序）
+        const shiftSequence = ['A', 'B', 'C', 'D', 'E', 'F'];
+        
+        // 計算下一個標記：按照 A→B→C→D→E→F→取消 的循環，跳過已占用班別
         let nextMark = '';
         
         if (currentMark === '') {
-          // 未選中 → A
-          nextMark = 'A';
-        } else if (currentMark === 'A') {
-          // A → B
-          nextMark = 'B';
-        } else if (currentMark === 'B') {
-          // B → C
-          nextMark = 'C';
-        } else if (currentMark === 'C') {
-          // C → D
-          nextMark = 'D';
-        } else if (currentMark === 'D') {
-          // D → E
-          nextMark = 'E';
-        } else if (currentMark === 'E') {
-          // E → F
-          nextMark = 'F';
-        } else if (currentMark === 'F') {
-          // F → 取消（空字串）
-          nextMark = '';
+          // 未選中 → 找第一個可用班別
+          nextMark = shiftSequence.find(shift => !occupiedShifts.includes(shift)) || '';
         } else {
-          // 其他情況，重置為 A
-          nextMark = 'A';
-        }
-        
-        // 處理衝突：如果要設置的班別已被其他人占用，先取消原有人員
-        if (nextMark !== '') {
-          // 找到使用相同標記的其他人員
-          const conflictStaffId = Object.entries(newMarkings[dateKey] || {})
-            .find(([id, mark]) => mark === nextMark && id !== staffId)?.[0];
+          // 已有班別 → 找下一個可用班別
+          const currentIndex = shiftSequence.indexOf(currentMark);
           
-          if (conflictStaffId) {
-            // 有衝突：先取消原有人員的標記
-            delete newMarkings[dateKey][conflictStaffId];
+          if (currentIndex === -1) {
+            // 當前標記不在序列中，重置為第一個可用班別
+            nextMark = shiftSequence.find(shift => !occupiedShifts.includes(shift)) || '';
+          } else {
+            // 從當前位置的下一個開始尋找可用班別
+            let found = false;
+            for (let i = currentIndex + 1; i < shiftSequence.length; i++) {
+              if (!occupiedShifts.includes(shiftSequence[i])) {
+                nextMark = shiftSequence[i];
+                found = true;
+                break;
+              }
+            }
+            
+            // 如果沒有找到可用班別，表示已經循環完畢，取消標記
+            if (!found) {
+              nextMark = '';
+            }
           }
         }
         
