@@ -819,7 +819,7 @@ const OvertimeStaff = () => {
         // 獲取該員工當前的標記
         const currentMark = newMarkings[dateKey][staffId] || '';
         
-        // 獲取該日期已被占用的班別
+        // 獲取該日期已被占用的班別（排除當前員工）
         const occupiedShifts = Object.entries(newMarkings[dateKey] || {})
           .filter(([id, mark]) => id !== staffId && mark !== '')
           .map(([, mark]) => mark);
@@ -871,6 +871,10 @@ const OvertimeStaff = () => {
           newMarkings[dateKey][staffId] = nextMark;
         }
         
+        // Debug: 確認狀態更新
+        logger.info(`更新標記: 日期=${dateKey}, 人員=${staffId}, 從 ${currentMark} → ${nextMark}`);
+        
+        // 立即更新狀態
         dispatchData({ type: 'SET_MARKINGS', markings: newMarkings });
       } catch (error) {
         logger.error('處理標記時出錯:', error);
@@ -878,7 +882,7 @@ const OvertimeStaff = () => {
         dispatchDialog({ type: 'OPEN_DIALOG', dialogType: 'openSnackbar' });
       }
     },
-    [filteredSchedule, markings]
+    [filteredSchedule, markings, dispatchData, dispatchMessage, dispatchDialog]
   );
 
   // 保存加班記錄 - 優化版本
