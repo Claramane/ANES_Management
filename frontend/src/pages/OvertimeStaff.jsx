@@ -45,7 +45,6 @@ import {
   AllocationConfirmDialog,
   AllocationProgressDialog,
   scoreUtils,
-  MARK_SEQUENCE,
   NO_OVERTIME_PENALTY
 } from '../components/OvertimeAllocation';
 import { useOvertimeAllocation } from '../hooks/useOvertimeAllocation';
@@ -809,7 +808,7 @@ const OvertimeStaff = () => {
           return;
         }
         
-        // 平日的處理邏輯（不對Leader做特殊限制）
+        // 平日的處理邏輯：實現循環點擊 A→B→C→D→E→F→取消
         const newMarkings = { ...markings };
         
         // 初始化該日期的標記對象，如果不存在
@@ -820,38 +819,57 @@ const OvertimeStaff = () => {
         // 獲取該員工當前的標記
         const currentMark = newMarkings[dateKey][staffId] || '';
         
-        // 新的循環邏輯：A→B→C→D→E→F→取消，並處理衝突
-        let nextMarkIndex = MARK_SEQUENCE.indexOf(currentMark) + 1;
-        if (nextMarkIndex >= MARK_SEQUENCE.length) {
-          nextMarkIndex = 0;
+        // 計算下一個標記：按照 A→B→C→D→E→F→取消 的循環
+        let nextMark = '';
+        
+        if (currentMark === '') {
+          // 未選中 → A
+          nextMark = 'A';
+        } else if (currentMark === 'A') {
+          // A → B
+          nextMark = 'B';
+        } else if (currentMark === 'B') {
+          // B → C
+          nextMark = 'C';
+        } else if (currentMark === 'C') {
+          // C → D
+          nextMark = 'D';
+        } else if (currentMark === 'D') {
+          // D → E
+          nextMark = 'E';
+        } else if (currentMark === 'E') {
+          // E → F
+          nextMark = 'F';
+        } else if (currentMark === 'F') {
+          // F → 取消（空字串）
+          nextMark = '';
+        } else {
+          // 其他情況，重置為 A
+          nextMark = 'A';
         }
         
-        let nextMark = MARK_SEQUENCE[nextMarkIndex];
-        
-        // 如果下一個標記不是空字串，檢查是否有衝突
+        // 處理衝突：如果要設置的班別已被其他人占用，先取消原有人員
         if (nextMark !== '') {
-          // 檢查是否有其他人使用了這個標記
+          // 找到使用相同標記的其他人員
           const conflictStaffId = Object.entries(newMarkings[dateKey] || {})
             .find(([id, mark]) => mark === nextMark && id !== staffId)?.[0];
           
           if (conflictStaffId) {
-            // 有衝突：先取消原有人員的標記，然後使用這個標記
+            // 有衝突：先取消原有人員的標記
             delete newMarkings[dateKey][conflictStaffId];
           }
-          // 沒有衝突則直接使用該標記
         }
         
-        // nextMark 為空字串表示要取消標記
-        
-        // 更新標記
+        // 更新當前人員的標記
         if (nextMark === '') {
-          // 如果是空標記，則移除該員工的標記
+          // 取消標記
           delete newMarkings[dateKey][staffId];
           // 如果該日期沒有任何標記，則移除該日期
           if (Object.keys(newMarkings[dateKey]).length === 0) {
             delete newMarkings[dateKey];
           }
         } else {
+          // 設置新標記
           newMarkings[dateKey][staffId] = nextMark;
         }
         
@@ -862,7 +880,7 @@ const OvertimeStaff = () => {
         dispatchDialog({ type: 'OPEN_DIALOG', dialogType: 'openSnackbar' });
       }
     },
-    [filteredSchedule]
+    [filteredSchedule, markings]
   );
 
   // 保存加班記錄 - 優化版本
