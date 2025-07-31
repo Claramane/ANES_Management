@@ -808,73 +808,57 @@ const OvertimeStaff = () => {
           return;
         }
         
-        // 平日的處理邏輯：實現循環點擊 A→B→C→D→E→F→取消
+        // 簡單的循環邏輯：A→B→C→D→E→F→取消，跳過已占用班別
         const newMarkings = { ...markings };
-        
-        // 初始化該日期的標記對象，如果不存在
         if (!newMarkings[dateKey]) {
           newMarkings[dateKey] = {};
         }
         
-        // 獲取該員工當前的標記
-        const currentMark = newMarkings[dateKey][staffId] || '';
+        // 當前人員的班別
+        const currentShift = newMarkings[dateKey][staffId] || '';
         
-        // 獲取該日期已被占用的班別（排除當前員工）
-        const occupiedShifts = Object.entries(newMarkings[dateKey] || {})
-          .filter(([id, mark]) => id !== staffId && mark !== '')
-          .map(([, mark]) => mark);
+        // 找出已被其他人占用的班別
+        const usedShifts = [];
+        Object.entries(newMarkings[dateKey]).forEach(([id, shift]) => {
+          if (id !== staffId && shift) {
+            usedShifts.push(shift);
+          }
+        });
         
-        // 定義可用的班別序列（按優先順序）
-        const shiftSequence = ['A', 'B', 'C', 'D', 'E', 'F'];
+        // 所有可能的班別
+        const allShifts = ['A', 'B', 'C', 'D', 'E', 'F'];
         
-        // 計算下一個標記：按照 A→B→C→D→E→F→取消 的循環，跳過已占用班別
-        let nextMark = '';
+        // 找出可用的班別（未被占用的）
+        const availableShifts = allShifts.filter(shift => !usedShifts.includes(shift));
         
-        if (currentMark === '') {
-          // 未選中 → 找第一個可用班別
-          nextMark = shiftSequence.find(shift => !occupiedShifts.includes(shift)) || '';
+        let nextShift = '';
+        
+        if (!currentShift) {
+          // 沒有班別 → 分配第一個可用班別
+          nextShift = availableShifts[0] || '';
         } else {
-          // 已有班別 → 找下一個可用班別
-          const currentIndex = shiftSequence.indexOf(currentMark);
-          
-          if (currentIndex === -1) {
-            // 當前標記不在序列中，重置為第一個可用班別
-            nextMark = shiftSequence.find(shift => !occupiedShifts.includes(shift)) || '';
+          // 有班別 → 找下一個可用班別
+          const currentIndex = availableShifts.indexOf(currentShift);
+          if (currentIndex >= 0 && currentIndex < availableShifts.length - 1) {
+            // 還有下一個可用班別
+            nextShift = availableShifts[currentIndex + 1];
           } else {
-            // 從當前位置的下一個開始尋找可用班別
-            let found = false;
-            for (let i = currentIndex + 1; i < shiftSequence.length; i++) {
-              if (!occupiedShifts.includes(shiftSequence[i])) {
-                nextMark = shiftSequence[i];
-                found = true;
-                break;
-              }
-            }
-            
-            // 如果沒有找到可用班別，表示已經循環完畢，取消標記
-            if (!found) {
-              nextMark = '';
-            }
+            // 沒有下一個了，取消班別
+            nextShift = '';
           }
         }
         
-        // 更新當前人員的標記
-        if (nextMark === '') {
-          // 取消標記
+        // 更新班別
+        if (nextShift) {
+          newMarkings[dateKey][staffId] = nextShift;
+        } else {
           delete newMarkings[dateKey][staffId];
-          // 如果該日期沒有任何標記，則移除該日期
           if (Object.keys(newMarkings[dateKey]).length === 0) {
             delete newMarkings[dateKey];
           }
-        } else {
-          // 設置新標記
-          newMarkings[dateKey][staffId] = nextMark;
         }
         
-        // Debug: 確認狀態更新
-        logger.info(`更新標記: 日期=${dateKey}, 人員=${staffId}, 從 ${currentMark} → ${nextMark}`);
-        
-        // 立即更新狀態
+        logger.info(`班別切換: ${staffId} 從 ${currentShift || '無'} → ${nextShift || '取消'}`);
         dispatchData({ type: 'SET_MARKINGS', markings: newMarkings });
       } catch (error) {
         logger.error('處理標記時出錯:', error);
