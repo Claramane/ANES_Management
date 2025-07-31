@@ -160,7 +160,7 @@ const useApiCache = () => {
 };
 
 // 將OvertimeRow抽出來作為獨立組件，使用memo優化渲染
-const OvertimeRow = memo(({ 
+const OvertimeRow = ({ 
   dayData, 
   canEdit, 
   markings, 
@@ -271,17 +271,8 @@ const OvertimeRow = memo(({
       </TableCell>
     </TableRow>
   );
-}, (prevProps, nextProps) => {
-  // 優化渲染，只有在必要時才重新渲染
-  return (
-    prevProps.isCompliant === nextProps.isCompliant &&
-    prevProps.canEdit === nextProps.canEdit &&
-    prevProps.showUnmarkedStaff === nextProps.showUnmarkedStaff &&
-    prevProps.dayData.date === nextProps.dayData.date &&
-    JSON.stringify(prevProps.markings[prevProps.dayData.date]) === 
-    JSON.stringify(nextProps.markings[nextProps.dayData.date])
-  );
-});
+};
+// 移除 memo 優化以確保用戶點擊後立即渲染，優先考慮用戶體驗
 
 // 獨立的統計行組件
 const StatRow = memo(({ staff, daysInMonth, selectedDate }) => {
@@ -837,13 +828,21 @@ const OvertimeStaff = () => {
           // 沒有班別 → 分配第一個可用班別
           nextShift = availableShifts[0] || '';
         } else {
-          // 有班別 → 找下一個可用班別
-          const currentIndex = availableShifts.indexOf(currentShift);
-          if (currentIndex >= 0 && currentIndex < availableShifts.length - 1) {
-            // 還有下一個可用班別
-            nextShift = availableShifts[currentIndex + 1];
-          } else {
-            // 沒有下一個了，取消班別
+          // 有班別 → 在全部班別序列中找下一個可用班別
+          const currentIndexInAll = allShifts.indexOf(currentShift);
+          
+          // 從當前班別的下一個開始尋找可用班別
+          let found = false;
+          for (let i = currentIndexInAll + 1; i < allShifts.length; i++) {
+            if (availableShifts.includes(allShifts[i])) {
+              nextShift = allShifts[i];
+              found = true;
+              break;
+            }
+          }
+          
+          // 如果沒找到，表示已經循環完畢，取消班別
+          if (!found) {
             nextShift = '';
           }
         }
