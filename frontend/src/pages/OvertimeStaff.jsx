@@ -828,8 +828,8 @@ const OvertimeStaff = () => {
         
         let nextMark = MARK_SEQUENCE[nextMarkIndex];
         
-        // 循環尋找下一個可用的標記
-        while (nextMark !== '') {
+        // 如果下一個標記不是空字串，檢查是否有衝突
+        if (nextMark !== '') {
           // 檢查是否有其他人使用了這個標記
           const conflictStaffId = Object.entries(newMarkings[dateKey] || {})
             .find(([id, mark]) => mark === nextMark && id !== staffId)?.[0];
@@ -837,14 +837,11 @@ const OvertimeStaff = () => {
           if (conflictStaffId) {
             // 有衝突：先取消原有人員的標記，然後使用這個標記
             delete newMarkings[dateKey][conflictStaffId];
-            break; // 找到可用的標記（透過替換），跳出循環
-          } else {
-            // 沒有衝突，可以直接使用這個標記
-            break;
           }
+          // 沒有衝突則直接使用該標記
         }
         
-        // 如果 nextMark 是空字串，表示要取消標記
+        // nextMark 為空字串表示要取消標記
         
         // 更新標記
         if (nextMark === '') {
