@@ -325,9 +325,9 @@ const WeeklySchedule = () => {
     
     if (baseType === 'OR') {
       // OR 支援的數字組合: 1,2,3,5,6,7,8,9,11,13
-      // 週一、週三、週五額外有 1
+      // 週一到週五額外有 1
       let validNumbers = ['2', '3', '5', '6', '7', '8', '9', '11', '13'];
-      if (dayOfWeek === 1 || dayOfWeek === 3 || dayOfWeek === 5) {
+      if (dayOfWeek >= 1 && dayOfWeek <= 5) {
         validNumbers.unshift('1');
       }
       
@@ -1073,7 +1073,7 @@ const WeeklySchedule = () => {
         const baseOptions = ['OR2', 'OR3', 'OR5', 'OR6', 'OR7', 'OR8', 'OR9', 'OR11', 'OR13'];
         let options = baseOptions;
         
-        if (dayOfWeek === 1 || dayOfWeek === 3 || dayOfWeek === 5) { // 週一、週三、週五
+        if (dayOfWeek >= 1 && dayOfWeek <= 5) { // 週一到週五
           options = ['OR1', ...baseOptions];
         }
         
@@ -1094,7 +1094,7 @@ const WeeklySchedule = () => {
       } else if (buttonType === 'F') {
         let options = ['F1', 'F2', 'PCA', 'SEC'];
         
-        if (dayOfWeek === 3 || dayOfWeek === 4) { // 週三、週四加入TAE
+        if (dayOfWeek >= 1 && dayOfWeek <= 5) { // 週一到週五加入TAE
           options = ['F1', 'F2', 'TAE', 'PCA', 'SEC'];
         }
         
@@ -1236,8 +1236,8 @@ const WeeklySchedule = () => {
           const date = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), currentDate);
           const dayOfWeek = date.getDay();
           
-          // 週三週四才有TAE的智能邏輯
-          if (dayOfWeek === 3 || dayOfWeek === 4) {
+          // 週一到週五才有TAE的智能邏輯
+          if (dayOfWeek >= 1 && dayOfWeek <= 5) {
             // F1和F2都被分配時，顯示TAE
             if (isF1Assigned && isF2Assigned && !isTAEAssigned) {
               return 'TAE';
@@ -1251,7 +1251,7 @@ const WeeklySchedule = () => {
               return 'SEC';
             }
           } else {
-            // 非週三週四，沒有TAE，直接檢查PCA和SEC
+            // 週末，沒有TAE，直接檢查PCA和SEC
             if (isF1Assigned && isF2Assigned && !isPCAAssigned) {
               return 'PCA';
             }
@@ -1534,11 +1534,11 @@ const WeeklySchedule = () => {
       
       if (baseType === 'OR') {
         // OR 循環邏輯：OR2, OR3, OR5, OR6, OR7, OR8, OR9, OR11, OR13, 取消
-        // 週一、週三、週五額外有 OR1
+        // 週一到週五額外有 OR1
         const baseOptions = ['OR2', 'OR3', 'OR5', 'OR6', 'OR7', 'OR8', 'OR9', 'OR11', 'OR13'];
         let options = baseOptions;
         
-        if (dayOfWeek === 1 || dayOfWeek === 3 || dayOfWeek === 5) { // 週一、週三、週五
+        if (dayOfWeek >= 1 && dayOfWeek <= 5) { // 週一到週五
           options = ['OR1', ...baseOptions];
         }
         
@@ -1638,10 +1638,10 @@ const WeeklySchedule = () => {
         return null; // 取消
         
       } else if (baseType === 'F') {
-        // F 循環邏輯：F1, F2, TAE（週三週四）, PCA, SEC, 取消
+        // F 循環邏輯：F1, F2, TAE（週一到週五）, PCA, SEC, 取消
         let options = ['F1', 'F2', 'PCA', 'SEC'];
         
-        if (dayOfWeek === 3 || dayOfWeek === 4) { // 週三、週四加入TAE
+        if (dayOfWeek >= 1 && dayOfWeek <= 5) { // 週一到週五加入TAE
           options = ['F1', 'F2', 'TAE', 'PCA', 'SEC'];
         }
         
@@ -1652,13 +1652,13 @@ const WeeklySchedule = () => {
           // 智能選擇邏輯：根據已分配狀況智能選擇下一個可用選項
           if (assignedMissions.has('F1') && assignedMissions.has('F2')) {
             // F1和F2都被分配了
-            if ((dayOfWeek === 3 || dayOfWeek === 4)) {
-              // 週三週四：F1,F2 → TAE → PCA → SEC
+            if ((dayOfWeek >= 1 && dayOfWeek <= 5)) {
+              // 週一到週五：F1,F2 → TAE → PCA → SEC
               if (!assignedMissions.has('TAE')) return 'TAE';
               if (!assignedMissions.has('PCA')) return 'PCA';
               if (!assignedMissions.has('SEC')) return 'SEC';
             } else {
-              // 非週三週四：F1,F2 → PCA → SEC
+              // 週末：F1,F2 → PCA → SEC
               if (!assignedMissions.has('PCA')) return 'PCA';
               if (!assignedMissions.has('SEC')) return 'SEC';
             }
@@ -1671,13 +1671,13 @@ const WeeklySchedule = () => {
           // 智能選擇邏輯：根據已分配狀況智能選擇下一個可用選項
           if (assignedMissions.has('F1') && assignedMissions.has('F2')) {
             // F1和F2都被分配了
-            if ((dayOfWeek === 3 || dayOfWeek === 4)) {
-              // 週三週四：F1,F2 → TAE → PCA → SEC
+            if ((dayOfWeek >= 1 && dayOfWeek <= 5)) {
+              // 週一到週五：F1,F2 → TAE → PCA → SEC
               if (!assignedMissions.has('TAE')) return 'TAE';
               if (!assignedMissions.has('PCA')) return 'PCA';
               if (!assignedMissions.has('SEC')) return 'SEC';
             } else {
-              // 非週三週四：F1,F2 → PCA → SEC
+              // 週末：F1,F2 → PCA → SEC
               if (!assignedMissions.has('PCA')) return 'PCA';
               if (!assignedMissions.has('SEC')) return 'SEC';
             }
