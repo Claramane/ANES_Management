@@ -4,8 +4,13 @@ from sqlalchemy.orm import sessionmaker
 from .config import settings
 
 # 創建SQLAlchemy引擎
+# 確保使用 psycopg 驅動
+database_url = settings.DATABASE_URL
+if database_url.startswith("postgresql://"):
+    database_url = database_url.replace("postgresql://", "postgresql+psycopg://", 1)
+
 engine = create_engine(
-    settings.DATABASE_URL
+    database_url
 )
 
 # 創建SessionLocal類
