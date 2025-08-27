@@ -7,7 +7,7 @@
 # ALGORITHM=HS256
 # ACCESS_TOKEN_EXPIRE_MINUTES=480
 # DEBUG=true
-# DATABASE_URL=postgresql://anes_user:anes_password@localhost/anes_db
+# DATABASE_URL=postgresql+psycopg://anes_user:anes_password@localhost/anes_db
 # FRONTEND_ORIGIN=http://localhost:3000
 # WEBAUTHN_RP_ID=localhost
 # BACKEND_CORS_ORIGINS=http://localhost:3000
@@ -23,7 +23,7 @@
 # ALGORITHM=HS256
 # ACCESS_TOKEN_EXPIRE_MINUTES=480
 # DEBUG=false
-# DATABASE_URL=postgresql://production_user:production_password@production_host/production_db
+# DATABASE_URL=postgresql+psycopg://production_user:production_password@production_host/production_db
 # FRONTEND_ORIGIN=https://your-frontend-domain.zeabur.app
 # WEBAUTHN_RP_ID=your-frontend-domain.zeabur.app
 # BACKEND_CORS_ORIGINS=https://your-frontend-domain.zeabur.app
@@ -49,7 +49,7 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     
     # 數據庫配置
-    DATABASE_URL: str = "postgresql://anes_user:anes_password@localhost/anes_db"
+    DATABASE_URL: str = "postgresql+psycopg://anes_user:anes_password@localhost/anes_db"
 
     # 新增前端與 RP_ID 環境變數
     FRONTEND_ORIGIN: str = "http://localhost:3000"
