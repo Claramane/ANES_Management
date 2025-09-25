@@ -122,6 +122,8 @@ coverage/
 .coverage
 .pytest_cache/
 .nyc_output
+test_*
+debug_*
 
 # Temporary files
 temp/
