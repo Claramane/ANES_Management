@@ -1235,6 +1235,15 @@ async def bulk_update_area_codes(
             if not user_id or not date or not year or not month:
                 raise HTTPException(status_code=400, detail="Missing required fields")
             
+            # 將date字符串轉換為date對象
+            try:
+                if isinstance(date, str):
+                    date_obj = datetime.strptime(date, '%Y-%m-%d').date()
+                else:
+                    date_obj = date
+            except ValueError:
+                raise HTTPException(status_code=400, detail=f"日期格式錯誤: {date}，應為YYYY-MM-DD格式")
+            
             # 將month確保為字符串格式，並處理可能的前導零
             if isinstance(month, int):
                 month_str = f"{year}{month:02d}"
@@ -1250,10 +1259,10 @@ async def bulk_update_area_codes(
             if not latest_version:
                 raise HTTPException(status_code=404, detail=f"找不到 {year}年{month}月的排班表版本")
             
-            # 查找此用戶在該日期的排班記錄
+            # 查找此用戶在該日期的排班記錄 - 現在使用date對象進行查詢
             schedule = db.query(MonthlySchedule).filter(
                 MonthlySchedule.user_id == user_id,
-                MonthlySchedule.date == date
+                MonthlySchedule.date == date_obj
             ).first()
             
             if schedule:
@@ -1262,7 +1271,7 @@ async def bulk_update_area_codes(
                 db.commit()
                 results.append({
                     "user_id": user_id,
-                    "date": date,
+                    "date": date_obj.isoformat(),
                     "area_code": area_code,
                     "status": "updated"
                 })
@@ -1270,7 +1279,7 @@ async def bulk_update_area_codes(
                 # 如果找不到記錄，創建一個新的
                 new_schedule = MonthlySchedule(
                     user_id=user_id,
-                    date=date,
+                    date=date_obj,
                     area_code=area_code,
                     version_id=latest_version.id
                 )
@@ -1278,7 +1287,7 @@ async def bulk_update_area_codes(
                 db.commit()
                 results.append({
                     "user_id": user_id,
-                    "date": date,
+                    "date": date_obj.isoformat(),
                     "area_code": area_code,
                     "status": "created"
                 })
