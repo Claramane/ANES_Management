@@ -1,8 +1,8 @@
 {
   "build": {
     "commands": [
-      "pnpm i --frozen-lockfile",
-      "pnpm build"
+      "pnpm install --frozen-lockfile",
+      "pnpm run build"
     ]
   },
   "deploy": {
