@@ -1,0 +1,12 @@
+{
+  "build": {
+    "commands": [
+      "pnpm i --frozen-lockfile",
+      "pnpm build"
+    ]
+  },
+  "deploy": {
+    "type": "static",
+    "output": "build"
+  }
+}

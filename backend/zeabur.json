@@ -1,37 +1,11 @@
 {
-  "routes": [
-    {
-      "src": "/api/doctor-schedules/.*",
-      "dest": "/$0"
-    },
-    {
-      "src": "/api/(.*)",
-      "dest": "/$1"
-    }
-  ],
-  "rewrites": [
-    {
-      "source": "/api/doctor-schedules/(.*)",
-      "destination": "/api/doctor-schedules/$1"
-    }
-  ],
-  "headers": [
-    {
-      "source": "/api/(.*)",
-      "headers": [
-        {
-          "key": "Access-Control-Allow-Origin",
-          "value": "*"
-        },
-        {
-          "key": "Access-Control-Allow-Methods", 
-          "value": "GET, POST, PUT, DELETE, OPTIONS"
-        },
-        {
-          "key": "Access-Control-Allow-Headers",
-          "value": "Content-Type, Authorization"
-        }
-      ]
-    }
-  ]
+  "build": {
+    "commands": [
+      "uv pip install -r requirements.txt"
+    ]
+  },
+  "deploy": {
+    "type": "python",
+    "entry": "main.py"
+  }
 } 

@@ -175,3 +175,7 @@ backend/app/
 - Backend WSGI server configuration in `backend/main.py`
 - Database migrations in `backend/migrations/`
 - Platform-specific configs: `vercel.json`, `zeabur.json`
+
+
+# 提交git commit的時候不要提到Claude
+# 提交git commit的時候不要提到Claude
