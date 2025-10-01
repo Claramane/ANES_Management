@@ -127,4 +127,7 @@ debug_*
 
 # Temporary files
 temp/
-tmp/ 
+tmp/
+
+# Documentation
+docs/ 
