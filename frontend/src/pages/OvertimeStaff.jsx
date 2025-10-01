@@ -246,7 +246,7 @@ const OvertimeRow = ({
               const isLeader = staff.identity === '麻醉科Leader';
               
               return (
-                <Tooltip key={staff.id} title={canEdit ? `點擊標記排序${isLeader ? ' (Leader僅手動加班)' : ''}` : "只有護理長和管理員可以修改"}>
+                <Tooltip key={staff.id} title={canEdit ? `點擊標記排序${isLeader ? ' (Leader僅手動加班)' : ''}` : "只有護理長和系統管理員可以修改"}>
                   <Chip 
                     label={chipLabel}
                     variant={mark ? "filled" : "outlined"}
@@ -871,7 +871,7 @@ const OvertimeStaff = () => {
   // 保存加班記錄 - 優化版本
   const saveOvertimeRecords = async () => {
     if (!canEdit) {
-      dispatchMessage({ type: 'SET_ERROR', error: '只有護理長和管理員可以保存加班記錄' });
+      dispatchMessage({ type: 'SET_ERROR', error: '只有護理長和系統管理員可以保存加班記錄' });
       dispatchDialog({ type: 'OPEN_DIALOG', dialogType: 'openSnackbar' });
       return;
     }
@@ -2046,7 +2046,7 @@ const OvertimeStaff = () => {
   // 🚀 新的智能分配函數 - 使用Hook
   const handleSmartAllocation = useCallback(() => {
     if (!canEdit) {
-      showError('只有護理長和管理員可以生成加班記錄');
+      showError('只有護理長和系統管理員可以生成加班記錄');
       return;
     }
     
@@ -2367,7 +2367,7 @@ const OvertimeStaff = () => {
   // 重設加班表
   const resetOvertimeSchedule = () => {
     if (!canEdit) {
-      showError('只有護理長和管理員可以重設加班記錄');
+      showError('只有護理長和系統管理員可以重設加班記錄');
       return;
     }
     
@@ -2693,7 +2693,7 @@ const OvertimeStaff = () => {
           </LocalizationProvider>
           
           {!canEdit && hasSchedule && (
-            <Tooltip title="您可以查看加班記錄，但只有護理長和管理員可以修改" placement="top">
+            <Tooltip title="您可以查看加班記錄，但只有護理長和系統管理員可以修改" placement="top">
               <IconButton size="small" color="info">
                 <InfoIcon />
               </IconButton>

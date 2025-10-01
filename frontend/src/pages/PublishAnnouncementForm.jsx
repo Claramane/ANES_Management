@@ -47,7 +47,7 @@ const PublishAnnouncementForm = ({ onSubmit, onCancel }) => {
   const availableCategories = useMemo(() => {
     // 如果從API獲取到了分類，就使用API的分類
     if (categories.length > 0) {
-      // 管理員和護理長可以看到所有分類
+      // 系統管理員和護理長可以看到所有分類
       if (user?.role === 'admin' || user?.role === 'head_nurse') {
         return categories;
       }

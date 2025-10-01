@@ -271,17 +271,17 @@ export const canDeleteRequest = (request, user) => {
   
   // 以下人員可以操作換班請求:
   // 1. 換班申請人可以取消自己的請求
-  // 2. 管理員可以駁回所有請求
+  // 2. 系統管理員可以駁回所有請求
   // 3. 護理長可以駁回所有請求
-  
+
   const isAdmin = user.role === 'admin';
   const isLeader = user.identity === 'anesthesia_leader' || user.identity === '麻醉科Leader';
   const isHeadNurse = user.role === 'head_nurse';
   const isRequester = request.requestor_id === user.id;
-  
+
   // 檢查權限
   if (isAdmin || isLeader || isHeadNurse) {
-    return true; // 管理員、領導和護理長可以操作任何請求
+    return true; // 系統管理員、領導和護理長可以操作任何請求
   } else if (isRequester && request.status === 'pending') {
     return true; // 申請人可以取消待處理的請求
   }
@@ -302,8 +302,8 @@ export const getDeleteButtonText = (request, user) => {
   const isLeader = user.identity === 'anesthesia_leader' || user.identity === '麻醉科Leader';
   const isHeadNurse = user.role === 'head_nurse';
   const isRequester = request.requestor_id === user.id;
-  
-  // 已接受的請求，管理員/護理長/領導可以駁回
+
+  // 已接受的請求，系統管理員/護理長/領導可以駁回
   if (request.status === 'accepted' && (isAdmin || isLeader || isHeadNurse)) {
     return '駁回並恢復班表';
   }

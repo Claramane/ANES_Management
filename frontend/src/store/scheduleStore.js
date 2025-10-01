@@ -542,7 +542,7 @@ export const useScheduleStore = create(
             throw new Error('沒有排班數據可保存');
           }
           
-          // 檢查當前用戶角色，只有護理長和管理員可以保存
+          // 檢查當前用戶角色，只有護理長和系統管理員可以保存
           const authStorage = localStorage.getItem('auth-storage');
           let userId = null;
           let userName = null;
@@ -559,7 +559,7 @@ export const useScheduleStore = create(
           }
           
           if (!canSave) {
-            throw new Error('只有護理長和管理員可以保存班表');
+            throw new Error('只有護理長和系統管理員可以保存班表');
           }
           
           const year = selectedDate.getFullYear();
@@ -789,7 +789,7 @@ export const useScheduleStore = create(
             if (state.user) {
               const userRole = state.user.role;
               userId = state.user.id;
-              // 只有護理長和管理員可以實時更新數據庫
+              // 只有護理長和系統管理員可以實時更新數據庫
               canUpdateDB = userRole === 'head_nurse' || userRole === 'admin';
             }
           }
@@ -828,7 +828,7 @@ export const useScheduleStore = create(
             await apiService.schedule.updateShift(requestData);
             console.log(`實時更新數據庫: ${nurse.name} 在 ${formattedDate} 的班次更新為 ${newShift}`);
           } else {
-            console.log('班表變更已保存在本地，但未同步到數據庫，因為當前用戶不是護理長或管理員');
+            console.log('班表變更已保存在本地，但未同步到數據庫，因為當前用戶不是護理長或系統管理員');
           }
           
         } catch (error) {

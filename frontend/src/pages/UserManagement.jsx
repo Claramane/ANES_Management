@@ -581,7 +581,7 @@ const UserManagement = () => {
                     <TableCell>電子郵件</TableCell>
                     <TableCell>入職日期</TableCell>
                     <TableCell>身份</TableCell>
-                    {editMode && <TableCell>角色</TableCell>}
+                    <TableCell>角色</TableCell>
                     {editMode && <TableCell>操作</TableCell>}
                   </TableRow>
                 </TableHead>
@@ -658,27 +658,32 @@ const UserManagement = () => {
                             user.identity
                           )}
                         </TableCell>
-                        {editMode && (
-                          <TableCell>
-                            {user.role !== 'admin' && user.is_active !== false ? (
-                              <FormControl size="small" fullWidth>
-                                <Select
-                                  value={user.role || 'nurse'}
-                                  onChange={(e) => handleSelectChange(user.id, 'role', e.target.value)}
-                                  displayEmpty
-                                >
-                                  <MenuItem value="nurse">一般護理師</MenuItem>
-                                  <MenuItem value="leader">Leader</MenuItem>
-                                  <MenuItem value="supervise_nurse">A組護理師</MenuItem>
-                                  <MenuItem value="head_nurse">護理長</MenuItem>
-                                  <MenuItem value="clerk">書記</MenuItem>
-                                </Select>
-                              </FormControl>
-                            ) : (
-                              user.role
-                            )}
-                          </TableCell>
-                        )}
+                        <TableCell>
+                          {editMode && user.role !== 'admin' && user.is_active !== false ? (
+                            <FormControl size="small" fullWidth>
+                              <Select
+                                value={user.role || 'nurse'}
+                                onChange={(e) => handleSelectChange(user.id, 'role', e.target.value)}
+                                displayEmpty
+                              >
+                                <MenuItem value="nurse">一般護理師</MenuItem>
+                                <MenuItem value="leader">Leader</MenuItem>
+                                <MenuItem value="supervise_nurse">A組護理師</MenuItem>
+                                <MenuItem value="head_nurse">護理長</MenuItem>
+                                <MenuItem value="clerk">書記</MenuItem>
+                              </Select>
+                            </FormControl>
+                          ) : (
+                            user.role === 'nurse' ? '一般護理師' :
+                            user.role === 'leader' ? 'Leader' :
+                            user.role === 'supervise_nurse' ? 'A組護理師' :
+                            user.role === 'head_nurse' ? '護理長' :
+                            user.role === 'clerk' ? '書記' :
+                            user.role === 'admin' ? '系統管理員' :
+                            user.role === 'doctor' ? '醫師' :
+                            user.role || '未知'
+                          )}
+                        </TableCell>
                         {editMode && (
                           <TableCell>
                             {user.role !== 'head_nurse' && user.role !== 'admin' ? (
@@ -710,7 +715,7 @@ const UserManagement = () => {
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={editMode ? 9 : 7} align="center">
+                      <TableCell colSpan={editMode ? 9 : 8} align="center">
                         沒有找到用戶
                       </TableCell>
                     </TableRow>

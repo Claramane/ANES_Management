@@ -64,10 +64,10 @@ const ensureValidDate = (date) => {
 
 // 確保班表包含所有啟用護理師的工具函數
 const ensureAllActiveNursesIncluded = (scheduleData, allNurses, selectedDate) => {
-  const activeNurses = allNurses.filter(nurse => nurse.is_active === true && 
-    nurse.identity !== '麻醉科醫師' && 
-    nurse.identity !== '訪客' && 
-    nurse.identity !== 'admin');
+  const activeNurses = allNurses.filter(nurse => nurse.is_active === true &&
+    nurse.identity !== '麻醉科醫師' &&
+    nurse.identity !== '訪客' &&
+    nurse.role !== 'admin');
   const missingNurses = activeNurses.filter(nurse => 
     !scheduleData.some(scheduled => scheduled.id === nurse.id)
   );
@@ -1033,12 +1033,12 @@ const MonthlySchedule = () => {
         setError('無法重置班表：找不到護理師資料');
         return;
       }
-      
+
       // 只包含明確啟用的用戶 (is_active === true)，排除麻醉科醫師、訪客和admin
-      const activeNurses = allNurses.filter(nurse => nurse.is_active === true && 
-        nurse.identity !== '麻醉科醫師' && 
-        nurse.identity !== '訪客' && 
-        nurse.identity !== 'admin');
+      const activeNurses = allNurses.filter(nurse => nurse.is_active === true &&
+        nurse.identity !== '麻醉科醫師' &&
+        nurse.identity !== '訪客' &&
+        nurse.role !== 'admin');
       
       const year = selectedDate.getFullYear();
       const month = selectedDate.getMonth() + 1;
@@ -1125,12 +1125,12 @@ const MonthlySchedule = () => {
         setError('無法生成空白班表：找不到護理師資料');
         return;
       }
-      
+
       // 只包含明確啟用的用戶 (is_active === true)，排除麻醉科醫師、訪客和admin
-      const activeNurses = allNurses.filter(nurse => nurse.is_active === true && 
-        nurse.identity !== '麻醉科醫師' && 
-        nurse.identity !== '訪客' && 
-        nurse.identity !== 'admin');
+      const activeNurses = allNurses.filter(nurse => nurse.is_active === true &&
+        nurse.identity !== '麻醉科醫師' &&
+        nurse.identity !== '訪客' &&
+        nurse.role !== 'admin');
       
       const year = selectedDate.getFullYear();
       const month = selectedDate.getMonth() + 1;
@@ -1305,10 +1305,10 @@ const MonthlySchedule = () => {
       const users = usersRes.data;
       
       // 檢查所有啟用的護理師（排除麻醉科醫師、訪客和admin）
-      const activeUsers = users.filter(user => user.is_active === true && 
-        user.identity !== '麻醉科醫師' && 
-        user.identity !== '訪客' && 
-        user.identity !== 'admin');
+      const activeUsers = users.filter(user => user.is_active === true &&
+        user.identity !== '麻醉科醫師' &&
+        user.identity !== '訪客' &&
+        user.role !== 'admin');
       console.log('更新包班人員前統計:');
       console.log(`總共 ${users.length} 位用戶，其中 ${activeUsers.length} 位啟用中`);
       console.log('啟用用戶的角色分佈:', activeUsers.reduce((acc, user) => {

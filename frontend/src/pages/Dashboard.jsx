@@ -1330,8 +1330,8 @@ function Dashboard() {
                     <TodayIcon color="primary" sx={{ mr: 1 }} />
                     <Typography variant="h6">今日班表</Typography>
                   </Box>
-                  
-                  {/* 醫師和管理員顯示醫師班表 */}
+
+                  {/* 醫師和系統管理員顯示醫師班表 */}
                   {(user?.role === 'doctor' || user?.role === 'admin') ? (
                     isDoctorScheduleLoading ? (
                       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 2 }}>
@@ -1623,8 +1623,8 @@ function Dashboard() {
                     <EventIcon color="primary" sx={{ mr: 1 }} />
                     <Typography variant="h6">本月班表</Typography>
                   </Box>
-                  
-                  {/* 醫師和管理員顯示醫師月班表 */}
+
+                  {/* 醫師和系統管理員顯示醫師月班表 */}
                   {(user?.role === 'doctor' || user?.role === 'admin') ? (
                     isDoctorScheduleLoading ? (
                       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 4 }}>
