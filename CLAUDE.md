@@ -11,10 +11,10 @@ This is a **麻醉科護理班表管理系統** (Anesthesia Nursing Schedule Man
 ### Frontend (React)
 ```bash
 cd frontend
-npm install          # Install dependencies
-npm start           # Start development server (port 3000)
-npm run build       # Build for production
-npm test            # Run tests
+pnpm install         # Install dependencies
+pnpm start          # Start development server (port 3000)
+pnpm build          # Build for production
+pnpm test           # Run tests
 ```
 
 ### Backend (FastAPI)
@@ -159,7 +159,7 @@ backend/app/
 
 ### Frontend Testing
 - React Testing Library configured in `frontend/package.json`
-- Run tests with `npm test` in frontend directory
+- Run tests with `pnpm test` in frontend directory
 
 ## Security Notes
 
@@ -171,10 +171,19 @@ backend/app/
 
 ## Deployment Configuration
 
+### Build Optimization
+- **Frontend**: Uses pnpm for faster dependency management (pnpm-lock.yaml)
+- **Backend**: Uses uv for faster Python package installation
+
+### Platform-specific configs
+- `frontend/zeabur.json`: Frontend deployment with pnpm optimization
+- `backend/zeabur.json`: Backend deployment with uv optimization  
+- `vercel.json`: Legacy Vercel configuration
+
+### Build Output
 - Frontend build output in `frontend/build/`
 - Backend WSGI server configuration in `backend/main.py`
 - Database migrations in `backend/migrations/`
-- Platform-specific configs: `vercel.json`, `zeabur.json`
 
 
 # 提交git commit的時候不要提到Claude
