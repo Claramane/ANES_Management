@@ -6,14 +6,21 @@
 
 ## 版本資訊
 
-**當前版本**: v0.9.3 beta
+**當前版本**: v0.9.5 beta
 **最後更新**: 2025-10-01
 
 **⚠️ 重要提醒**: 每次完成重要功能更新後，您**必須**同步更新以下位置的版本號和更新時間：
 1. 本文件 (CLAUDE.md) 的版本資訊區塊
-2. `frontend/src/pages/Settings.jsx` 中的系統信息區塊（第671-676行）
-3. `frontend/src/pages/Login.jsx` 中的版本資訊（需要新增）
-4. `docs/USAGE.md` 中的版本歷史記錄
+2. `README.md` 的版本徽章和版本更新記錄（第3行和版本更新記錄區塊）
+3. `frontend/src/pages/Settings.jsx` 中的系統信息區塊（第671行）
+4. `frontend/src/pages/Login.jsx` 中的版本資訊（第308行）
+5. `docs/USAGE.md` 中的版本歷史記錄
+
+**版本號更新流程**：
+1. 確認新版本號（參考 README.md 的版本更新記錄）
+2. 依序更新上述5個位置的版本號
+3. 在 README.md 中記錄本次更新的主要功能
+4. 提交 git commit，標題格式：「更新系統版本號至 vX.X.X」
 
 保持所有文件的版本號一致性！
 

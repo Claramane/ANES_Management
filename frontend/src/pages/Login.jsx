@@ -305,7 +305,7 @@ function Login() {
           © {new Date().getFullYear()} 護理班表管理系統
         </Typography>
         <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
-          v0.9.3 beta | 最後更新: 2025-10-01
+          v0.9.5 beta | 最後更新: 2025-10-01
         </Typography>
       </Box>
     </Container>
