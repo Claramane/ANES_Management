@@ -14,7 +14,7 @@ import {
   IconButton,
   Tooltip
 } from '@mui/material';
-import { LockOutlined, Fingerprint } from '@mui/icons-material';
+import { Fingerprint } from '@mui/icons-material';
 import { useAuthStore } from '../store/authStore';
 import { api } from '../utils/api';
 
@@ -211,8 +211,8 @@ function Login() {
           alignItems: 'center',
         }}
       >
-        <Typography variant="h4" gutterBottom>
-          護理班表管理系統
+        <Typography variant="h4" gutterBottom fontWeight="bold">
+          恩主公麻醉科班表小查查
         </Typography>
         <Paper
           elevation={0}
@@ -232,10 +232,12 @@ function Login() {
               alignItems: 'center',
             }}
           >
-            <Avatar sx={{ m: 1, bgcolor: 'primary.main' }}>
-              <LockOutlined />
-            </Avatar>
-            <Typography component="h1" variant="h5">
+            <Avatar
+              src="/favicon.png"
+              alt="恩主公麻醉科班表小查查"
+              sx={{ m: 1, width: 56, height: 56 }}
+            />
+            <Typography component="h1" variant="h5" fontWeight="bold">
               登入
             </Typography>
             {(error || formError) && (
@@ -302,7 +304,7 @@ function Login() {
           </Box>
         </Paper>
         <Typography variant="body2" color="text.secondary" sx={{ mt: 4 }}>
-          © {new Date().getFullYear()} 護理班表管理系統
+          © {new Date().getFullYear()} 恩主公麻醉科班表小查查
         </Typography>
         <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
           v0.9.5 beta | 最後更新: 2025-10-01
