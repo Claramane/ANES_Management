@@ -129,5 +129,5 @@ debug_*
 temp/
 tmp/
 
-# Documentation
-docs/ 
+# Documentation (保留重要文件在版本控制中)
+# docs/  # 已移除，docs 資料夾需要版本控制 
