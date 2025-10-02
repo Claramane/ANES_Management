@@ -123,15 +123,20 @@ app.add_middleware(
 )
 
 # 配置CORS
-cors_origins = ["http://localhost:3000", "http://127.0.0.1:3000"] if not settings.IS_PRODUCTION else settings.BACKEND_CORS_ORIGINS
+# 優先使用環境變數設定的 BACKEND_CORS_ORIGINS，若未設定則根據環境判斷
+if settings.BACKEND_CORS_ORIGINS:
+    cors_origins = settings.BACKEND_CORS_ORIGINS
+else:
+    cors_origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=cors_origins,  # 根據環境動態設置
+    allow_origins=cors_origins,  # 使用環境變數設定的來源
     allow_credentials=True,  # 確保允許攜帶credentials
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allow_headers=[
-        "Authorization", 
-        "Content-Type", 
+        "Authorization",
+        "Content-Type",
         "Accept",
         "Origin",
         "X-Requested-With",
