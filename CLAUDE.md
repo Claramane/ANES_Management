@@ -2,7 +2,7 @@
 
 本文件為 Claude Code (claude.ai/code) 在此儲存庫工作時提供指導。
 
-> **📁 重要文件位置提醒**: 本文件中提到的其他重要文件（如 `DATABASE_ARCHITECTURE.md`、`ROUND_ALLOCATION_LOGIC.md`、`SECURITY.md`、`USAGE.md`、`PERMISSIONS.md`、`GIT_WORKFLOW.md`）都位於 `docs/` 資料夾中。
+> **📁 重要文件位置提醒**: 本文件中提到的其他重要文件（如 `DATABASE_ARCHITECTURE.md`、`ROUND_ALLOCATION_LOGIC.md`、`SECURITY.md`、`USAGE.md`、`PERMISSIONS.md`、`GIT_WORKFLOW.md`、`ZEABUR_ENV_CONFIG.md`）都位於 `docs/` 資料夾中。
 
 ## 版本資訊
 
@@ -264,6 +264,17 @@ PGPASSWORD=anes_password psql -h localhost -U anes_user -d anes_db -c "UPDATE us
 - 更新權限矩陣或權限層級
 - 變更路由保護或 UI 元素顯示邏輯
 確保權限文件與實際代碼保持同步，並保證系統安全性！
+
+### Zeabur 部署配置文件
+**重要**: 完整 Zeabur 環境變數配置、部署步驟和環境架構，請參考：`docs/ZEABUR_ENV_CONFIG.md`
+
+**⚠️ 重要提醒**: 變更部署配置或環境變數時，您**必須**更新 `docs/ZEABUR_ENV_CONFIG.md` 以反映變更。包括：
+- 新增或修改環境變數
+- 變更服務配置或域名
+- 更新部署流程或步驟
+- 修改資料庫連接設定
+- 變更 CORS、WebAuthn 或安全性設定
+確保部署文件與實際配置保持同步，方便團隊協作！
 
 ## 開發模式
 
