@@ -74,7 +74,7 @@ Thumbs.db
 SOURCE_DB_URL=postgresql://root:YOUR_PASSWORD@hnd1.clusters.zeabur.com:32221/zeabur
 
 # 目標資料庫 - 本地環境
-TARGET_LOCAL_URL=postgresql://anes_user:anes_password@localhost:5432/anes_db
+TARGET_LOCAL_URL=postgresql://anes_user:YOUR_PASSWORD@localhost:5432/anes_db
 
 # 目標資料庫 - 測試站
 TARGET_TEST_URL=postgresql://test_user:test_password@test-host:5432/test_db
