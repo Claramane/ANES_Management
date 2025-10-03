@@ -78,7 +78,7 @@ SYNC_INTERVAL_MINUTES=10
 
 ```bash
 # ❌ 錯誤：Zeabur 無法連接到 localhost
-TARGET_LOCAL_URL=postgresql://anes_user:anes_password@localhost:5432/anes_db
+TARGET_LOCAL_URL=postgresql://anes_user:YOUR_PASSWORD@localhost:5432/anes_db
 SYNC_TARGETS=local,test  # ❌ 包含 local 會失敗
 
 # ✅ 正確：只同步到測試站
@@ -92,7 +92,7 @@ SYNC_TARGETS=test
 2. 設定本機 `.env` 檔案：
    ```bash
    SOURCE_DB_URL=postgresql://root:PASSWORD@hnd1.clusters.zeabur.com:32221/zeabur
-   TARGET_LOCAL_URL=postgresql://anes_user:anes_password@localhost:5432/anes_db
+   TARGET_LOCAL_URL=postgresql://anes_user:YOUR_PASSWORD@localhost:5432/anes_db
    SYNC_TARGETS=local
    ```
 3. 本機執行：`python main.py`

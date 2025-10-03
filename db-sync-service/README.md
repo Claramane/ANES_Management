@@ -92,7 +92,7 @@ SYNC_INTERVAL_MINUTES=10
 **環境變數配置**：
 ```bash
 SOURCE_DB_URL=postgresql://root:PASSWORD@hnd1.clusters.zeabur.com:32221/zeabur
-TARGET_LOCAL_URL=postgresql://anes_user:anes_password@localhost:5432/anes_db
+TARGET_LOCAL_URL=postgresql://anes_user:YOUR_PASSWORD@localhost:5432/anes_db
 SYNC_TARGETS=local
 SYNC_INTERVAL_MINUTES=10
 ```
