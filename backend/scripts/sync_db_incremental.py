@@ -62,14 +62,14 @@ TABLE_SYNC_ORDER = [
     'doctor_schedule_details',  # 醫師班表詳情 (依賴 doctor_schedules)
     'notifications',            # 通知 (依賴 users)
     'shift_swap_notifications', # 調班通知 (依賴 shift_swap_requests, users)
-    'webauthn_credentials',     # WebAuthn 憑證 (依賴 users)
+    # 'webauthn_credentials',   # 跳過：包含敏感生物辨識資料，且測試環境不需要
     'application_logs',         # 應用程式日誌 (最後)
 ]
 
 # 需要脫敏的欄位
 SENSITIVE_FIELDS = {
     'users': ['password'],  # 密碼欄位不同步
-    'webauthn_credentials': ['credential_id', 'public_key'],  # 生物辨識資料不同步
+    # 'webauthn_credentials': ['credential_id', 'public_key'],  # 整個表格已跳過
 }
 
 # 批次大小

@@ -60,20 +60,42 @@ Zeabur 設定：
 
 #### 必要環境變數
 
+**⚠️ 重要提醒**：Zeabur 部署時**無法連接到 localhost**，請勿設定 `TARGET_LOCAL_URL`
+
 ```bash
-# 來源資料庫
+# 來源資料庫（正式環境）
 SOURCE_DB_URL=postgresql://root:SGPdg26Npyc35KtzHoW1x4U0YC7TkL98@hnd1.clusters.zeabur.com:32221/zeabur
 
-# 目標資料庫 - 本地環境（如果需要）
-TARGET_LOCAL_URL=postgresql://anes_user:anes_password@localhost:5432/anes_db
-
-# 目標資料庫 - 測試站
+# 目標資料庫 - 測試站（必須有公網 IP 或 Zeabur 內網可達）
 TARGET_TEST_URL=postgresql://test_user:test_password@test-host:5432/test_db
 
 # 同步設定
-SYNC_TARGETS=test
+SYNC_TARGETS=test  # 只同步到測試站，不要設為 "local"
 SYNC_INTERVAL_MINUTES=10
 ```
+
+#### ❌ 錯誤配置範例（不要這樣設定）
+
+```bash
+# ❌ 錯誤：Zeabur 無法連接到 localhost
+TARGET_LOCAL_URL=postgresql://anes_user:anes_password@localhost:5432/anes_db
+SYNC_TARGETS=local,test  # ❌ 包含 local 會失敗
+
+# ✅ 正確：只同步到測試站
+SYNC_TARGETS=test
+```
+
+#### 本機同步說明
+
+如需同步到本機資料庫：
+1. 在本機執行服務（不要部署到 Zeabur）
+2. 設定本機 `.env` 檔案：
+   ```bash
+   SOURCE_DB_URL=postgresql://root:PASSWORD@hnd1.clusters.zeabur.com:32221/zeabur
+   TARGET_LOCAL_URL=postgresql://anes_user:anes_password@localhost:5432/anes_db
+   SYNC_TARGETS=local
+   ```
+3. 本機執行：`python main.py`
 
 #### 進階環境變數（可選）
 

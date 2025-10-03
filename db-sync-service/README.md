@@ -60,6 +60,50 @@
 - [ ] 部署到 Zeabur
 - [ ] 清理舊有整合
 
+## 🎯 部署情境
+
+本服務支援兩種部署方式，請根據您的需求選擇：
+
+### 情境 A: Zeabur 雲端部署（推薦用於測試站自動同步）
+
+**用途**：自動同步正式環境資料到測試站
+**運行方式**：持續在 Zeabur 雲端運行
+**同步目標**：測試站資料庫
+
+**環境變數配置**：
+```bash
+SOURCE_DB_URL=postgresql://root:PASSWORD@hnd1.clusters.zeabur.com:32221/zeabur
+TARGET_TEST_URL=postgresql://test_user:test_password@test-host:5432/test_db
+SYNC_TARGETS=test
+SYNC_INTERVAL_MINUTES=10
+```
+
+**⚠️ 重要限制**：
+- ❌ 無法同步到 `localhost`（本機資料庫）
+- ❌ 不要在 Zeabur 設定 `TARGET_LOCAL_URL`
+- ✅ 只能同步到有公網 IP 或內網可達的資料庫
+
+### 情境 B: 本機執行（推薦用於本地開發）
+
+**用途**：手動同步正式環境資料到本機資料庫
+**運行方式**：需要時手動執行
+**同步目標**：本機 localhost 資料庫
+
+**環境變數配置**：
+```bash
+SOURCE_DB_URL=postgresql://root:PASSWORD@hnd1.clusters.zeabur.com:32221/zeabur
+TARGET_LOCAL_URL=postgresql://anes_user:anes_password@localhost:5432/anes_db
+SYNC_TARGETS=local
+SYNC_INTERVAL_MINUTES=10
+```
+
+**使用時機**：
+- ✅ 本地開發需要最新資料
+- ✅ 測試新功能前同步資料
+- ✅ 排查問題需要複製正式環境資料
+
+---
+
 ## 🚀 快速開始
 
 ### 步驟 1: 建立環境變數檔案

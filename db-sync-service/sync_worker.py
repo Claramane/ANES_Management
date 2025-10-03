@@ -37,14 +37,14 @@ TABLE_SYNC_ORDER = [
     'doctor_schedules',             # 獨立表格
     'day_shift_doctors',            # 依賴 doctor_schedules
     'doctor_schedule_update_logs',  # 依賴 doctor_schedules
-    'webauthn_credentials',         # 依賴 users
+    # 'webauthn_credentials',       # 跳過：包含敏感生物辨識資料，且測試環境不需要
     'logs',                         # 最後（無依賴）
 ]
 
 # 敏感欄位（不同步）
 SENSITIVE_FIELDS = {
     'users': ['password'],
-    'webauthn_credentials': ['credential_id', 'public_key']
+    # 'webauthn_credentials': ['credential_id', 'public_key']  # 暫時註解，因為這些欄位是 NOT NULL
 }
 
 
