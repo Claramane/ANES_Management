@@ -1,0 +1,65 @@
+{
+  "source": {
+    "name": "正式環境 (Zeabur)",
+    "database_url": "postgresql://root:SGPdg26Npyc35KtzHoW1x4U0YC7TkL98@hnd1.clusters.zeabur.com:32221/zeabur"
+  },
+  "targets": {
+    "local": {
+      "name": "本地開發環境",
+      "database_url": "postgresql://anes_user:anes_password@localhost:5432/anes_db"
+    },
+    "test": {
+      "name": "測試環境",
+      "database_url": "postgresql://test_user:test_password@test.example.com:5432/anes_test_db"
+    }
+  },
+  "sync_tables": [
+    "users",
+    "formula_schedules",
+    "monthly_schedules",
+    "schedule_versions",
+    "schedule_version_diffs",
+    "schedule_changes",
+    "shift_swap_requests",
+    "overtime_records",
+    "overtime_points",
+    "overtime_monthly_scores",
+    "overtime_summaries",
+    "announcements",
+    "doctor_schedules",
+    "day_shift_doctors",
+    "doctor_schedule_update_logs",
+    "webauthn_credentials",
+    "logs"
+  ],
+  "exclude_fields": {
+    "users": [
+      "password"
+    ],
+    "webauthn_credentials": []
+  },
+  "sync_schedule": {
+    "enabled": false,
+    "interval_minutes": 10,
+    "run_at_startup": true
+  },
+  "notifications": {
+    "enabled": false,
+    "on_error": true,
+    "on_success": false,
+    "email": "admin@example.com"
+  },
+  "retry": {
+    "max_attempts": 3,
+    "delay_seconds": 60
+  },
+  "batch_size": 1000,
+  "comments": {
+    "_source": "來源資料庫為正式環境，請勿修改",
+    "_targets": "可新增多個目標環境，例如 staging, dev 等",
+    "_sync_tables": "依照外鍵依賴順序排列，避免同步錯誤",
+    "_exclude_fields": "敏感欄位不會被同步到目標資料庫",
+    "_sync_schedule": "整合到 APScheduler 時啟用自動排程",
+    "_test_database": "測試環境資料庫連線需要實際設定後才能使用"
+  }
+}

@@ -17,6 +17,7 @@ from app.core.config import settings
 from app.core.database import engine, Base, create_tables
 from app.routes import routers
 from app.tasks.doctor_schedule_tasks import doctor_schedule_task_manager
+from app.tasks.db_sync_tasks import db_sync_task_manager
 from app.utils.timezone import get_timezone_info
 
 # 設定時區為台灣時區 (UTC+8)
@@ -73,6 +74,17 @@ async def lifespan(app: FastAPI):
         logger.info("醫師班表定時任務啟動成功（包含自動下班檢測）")
     except Exception as e:
         logger.error(f"啟動醫師班表定時任務失敗: {str(e)}")
+
+    # 啟動資料庫同步定時任務（正式環境 → 本地/測試環境）
+    # ⚠️ 注意：只在本地/測試環境啟動，避免在正式環境執行
+    if not settings.IS_PRODUCTION:
+        try:
+            db_sync_task_manager.start_scheduler()
+            logger.info("資料庫同步定時任務啟動成功（正式環境 → 本地，每10分鐘執行）")
+        except Exception as e:
+            logger.error(f"啟動資料庫同步定時任務失敗: {str(e)}")
+    else:
+        logger.info("正式環境不啟動資料庫同步任務（單向同步：正式 → 本地/測試）")
     
     yield
     
@@ -85,6 +97,14 @@ async def lifespan(app: FastAPI):
         logger.info("醫師班表定時任務已停止")
     except Exception as e:
         logger.error(f"停止定時任務時發生錯誤: {str(e)}")
+
+    # 停止資料庫同步定時任務
+    if not settings.IS_PRODUCTION:
+        try:
+            db_sync_task_manager.stop_scheduler()
+            logger.info("資料庫同步定時任務已停止")
+        except Exception as e:
+            logger.error(f"停止資料庫同步任務時發生錯誤: {str(e)}")
     
     print("✅ 系統已安全關閉")
 

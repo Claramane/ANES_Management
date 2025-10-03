@@ -455,3 +455,239 @@ announcements (公告)
 - 模組化設計便於功能擴展
 
 此資料庫架構展現了一個設計良好、適合正式環境的系統，支援複雜的醫療排班需求，具備適當的資料完整性、效能最佳化和稽核功能。
+
+## 資料庫同步機制
+
+### **同步需求背景**
+
+正式環境資料庫持續更新，開發和測試環境需要定期同步正式資料以確保：
+- 開發時使用真實資料結構和內容
+- 測試環境接近正式環境狀態
+- 問題排查時可複製正式環境資料
+
+### **同步方案架構**
+
+系統提供兩種資料庫同步方案：
+
+#### **方案 A: PostgreSQL 邏輯複製（推薦）**
+
+**架構**：
+```
+正式環境 (Zeabur)          本地/測試環境
+    ↓                          ↓
+[Publisher]    →→→→→→→→    [Subscriber]
+(wal_level=logical)       (接收同步資料)
+```
+
+**特點**：
+- ✅ **即時同步**：毫秒級延遲，資料接近即時更新
+- ✅ **低資源消耗**：PostgreSQL 原生支援，無需額外服務
+- ✅ **自動化**：設定後自動執行，無需手動介入
+- ✅ **單向複製**：防止測試環境資料回寫正式環境
+
+**適用條件**：
+- PostgreSQL 10+ 版本
+- `wal_level = logical`
+- 具有 `REPLICATION` 權限
+
+**同步對象**：
+- ✅ 所有表格資料（可選擇特定表格）
+- ❌ 表格結構（需先在訂閱端建立）
+- ❌ 索引和約束（需先在訂閱端建立）
+
+#### **方案 B: Python 增量同步（備案）**
+
+**架構**：
+```
+正式環境              增量同步腳本           本地/測試環境
+    ↓                      ↓                      ↓
+[Source DB]  ←讀取增量→  [Python]  →寫入→  [Target DB]
+              (基於 updated_at)
+```
+
+**特點**：
+- ✅ **靈活控制**：可自定義同步邏輯和資料脫敏
+- ✅ **低權限需求**：只需一般查詢權限
+- ✅ **批次同步**：支援大數據量分批處理
+- ⚠️ **定期執行**：需排程觸發（如每 10 分鐘）
+
+**同步機制**：
+1. **增量判斷**：基於 `updated_at` 欄位判斷變更記錄
+2. **外鍵順序**：依照依賴關係排序同步（users → schedules → ...）
+3. **UPSERT 邏輯**：存在則更新，不存在則插入
+4. **敏感資料處理**：排除密碼等敏感欄位
+
+**同步順序**（依外鍵依賴）：
+```
+1. users                      # 最優先（其他表格依賴）
+2. formula_schedules          # 班表公式
+3. schedules                  # 班表（依賴 users）
+4. shift_swap_requests        # 調班申請（依賴 users, schedules）
+5. overtime_records           # 加班記錄（依賴 users, schedules）
+6. announcements              # 公告
+7. doctor_schedules           # 醫師班表
+8. doctor_schedule_details    # 醫師班表詳情（依賴 doctor_schedules）
+9. notifications              # 通知（依賴 users）
+10. shift_swap_notifications  # 調班通知（依賴 shift_swap_requests, users）
+11. webauthn_credentials      # WebAuthn 憑證（依賴 users）
+12. application_logs          # 應用程式日誌（最後）
+```
+
+### **敏感資料處理**
+
+**排除同步的欄位**：
+- `users.password` - 密碼欄位（使用測試密碼）
+- `webauthn_credentials.credential_id` - 生物辨識憑證
+- `webauthn_credentials.public_key` - 公鑰資料
+
+**脫敏方式**：
+- **方案 A**：使用訂閱端觸發器自動脱敏
+- **方案 B**：配置檔 `exclude_fields` 排除欄位
+
+### **同步工具說明**
+
+#### **檢查工具**
+- **`check_replication_support.py`**
+  - 檢查資料庫是否支援邏輯複製
+  - 驗證權限和配置
+  - 檢查 `updated_at` 欄位（用於增量同步）
+
+#### **邏輯複製工具（方案 A）**
+- **`setup_replication.sql`**
+  - 發布端：建立 PUBLICATION
+  - 訂閱端：建立 SUBSCRIPTION
+  - 包含測試驗證 SQL
+
+- **`monitor_replication.py`**
+  - 監控複製狀態和延遲
+  - 檢查複製槽位健康度
+  - 支援持續監控和告警
+
+#### **增量同步工具（方案 B）**
+- **`sync_db_incremental.py`**
+  - 主同步腳本
+  - 支援增量和全量同步
+  - 批次處理大數據量
+
+- **`sync_config.json`**
+  - 資料庫連線配置
+  - 同步表格清單
+  - 排除欄位設定
+
+- **`sync_state.json`** (自動生成)
+  - 記錄最後同步時間
+  - 追蹤同步統計
+
+### **同步監控指標**
+
+**邏輯複製監控**：
+```sql
+-- 查看複製延遲
+SELECT
+    subname,
+    EXTRACT(EPOCH FROM (now() - latest_end_time))::INT AS lag_seconds
+FROM pg_stat_subscription;
+
+-- 查看複製槽位狀態
+SELECT
+    slot_name,
+    active,
+    pg_size_pretty(pg_wal_lsn_diff(pg_current_wal_lsn(), restart_lsn)) AS lag
+FROM pg_replication_slots;
+```
+
+**Python 同步監控**：
+```bash
+# 查看同步狀態
+cat backend/scripts/sync_state.json
+
+# 執行監控腳本
+python monitor_replication.py --mode subscriber --watch 30
+```
+
+### **故障處理機制**
+
+**常見問題與解決**：
+
+1. **權限不足**
+   - 問題：無法建立 PUBLICATION
+   - 解決：改用 Python 增量同步
+
+2. **同步延遲過大**
+   - 問題：lag_seconds > 60
+   - 解決：檢查網路、重建訂閱或增加資源
+
+3. **資料衝突**
+   - 問題：測試環境修改資料被覆蓋
+   - 解決：使用獨立測試資料庫或唯讀模式
+
+4. **表格無時間戳記**
+   - 問題：無法增量同步
+   - 解決：全量同步或新增 `updated_at` 欄位
+
+### **安全性考量**
+
+**網路安全**：
+- ✅ 使用 SSL 連線（`sslmode=require`）
+- ✅ 防火牆限制 IP 白名單
+- ✅ 加密傳輸敏感資料
+
+**資料安全**：
+- ✅ 敏感欄位排除或脫敏
+- ✅ 測試環境使用獨立密碼
+- ✅ 禁止測試環境回寫正式環境
+
+**稽核記錄**：
+- ✅ 記錄同步時間和數量
+- ✅ 監控異常同步行為
+- ✅ 定期檢視同步日誌
+
+### **效能影響評估**
+
+**對正式環境的影響**：
+- PostgreSQL 邏輯複製：< 1% CPU/Memory
+- 網路頻寬：依資料變更量，通常 < 10 MB/hr
+- 不阻塞正式環境寫入操作
+
+**對本地/測試環境的影響**：
+- 資料庫寫入：UPSERT 操作
+- 磁碟空間：與正式環境相同
+- 建議配置：至少與正式環境 50% 的資源
+
+### **部署建議**
+
+**正式環境部署**：
+1. 選擇低峰時段設定 PUBLICATION
+2. 監控資源使用情況
+3. 設定複製槽位大小限制
+
+**本地/測試環境部署**：
+1. 先執行 `init_db.py` 建立表格結構
+2. 設定 SUBSCRIPTION 或排程 Python 同步
+3. 驗證資料完整性
+
+**整合到 APScheduler**（Python 方案）：
+```python
+# backend/app/tasks/scheduler.py
+from scripts.sync_db_incremental import IncrementalSync, DatabaseConnector
+
+scheduler.add_job(
+    scheduled_db_sync,
+    'interval',
+    minutes=10,
+    id='db_sync',
+    name='資料庫增量同步'
+)
+```
+
+### **相關文件**
+
+完整同步實作指南請參考：
+- [`backend/scripts/README_DATABASE_SYNC.md`](../backend/scripts/README_DATABASE_SYNC.md) - 詳細使用說明
+- [`backend/scripts/setup_replication.sql`](../backend/scripts/setup_replication.sql) - 邏輯複製設定
+- [`backend/scripts/sync_config.json`](../backend/scripts/sync_config.json) - 同步配置範本
+
+---
+
+**資料庫架構最後更新**: 2025-10-02
+**同步機制版本**: v1.0

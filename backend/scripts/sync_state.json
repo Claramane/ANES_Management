@@ -1,0 +1,82 @@
+{
+  "users": {
+    "last_sync_time": "2025-10-03T14:20:23.410853",
+    "records_synced": 0,
+    "updated_at": "2025-10-03T14:20:23.501829"
+  },
+  "formula_schedules": {
+    "last_sync_time": "2025-10-03T14:20:24.177571",
+    "records_synced": 0,
+    "updated_at": "2025-10-03T14:20:24.288813"
+  },
+  "shift_swap_requests": {
+    "last_sync_time": "2025-10-03T14:20:28.144890",
+    "records_synced": 0,
+    "updated_at": "2025-10-03T14:20:28.237266"
+  },
+  "overtime_records": {
+    "last_sync_time": "2025-10-03T14:20:28.934806",
+    "records_synced": 0,
+    "updated_at": "2025-10-03T14:20:29.023292"
+  },
+  "announcements": {
+    "last_sync_time": "2025-10-03T14:20:32.160003",
+    "records_synced": 0,
+    "updated_at": "2025-10-03T14:20:32.267908"
+  },
+  "doctor_schedules": {
+    "last_sync_time": "2025-10-03T14:20:32.981789",
+    "records_synced": 114,
+    "updated_at": "2025-10-03T14:20:33.071682"
+  },
+  "monthly_schedules": {
+    "last_sync_time": "2025-10-03T14:20:25.015522",
+    "records_synced": 0,
+    "updated_at": "2025-10-03T14:20:25.095571"
+  },
+  "schedule_versions": {
+    "last_sync_time": "2025-10-03T14:20:25.771623",
+    "records_synced": 0,
+    "updated_at": "2025-10-03T14:20:25.894404"
+  },
+  "schedule_version_diffs": {
+    "last_sync_time": "2025-10-03T14:20:26.575619",
+    "records_synced": 0,
+    "updated_at": "2025-10-03T14:20:26.668736"
+  },
+  "schedule_changes": {
+    "last_sync_time": "2025-10-03T14:20:27.344601",
+    "records_synced": 0,
+    "updated_at": "2025-10-03T14:20:27.448776"
+  },
+  "overtime_points": {
+    "last_sync_time": "2025-10-03T14:20:29.706515",
+    "records_synced": 0,
+    "updated_at": "2025-10-03T14:20:29.789656"
+  },
+  "overtime_monthly_scores": {
+    "last_sync_time": "2025-10-03T14:20:30.583062",
+    "records_synced": 206,
+    "updated_at": "2025-10-03T14:20:30.663679"
+  },
+  "overtime_summaries": {
+    "last_sync_time": "2025-10-03T14:20:31.382835",
+    "records_synced": 28,
+    "updated_at": "2025-10-03T14:20:31.497737"
+  },
+  "day_shift_doctors": {
+    "last_sync_time": "2025-10-03T14:20:33.733337",
+    "records_synced": 0,
+    "updated_at": "2025-10-03T14:20:33.825952"
+  },
+  "doctor_schedule_update_logs": {
+    "last_sync_time": "2025-10-03T14:20:36.392757",
+    "records_synced": 19461,
+    "updated_at": "2025-10-03T14:20:36.492971"
+  },
+  "logs": {
+    "last_sync_time": "2025-10-03T14:20:38.006008",
+    "records_synced": 0,
+    "updated_at": "2025-10-03T14:20:38.095536"
+  }
+}
