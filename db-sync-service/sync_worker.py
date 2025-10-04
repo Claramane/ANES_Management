@@ -47,6 +47,13 @@ SENSITIVE_FIELDS = {
     # 'webauthn_credentials': ['credential_id', 'public_key']  # 暫時註解，因為這些欄位是 NOT NULL
 }
 
+# 表格衝突鍵配置（針對有唯一索引的表格）
+# 某些表格有業務唯一鍵（如 date），應優先使用而非主鍵 (id)
+TABLE_CONFLICT_KEYS = {
+    'doctor_schedules': 'date',  # 使用 date 唯一索引而非 id 主鍵
+    # 未來如有其他表格需要特殊處理，在此新增
+}
+
 
 # ============================================================================
 # 同步狀態管理
@@ -306,10 +313,15 @@ class SyncWorker:
 
         values_clause = ', '.join(placeholders_list)
 
+        # 決定使用哪個鍵進行衝突檢測
+        # 優先使用表格特定的衝突鍵（如業務唯一鍵），否則使用主鍵
+        conflict_key = TABLE_CONFLICT_KEYS.get(table, primary_key)
+
         # 構建 ON CONFLICT UPDATE 子句
+        # 更新時排除衝突鍵本身（無論是主鍵還是業務鍵）
         update_clause = ', '.join([
             f"{col} = EXCLUDED.{col}"
-            for col in columns if col != primary_key
+            for col in columns if col != conflict_key
         ])
 
         # 構建完整 SQL
@@ -317,14 +329,14 @@ class SyncWorker:
             query = f"""
                 INSERT INTO {table} ({column_names})
                 VALUES {values_clause}
-                ON CONFLICT ({primary_key})
+                ON CONFLICT ({conflict_key})
                 DO UPDATE SET {update_clause}
             """
         else:
             query = f"""
                 INSERT INTO {table} ({column_names})
                 VALUES {values_clause}
-                ON CONFLICT ({primary_key}) DO NOTHING
+                ON CONFLICT ({conflict_key}) DO NOTHING
             """
 
         # 執行 UPSERT
