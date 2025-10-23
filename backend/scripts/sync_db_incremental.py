@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """
 PostgreSQL 增量資料同步腳本 (備案方案)
 
@@ -31,19 +32,40 @@ PostgreSQL 增量資料同步腳本 (備案方案)
 import sys
 import os
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 # 添加 backend 到 Python 路徑
 backend_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(backend_dir))
 
 import asyncio
-import asyncpg
 import json
 import argparse
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Tuple
 from sqlalchemy import create_engine, text, MetaData, Table
 from sqlalchemy.orm import sessionmaker
+
+try:
+    import asyncpg  # type: ignore
+except ModuleNotFoundError as exc:  # pragma: no cover - optional dependency
+    asyncpg = None  # type: ignore
+    _ASYNC_PG_IMPORT_ERROR = exc
+else:
+    _ASYNC_PG_IMPORT_ERROR = None
+
+if TYPE_CHECKING:  # pragma: no cover - typing aid
+    import asyncpg as _asyncpg_typing  # noqa: F401
+
+
+def _require_asyncpg():
+    """Ensure asyncpg is available before running sync logic."""
+    if asyncpg is None:
+        raise ModuleNotFoundError(
+            "asyncpg is required to run the incremental sync script. "
+            "Install it manually with `pip install asyncpg`."
+        ) from _ASYNC_PG_IMPORT_ERROR
+    return asyncpg
 
 
 # ============================================================================
@@ -289,8 +311,9 @@ class IncrementalSync:
         """同步單一表格"""
 
         # 連接資料庫
-        source_conn = await asyncpg.connect(self.source_url)
-        target_conn = await asyncpg.connect(self.target_url)
+        asyncpg_module = _require_asyncpg()
+        source_conn = await asyncpg_module.connect(self.source_url)
+        target_conn = await asyncpg_module.connect(self.target_url)
 
         try:
             # 取得最後同步時間
@@ -405,6 +428,13 @@ async def main():
     )
 
     args = parser.parse_args()
+
+    try:
+        _require_asyncpg()
+    except ModuleNotFoundError as exc:
+        print(f"❌ 無法載入 asyncpg: {exc}")
+        print("   ➡️  請執行 `pip install asyncpg` 後再重試。")
+        return
 
     # 載入配置
     connector = DatabaseConnector(args.config)
