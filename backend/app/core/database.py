@@ -9,8 +9,12 @@ database_url = settings.DATABASE_URL
 if database_url.startswith("postgresql://"):
     database_url = database_url.replace("postgresql://", "postgresql+psycopg://", 1)
 
+# 連線到 PgBouncer（交易模式）時，server‑side prepared statements 會在連線被重用時失效，
+# 因此關閉 prepared statements 並預先檢測連線健康度。
 engine = create_engine(
-    database_url
+    database_url,
+    connect_args={"prepare_threshold": 0},  # 關閉 server-side prepared statements
+    pool_pre_ping=True,
 )
 
 # 創建SessionLocal類
