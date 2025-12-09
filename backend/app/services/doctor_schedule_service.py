@@ -297,7 +297,7 @@ class DoctorScheduleService:
                 
                 if first_letter in cls.FUZZY_AREA_MAPPING:
                     area_code = cls.FUZZY_AREA_MAPPING[first_letter]
-                    logger.info(f"模糊匹配: {summary} -> {first_letter} -> {area_code}")
+                    logger.debug(f"模糊匹配: {summary} -> {first_letter} -> {area_code}")
                     return name, area_code
                 
                 # 如果都匹配不到，返回原始區域字串
@@ -347,7 +347,7 @@ class DoctorScheduleService:
                 status='on_duty'
             )
             db.add(new_doctor)
-            logger.info(f"已自動新增范守仁醫師到班表ID {schedule_id} 的手術室")
+            logger.debug(f"已自動新增范守仁醫師到班表ID {schedule_id} 的手術室")
             
         except Exception as e:
             logger.error(f"新增范守仁醫師到手術室失敗: {e}")
