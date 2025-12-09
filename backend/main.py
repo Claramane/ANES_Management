@@ -29,13 +29,16 @@ try:
 except:
     pass
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
+)
 logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 啟動時執行
-    print("🚀 正在啟動醫師班表管理系統...")
+    logger.info("🚀 正在啟動醫師班表管理系統...")
     
     # 記錄時區資訊
     timezone_info = get_timezone_info()
@@ -46,7 +49,7 @@ async def lifespan(app: FastAPI):
     
     # 初始化資料庫表
     create_tables()
-    print("✅ 資料庫表已初始化")
+    logger.info("✅ 資料庫表已初始化")
     
     # 測試資料庫連接和創建表
     try:
@@ -77,7 +80,7 @@ async def lifespan(app: FastAPI):
     yield
     
     # 關閉時執行
-    print("🛑 正在關閉醫師班表管理系統...")
+    logger.info("🛑 正在關閉醫師班表管理系統...")
     
     # 停止醫師班表定時任務
     try:
@@ -86,7 +89,7 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"停止定時任務時發生錯誤: {str(e)}")
     
-    print("✅ 系統已安全關閉")
+    logger.info("✅ 系統已安全關閉")
 
 app = FastAPI(
     title=settings.APP_NAME,
