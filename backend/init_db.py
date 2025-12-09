@@ -9,7 +9,10 @@ from app.core.database import SessionLocal, create_tables
 from migrations.initial_data import init_announcement_categories
 
 # 設置logger
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
+)
 logger = logging.getLogger(__name__)
 
 def init_db():

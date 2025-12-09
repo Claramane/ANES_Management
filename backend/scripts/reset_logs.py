@@ -10,7 +10,10 @@ import os
 import logging
 
 # 設置logger
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
+)
 logger = logging.getLogger(__name__)
 
 # 將項目根目錄添加到路徑，確保可以導入應用模塊

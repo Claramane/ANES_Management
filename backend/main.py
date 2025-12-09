@@ -33,6 +33,10 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
 )
+# 降低第三方套件噪音
+logging.getLogger("apscheduler").setLevel(logging.INFO)
+logging.getLogger("uvicorn.error").setLevel(logging.INFO)
+logging.getLogger("uvicorn.access").setLevel(logging.INFO)
 logger = logging.getLogger(__name__)
 
 @asynccontextmanager
