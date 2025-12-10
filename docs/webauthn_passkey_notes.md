@@ -25,7 +25,7 @@
 - **管理**：`getPasskeys`、`deletePasskey` 對應列表/刪除 API。
 
 ## 風險與缺口
-- **憑證範圍**：已支援 username 過濾；舊客戶端未帶 username 時仍會回傳全部 active 憑證，需落日或改為必填/發現式憑證。
+- **憑證範圍**：已強制 username，僅回傳該用戶憑證；舊客戶端需升級後才能使用。
 - **重複註冊防護**：已在 register_start 填入 `excludeCredentials`，但仍可考慮後端以 AAGUID/指紋判斷同一 authenticator 重註並給出提示。
 - **指紋穩定性有限**：UA 變動（瀏覽器更新 / 同機不同瀏覽器）會產生新指紋；跨瀏覽器視為不同設備。
 - **Session 依賴**：備援讓前端帶回 challenge，雖仍驗證簽名，但建議減少對前端挑戰的依賴。
@@ -40,7 +40,7 @@
 - [ ] 強制生產安全配置檢查：開機自檢若 `IS_PRODUCTION` 且未啟用 `HTTPS_ONLY`、RP/Origin 不吻合則阻擋啟動並記錄告警。
 - [ ] 速率限制與審計：對 `/authenticate/*`、`/register/*` 增加速率限制；註冊/刪除 passkey 追加安全事件日誌。
 - [ ] 前端 UX：在登入頁顯示「此裝置未註冊 Passkey」等更精確錯誤；管理頁加入裝置指紋/瀏覽器資訊提示。
-- [ ] 落日全庫 allowCredentials：強制前端傳 username 或改採 discoverable credentials（空 allowCredentials），逐步移除全庫列表模式。
+- [x] 落日全庫 allowCredentials：強制前端傳 username，移除回傳全庫模式。
 
 ## 參考檔案
 - 後端：`backend/app/routes/webauthn.py`、`backend/app/models/webauthn.py`、`backend/app/core/config.py`、`backend/main.py`

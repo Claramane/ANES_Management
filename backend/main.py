@@ -5,6 +5,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 import logging
+import time
+from collections import defaultdict, deque
 import uvicorn
 from starlette.middleware.sessions import SessionMiddleware
 from sqlalchemy import text
@@ -29,6 +31,7 @@ try:
 except:
     pass
 
+# 降低第三方套件噪音
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
@@ -38,6 +41,36 @@ logging.getLogger("apscheduler").setLevel(logging.INFO)
 logging.getLogger("uvicorn.error").setLevel(logging.INFO)
 logging.getLogger("uvicorn.access").setLevel(logging.INFO)
 logger = logging.getLogger(__name__)
+
+# 簡易速率限制：key=(ip,path)，default 10 req / 60s
+RATE_LIMIT_RULES = {
+    "/api/webauthn/authenticate/start": (10, 60),
+    "/api/webauthn/register/start": (10, 60),
+    "/api/webauthn/register/finish": (20, 60),
+    "/api/webauthn/authenticate/finish": (20, 60),
+}
+_rate_buckets = defaultdict(deque)
+
+def rate_limited(request):
+    path = request.url.path
+    rule = None
+    for target, config in RATE_LIMIT_RULES.items():
+        if path.startswith(target):
+            rule = config
+            break
+    if not rule:
+        return False
+
+    limit, window = rule
+    now = time.time()
+    key = (request.client.host if request.client else "unknown", path)
+    bucket = _rate_buckets[key]
+
+    # 清理過期
+    while bucket and now - bucket[0] > window:
+        bucket.popleft()
+    bucket.append(now)
+    return len(bucket) > limit
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -158,7 +191,12 @@ for router in routers:
 # 添加調試中間件（僅在生產環境用於調試）
 @app.middleware("http")
 async def debug_requests(request, call_next):
-    # 只記錄問題路徑的請求
+    # 簡易 rate limit
+    if rate_limited(request):
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=429, content={"detail": "Too many requests"})
+
+    # 只記錄特定調試路徑
     if "/doctor-schedules/doctor/" in str(request.url) and "/set-status" in str(request.url):
         logger.info(f"收到請求: {request.method} {request.url}")
         logger.info(f"請求頭: {dict(request.headers)}")
