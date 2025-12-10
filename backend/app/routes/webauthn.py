@@ -1,5 +1,5 @@
 import logging
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Body
 from sqlalchemy.orm import Session
 from webauthn import (
     generate_authentication_options,
@@ -92,13 +92,27 @@ async def register_start(
                 current_user.id,
                 request.headers.get('user-agent', 'Unknown'),
                 request.headers.get('origin', 'Unknown'))
-    
+
+    # 為目前使用者填入 excludeCredentials，避免同一 authenticator 重複註冊
+    existing_credentials = db.query(WebAuthnCredential).filter(
+        WebAuthnCredential.user_id == current_user.id,
+        WebAuthnCredential.is_active == True
+    ).all()
+    exclude_descriptors = [
+        PublicKeyCredentialDescriptor(
+            id=safe_base64url_to_bytes(cred.credential_id),
+            type="public-key"
+        )
+        for cred in existing_credentials
+    ]
+
     options = generate_registration_options(
         rp_id=RP_ID,
         rp_name=RP_NAME,
         user_id=str(current_user.id).encode(),
         user_name=current_user.username,
         user_display_name=current_user.full_name,
+        exclude_credentials=exclude_descriptors
     )
     challenge_b64 = bytes_to_base64url(options.challenge)
     request.session["webauthn_challenge"] = challenge_b64
@@ -121,7 +135,12 @@ async def register_start(
                 {"type": "public-key", "alg": -257},
             ],
             "timeout": 60000,
-            "excludeCredentials": [],
+            "excludeCredentials": [
+                {
+                    "type": "public-key",
+                    "id": cred.credential_id
+                } for cred in existing_credentials
+            ],
             "authenticatorSelection": {
                 "authenticatorAttachment": "platform",
                 "userVerification": "preferred",
@@ -285,14 +304,31 @@ async def register_finish(
 @router.post("/authenticate/start")
 async def authenticate_start(
     request: Request,
+    payload: Optional[dict] = Body(default=None),
     db: Session = Depends(get_db)
 ):
     """開始WebAuthn認證流程"""
-    # 獲取所有有效的credential
-    credentials = db.query(WebAuthnCredential).filter(
-        WebAuthnCredential.is_active == True
-    ).all()
+    username = None
+    if payload and isinstance(payload, dict):
+        username = payload.get("username")
+
+    # 若提供 username，僅回傳該用戶的 passkey；否則回傳全部 active 憑證（兼容舊客戶端）
+    if username:
+        user = db.query(User).filter(User.username == username).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        credentials = db.query(WebAuthnCredential).filter(
+            WebAuthnCredential.user_id == user.id,
+            WebAuthnCredential.is_active == True
+        ).all()
+    else:
+        credentials = db.query(WebAuthnCredential).filter(
+            WebAuthnCredential.is_active == True
+        ).all()
     
+    if not credentials:
+        raise HTTPException(status_code=400, detail="No passkeys available for this user")
+
     # 生成認證選項
     options = generate_authentication_options(
         rp_id=RP_ID,

@@ -20,25 +20,27 @@
 
 ## 前端要點
 - **登入**：`Login.jsx` 觸發 `navigator.credentials.get()`，成功後呼叫 `/webauthn/authenticate/finish`，並以 `setAuth()` 直接寫入 token/user。
+- **登入前必填 username**：Passkey 按鈕前要求輸入用戶名，start API 會帶 username，伺服器僅回傳該用戶憑證，避免全庫列表。
 - **註冊**：`authStore.registerPasskey()` 先 `/webauthn/register/start`，將 challenge/user_id 暫存於 payload，以防 session 遺失，再 `/webauthn/register/finish`。
 - **管理**：`getPasskeys`、`deletePasskey` 對應列表/刪除 API。
 
 ## 風險與缺口
-- **憑證範圍過廣**：`authenticate/start` 回傳所有人的憑證，可能增加 payload 並讓非該用戶的憑證出現在瀏覽器選單。
-- **重複註冊防護不足**：`excludeCredentials` 未填入既有憑證，同一 authenticator 可重複為同帳號註冊多筆（雖 credential_id 唯一但仍可多筆記錄）。
+- **憑證範圍**：已支援 username 過濾；舊客戶端未帶 username 時仍會回傳全部 active 憑證，需落日或改為必填/發現式憑證。
+- **重複註冊防護**：已在 register_start 填入 `excludeCredentials`，但仍可考慮後端以 AAGUID/指紋判斷同一 authenticator 重註並給出提示。
 - **指紋穩定性有限**：UA 變動（瀏覽器更新 / 同機不同瀏覽器）會產生新指紋；跨瀏覽器視為不同設備。
 - **Session 依賴**：備援讓前端帶回 challenge，雖仍驗證簽名，但建議減少對前端挑戰的依賴。
 - **環境設定風險**：若生產未設置正確 `WEBAUTHN_RP_ID` / `WEBAUTHN_EXPECTED_ORIGIN` / `HTTPS_ONLY=true`，WebAuthn 將驗證失敗。
 - **缺乏率限與審計**：認證端點未實作速率限制；註冊/刪除缺少安全事件審計。
 
 ## 改進建議（TODO）
-- [ ] 認證 start 依使用者過濾：接受 `username` 或從 session 取得使用者，僅回傳該用戶 `allowCredentials`，或採用 discoverable credentials（空 `allowCredentials`）。
- - [ ] 註冊 start 填充 `excludeCredentials`：列出該用戶現有 credential_id，避免重複註冊同一 authenticator。
+- [x] 認證 start 依使用者過濾：接受 `username`，僅回傳該用戶 `allowCredentials`；舊客戶端需遷移或落日。
+- [x] 註冊 start 填充 `excludeCredentials`：列出該用戶現有 credential_id，避免重複註冊同一 authenticator。
 - [ ] 提升挑戰一致性：於後端暫存 challenge（例如 Redis / DB keyed by session id 或 nonce），在 finish 僅接受後端簽發的挑戰。
 - [ ] 強化設備指紋：考慮加入更穩定訊號（如 client extensions、平台 AAGUID + RP ID），或改用 per-device cookie/LocalStorage 綁定以減少 UA 變動影響。
 - [ ] 強制生產安全配置檢查：開機自檢若 `IS_PRODUCTION` 且未啟用 `HTTPS_ONLY`、RP/Origin 不吻合則阻擋啟動並記錄告警。
 - [ ] 速率限制與審計：對 `/authenticate/*`、`/register/*` 增加速率限制；註冊/刪除 passkey 追加安全事件日誌。
 - [ ] 前端 UX：在登入頁顯示「此裝置未註冊 Passkey」等更精確錯誤；管理頁加入裝置指紋/瀏覽器資訊提示。
+- [ ] 落日全庫 allowCredentials：強制前端傳 username 或改採 discoverable credentials（空 allowCredentials），逐步移除全庫列表模式。
 
 ## 參考檔案
 - 後端：`backend/app/routes/webauthn.py`、`backend/app/models/webauthn.py`、`backend/app/core/config.py`、`backend/main.py`

@@ -67,9 +67,14 @@ function Login() {
 
     try {
       console.log('開始Passkey登入流程...');
+      if (!username.trim()) {
+        throw new Error('請先輸入用戶名再使用 Passkey 登入');
+      }
       
       // 開始WebAuthn認證流程
-      const startResponse = await api.post('/webauthn/authenticate/start');
+      const startResponse = await api.post('/webauthn/authenticate/start', {
+        username: username.trim()
+      });
       console.log('收到認證選項:', startResponse.data);
       
       const options = startResponse.data.publicKey;
