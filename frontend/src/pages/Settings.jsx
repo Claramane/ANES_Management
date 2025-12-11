@@ -14,7 +14,6 @@ import {
   List,
   ListItem,
   ListItemText,
-  ListItemSecondaryAction,
   ListItemButton,
   Dialog,
   DialogTitle,
@@ -42,9 +41,8 @@ import apiService, { api } from '../utils/api';
 import { useAuthStore } from '../store/authStore';
 
 const Settings = () => {
-  const { settings, isLoading, error, fetchSettings } = useSettingsStore();
+  const { isLoading, error, fetchSettings } = useSettingsStore();
   const { user, getPasskeys, deletePasskey, registerPasskey, setAuth } = useAuthStore();
-  const [success, setSuccess] = useState(false);
   
   // 密碼修改狀態
   const [passwordForm, setPasswordForm] = useState({
@@ -107,7 +105,7 @@ const Settings = () => {
   // 加載Passkey列表
   useEffect(() => {
     loadPasskeys();
-  }, []);
+  }, [loadPasskeys]);
 
   // 若從 LINE callback 返回帶參數，提示綁定
   useEffect(() => {
@@ -118,14 +116,14 @@ const Settings = () => {
     }
   }, []);
 
-  const loadPasskeys = async () => {
+  const loadPasskeys = React.useCallback(async () => {
     try {
       const data = await getPasskeys();
       setPasskeys(data);
     } catch (error) {
       setPasskeyError('獲取Passkey列表失敗');
     }
-  };
+  }, [getPasskeys]);
 
   const handlePasskeyRegister = async () => {
     setIsRegistering(true);
