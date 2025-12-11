@@ -126,23 +126,18 @@ async def line_login_callback(request: Request, code: str, state: str, db: Sessi
 @router.post("/bind")
 async def line_bind(
     request: Request,
-    employee_id: str = Body(...),
-    password: str = Body(...),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
-    將 pending 的 LINE user 綁定到指定員工帳號（需密碼驗證）。
+    將 pending 的 LINE user 綁定到目前登入帳號（無需再輸入員工編號/密碼）。
     """
     line_user_id = pop_temp(request, "pending_line_user_id", ttl=600)
     if not line_user_id:
         raise HTTPException(status_code=400, detail="No pending LINE binding")
 
-    user = db.query(User).filter(User.username == employee_id, User.is_active == True).first()
-    if not user or not user.hashed_password or not verify_password(password, user.hashed_password):
-        raise HTTPException(status_code=400, detail="員工編號或密碼錯誤")
-
     # 檢查是否已綁定其他 LINE
-    existing = db.query(LineAccount).filter(LineAccount.user_id == user.id).first()
+    existing = db.query(LineAccount).filter(LineAccount.user_id == current_user.id).first()
     if existing:
         raise HTTPException(status_code=400, detail="此帳號已綁定 LINE")
 
@@ -152,7 +147,7 @@ async def line_bind(
         raise HTTPException(status_code=400, detail="此 LINE 已綁定其他帳號")
 
     account = LineAccount(
-        user_id=user.id,
+        user_id=current_user.id,
         line_user_id=line_user_id,
         display_name=pop_temp(request, "pending_line_display_name", ttl=600),
         picture_url=pop_temp(request, "pending_line_picture_url", ttl=600),
@@ -160,7 +155,7 @@ async def line_bind(
     )
     db.add(account)
     db.commit()
-    jwt_token = issue_jwt(user)
+    jwt_token = issue_jwt(current_user)
     return {"status": "success", "message": "LINE 綁定完成", "token": jwt_token}
 
 
