@@ -21,7 +21,8 @@ import {
   DialogActions,
   DialogContentText,
   Collapse,
-  Chip
+  Chip,
+  Avatar
 } from '@mui/material';
 import LockIcon from '@mui/icons-material/Lock';
 import Visibility from '@mui/icons-material/Visibility';

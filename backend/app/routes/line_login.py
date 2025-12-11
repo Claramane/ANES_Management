@@ -17,7 +17,7 @@ from app.core.security import create_access_token
 from app.models.line_account import LineAccount
 from app.models.user import User
 from app.schemas.line import LineLoginStartResponse
-from ..core.security import verify_password
+from ..core.security import verify_password, get_current_user
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth/line", tags=["LINE Login"])
@@ -240,3 +240,32 @@ def issue_jwt(user: User) -> str:
     from datetime import timedelta
     expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     return create_access_token(data={"sub": user.username}, expires_delta=expires)
+
+
+@router.get("/status")
+async def line_status(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    account = db.query(LineAccount).filter(LineAccount.user_id == current_user.id).first()
+    if not account:
+        return {"bound": False}
+    return {
+        "bound": True,
+        "line_user_id": account.line_user_id,
+        "display_name": account.display_name,
+        "picture_url": account.picture_url,
+    }
+
+
+@router.delete("/unbind")
+async def line_unbind(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    account = db.query(LineAccount).filter(LineAccount.user_id == current_user.id).first()
+    if not account:
+        raise HTTPException(status_code=404, detail="未綁定 LINE")
+    db.delete(account)
+    db.commit()
+    return {"status": "success", "message": "LINE 已解除綁定"}
