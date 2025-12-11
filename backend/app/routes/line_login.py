@@ -126,8 +126,8 @@ async def line_login_callback(request: Request, code: str, state: str, db: Sessi
 @router.post("/bind")
 async def line_bind(
     request: Request,
-    employee_id: str,
-    password: str,
+    employee_id: str = Body(...),
+    password: str = Body(...),
     db: Session = Depends(get_db),
 ):
     """
