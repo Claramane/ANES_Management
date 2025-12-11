@@ -31,3 +31,4 @@ class User(Base):
     formula_assignments = relationship("NurseFormulaAssignment", back_populates="user")
     pattern_assignments = relationship("PatternNurseAssignment", back_populates="user")
     webauthn_credentials = relationship("WebAuthnCredential", back_populates="user") 
+    line_account = relationship("LineAccount", back_populates="user", uselist=False)

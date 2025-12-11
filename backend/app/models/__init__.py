@@ -7,3 +7,4 @@ from .overtime import OvertimeRecord
 from .doctor_schedule import DoctorSchedule, DayShiftDoctor, DoctorScheduleUpdateLog
 from .formula import FormulaSchedule, FormulaSchedulePattern, NurseFormulaAssignment, PatternNurseAssignment
 from .webauthn import WebAuthnCredential 
+from .line_account import LineAccount 
