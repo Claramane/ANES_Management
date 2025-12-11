@@ -37,17 +37,21 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
 )
+_FMT = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s - %(message)s")
+
+def normalize_logging_format():
+    """強制所有現有 handler 使用統一格式（含 uvicorn/apscheduler）。"""
+    for logger_name in list(logging.root.manager.loggerDict.keys()) + [""]:
+        lg = logging.getLogger(logger_name)
+        for h in lg.handlers:
+            h.setFormatter(_FMT)
+
+normalize_logging_format()
+
 # 降低第三方套件噪音
 logging.getLogger("apscheduler").setLevel(logging.INFO)
 logging.getLogger("uvicorn.error").setLevel(logging.INFO)
 logging.getLogger("uvicorn.access").setLevel(logging.INFO)
-
-# 將 uvicorn handler 也改用同一格式，避免 access log 與應用 log 格式不一致
-_fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s - %(message)s")
-for _logger_name in ("uvicorn.access", "uvicorn.error"):
-    _lg = logging.getLogger(_logger_name)
-    for _handler in _lg.handlers:
-        _handler.setFormatter(_fmt)
 
 logger = logging.getLogger(__name__)
 
