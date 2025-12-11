@@ -43,7 +43,7 @@ import { useAuthStore } from '../store/authStore';
 
 const Settings = () => {
   const { settings, isLoading, error, fetchSettings } = useSettingsStore();
-  const { user, getPasskeys, deletePasskey, registerPasskey } = useAuthStore();
+  const { user, getPasskeys, deletePasskey, registerPasskey, setAuth } = useAuthStore();
   const [success, setSuccess] = useState(false);
   
   // 密碼修改狀態
@@ -78,6 +78,9 @@ const Settings = () => {
   const [expandedPasskey, setExpandedPasskey] = useState(null);
   const [lineLoading, setLineLoading] = useState(false);
   const [lineMessage, setLineMessage] = useState('');
+  const [lineBindDialogOpen, setLineBindDialogOpen] = useState(false);
+  const [lineBindForm, setLineBindForm] = useState({ employeeId: '', password: '' });
+  const [lineBindError, setLineBindError] = useState('');
 
   // 加載設定
   useEffect(() => {
@@ -104,6 +107,15 @@ const Settings = () => {
   // 加載Passkey列表
   useEffect(() => {
     loadPasskeys();
+  }, []);
+
+  // 若從 LINE callback 返回帶參數，提示綁定
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('line_status') === 'need_binding') {
+      setLineMessage('LINE 授權成功，請輸入員工編號與密碼完成綁定');
+      setLineBindDialogOpen(true);
+    }
   }, []);
 
   const loadPasskeys = async () => {
@@ -183,6 +195,25 @@ const Settings = () => {
       setLineMessage(err.response?.data?.detail || err.message || 'LINE 綁定啟動失敗');
     } finally {
       setLineLoading(false);
+    }
+  };
+
+  const handleLineBindSubmit = async () => {
+    setLineBindError('');
+    try {
+      const resp = await api.post('/auth/line/bind', {
+        employee_id: lineBindForm.employeeId,
+        password: lineBindForm.password,
+      });
+      if (resp.data?.token && resp.data?.message) {
+        setLineMessage(resp.data.message);
+        // 綁定成功後直接登入
+        const userResp = await api.get('/users/me');
+        setAuth(resp.data.token, userResp.data);
+        setLineBindDialogOpen(false);
+      }
+    } catch (err) {
+      setLineBindError(err.response?.data?.detail || err.message || '綁定失敗');
     }
   };
 
@@ -438,6 +469,36 @@ const Settings = () => {
           {lineLoading ? <CircularProgress size={24} /> : '開始綁定 LINE'}
         </Button>
       </Paper>
+
+      {/* LINE 綁定對話框 */}
+      <Dialog open={lineBindDialogOpen} onClose={() => setLineBindDialogOpen(false)}>
+        <DialogTitle>完成 LINE 綁定</DialogTitle>
+        <DialogContent>
+          {lineBindError && <Alert severity="error" sx={{ mb: 2 }}>{lineBindError}</Alert>}
+          <TextField
+            margin="dense"
+            label="員工編號"
+            fullWidth
+            value={lineBindForm.employeeId}
+            onChange={(e) => setLineBindForm({ ...lineBindForm, employeeId: e.target.value })}
+          />
+          <TextField
+            margin="dense"
+            label="密碼"
+            type="password"
+            fullWidth
+            value={lineBindForm.password}
+            onChange={(e) => setLineBindForm({ ...lineBindForm, password: e.target.value })}
+          />
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            請輸入員工編號與密碼確認身分，完成綁定。
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setLineBindDialogOpen(false)}>取消</Button>
+          <Button onClick={handleLineBindSubmit} variant="contained">確認綁定</Button>
+        </DialogActions>
+      </Dialog>
       
       {/* Passkey管理區塊 */}
       <Paper sx={{ padding: 3, marginBottom: 3, boxShadow: 'none', border: '1px solid #e0e0e0' }}>

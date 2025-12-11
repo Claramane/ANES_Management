@@ -77,6 +77,7 @@ class Settings(BaseSettings):
     LINE_STATE_TTL_SECONDS: int = 600
     LINE_NONCE_TTL_SECONDS: int = 600
     FRONTEND_REDIRECT_AFTER_LOGIN: str = "http://localhost:3000/dashboard"
+    FRONTEND_LINE_BIND_URL: str = "http://localhost:3000/settings"
 
     @field_validator("BACKEND_CORS_ORIGINS", mode="before")
     def assemble_cors_origins(cls, v: Union[str, List[str]], info) -> List[str]:

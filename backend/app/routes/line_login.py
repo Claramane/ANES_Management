@@ -118,16 +118,9 @@ async def line_login_callback(request: Request, code: str, state: str, db: Sessi
     store_temp(request, "pending_line_display_name", display_name or "")
     store_temp(request, "pending_line_picture_url", picture_url or "")
 
-    return JSONResponse(
-        status_code=200,
-        content={
-            "status": "need_binding",
-            "line_user_id": line_user_id,
-            "display_name": display_name,
-            "picture_url": picture_url,
-            "message": "LINE 帳號尚未綁定，請輸入員工編號與密碼完成綁定。"
-        }
-    )
+    # 導向前端設定頁提示綁定
+    target = redirect_override or settings.FRONTEND_LINE_BIND_URL or settings.FRONTEND_REDIRECT_AFTER_LOGIN
+    return RedirectResponse(f"{target}?line_status=need_binding")
 
 
 @router.post("/bind")
