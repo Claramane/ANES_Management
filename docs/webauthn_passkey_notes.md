@@ -15,8 +15,8 @@
 4. **入庫**：將 credential_id / public_key 轉 base64url，保存 sign_count、device_name(user-agent)、device_fingerprint。
 
 ## 認證流程（/webauthn/authenticate）
-1. **start**：需 username，僅回傳該用戶 `allowCredentials`，並附 `challenge_token`（簽名+TTL）。
-2. **finish**：解析 clientDataJSON 取 challenge，驗證 `challenge_token` 與 user/id 一致且未過期後才 `verify_authentication_response`；更新 sign_count、last_used_at，寫登入 Log，更新使用者 last_login_time/IP，發 JWT。
+1. **start**：若提供 username 則僅回傳該用戶 `allowCredentials`；未填則回傳全部 active 憑證（兼容舊流程）。回傳 `challenge_token`（簽名+TTL）。
+2. **finish**：解析 clientDataJSON 取 challenge，若有 `challenge_token` 則驗證簽名/時效；更新 sign_count、last_used_at，寫登入 Log，更新使用者 last_login_time/IP，發 JWT。
 
 ## 前端要點
 - **登入**：`Login.jsx` 觸發 `navigator.credentials.get()`，成功後呼叫 `/webauthn/authenticate/finish`，並以 `setAuth()` 直接寫入 token/user。
@@ -25,7 +25,7 @@
 - **管理**：`getPasskeys`、`deletePasskey` 對應列表/刪除 API。
 
 ## 風險與缺口
-- **憑證範圍**：已強制 username，僅回傳該用戶憑證；舊客戶端需升級後才能使用。
+- **憑證範圍**：未填 username 時仍回傳全部 active 憑證，方便登入但存在列舉風險；若要加強可改為 discoverable credentials 或強制 username。
 - **重複註冊防護**：已在 register_start 填入 `excludeCredentials`，但仍可考慮後端以 AAGUID/指紋判斷同一 authenticator 重註並給出提示。
 - **指紋穩定性**：已加入 client hints/Origin/RPID，但跨瀏覽器仍視為不同設備；可再加入 AAGUID 或 per-device cookie。
 - **Session 依賴**：已引入 `challenge_token`，減少對 session 失效時信任前端 challenge 的風險；仍可改為後端暫存(如 Redis)以完全移除前端參與。
@@ -33,7 +33,7 @@
 - **缺乏率限與審計**：認證端點未實作速率限制；註冊/刪除缺少安全事件審計。
 
 ## 改進建議（TODO）
-- [x] 認證 start 依使用者過濾：接受 `username`，僅回傳該用戶 `allowCredentials`；舊客戶端需遷移或落日。
+- [ ] 認證 start 依使用者過濾：接受 `username`，僅回傳該用戶 `allowCredentials`；舊客戶端需遷移或落日（目前仍允許無 username 回傳全庫）。
 - [x] 註冊 start 填充 `excludeCredentials`：列出該用戶現有 credential_id，避免重複註冊同一 authenticator。
 - [x] 提升挑戰一致性：引入 `challenge_token`（HMAC + user + purpose + TTL），finish 必須驗證 token。
 - [x] 強化設備指紋：新增 `sec-ch-ua`、`sec-ch-ua-platform`、RP/Origin 參與雜湊，弱化 UA 版本變動。

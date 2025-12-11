@@ -88,7 +88,7 @@ def generate_device_fingerprint(user_agent: str, client_data_json: str = None, h
     # 生成SHA256哈希作為設備指紋
     return hashlib.sha256(device_signature.encode()).hexdigest()
 
-def generate_challenge_token(challenge_b64: str, user_id: int, purpose: str) -> str:
+def generate_challenge_token(challenge_b64: str, user_id: Optional[int], purpose: str) -> str:
     ts = int(time.time())
     payload = f"{challenge_b64}|{user_id}|{purpose}|{ts}"
     mac = hmac.new(settings.SECRET_KEY.encode(), payload.encode(), hashlib.sha256).digest()
@@ -101,7 +101,7 @@ def generate_challenge_token(challenge_b64: str, user_id: int, purpose: str) -> 
     }).encode()
     return bytes_to_base64url(token_bytes)
 
-def verify_challenge_token(token: str, expected_user_id: int, purpose: str, ttl: int = CHALLENGE_TOKEN_TTL) -> str:
+def verify_challenge_token(token: str, expected_user_id: Optional[int], purpose: str, ttl: int = CHALLENGE_TOKEN_TTL) -> str:
     try:
         data = json.loads(base64url_to_bytes(token))
         challenge_b64 = data.get("c")
@@ -109,8 +109,10 @@ def verify_challenge_token(token: str, expected_user_id: int, purpose: str, ttl:
         token_purpose = data.get("p")
         ts = data.get("t")
         mac_b64 = data.get("m")
-        if token_purpose != purpose or user_id != expected_user_id:
-            raise ValueError("purpose or user mismatch")
+        if token_purpose != purpose:
+            raise ValueError("purpose mismatch")
+        if expected_user_id is not None and user_id != expected_user_id:
+            raise ValueError("user mismatch")
         if ts is None or int(time.time()) - int(ts) > ttl:
             raise ValueError("token expired")
         payload = f"{challenge_b64}|{user_id}|{token_purpose}|{ts}"
@@ -323,26 +325,31 @@ async def authenticate_start(
     payload: Optional[dict] = Body(default=None),
     db: Session = Depends(get_db)
 ):
-    """開始WebAuthn認證流程（需指定 username）"""
+    """開始WebAuthn認證流程（可選 username，提供則僅列該用戶憑證）"""
     username = None
     if payload and isinstance(payload, dict):
         username = payload.get("username")
 
-    if not username:
-        raise HTTPException(status_code=400, detail="Username is required for passkey authentication")
-
-    user = db.query(User).filter(User.username == username).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    credentials = db.query(WebAuthnCredential).filter(
-        WebAuthnCredential.user_id == user.id,
-        WebAuthnCredential.is_active == True
-    ).all()
+    user = None
+    credentials = []
+    if username:
+        user = db.query(User).filter(User.username == username).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        credentials = db.query(WebAuthnCredential).filter(
+            WebAuthnCredential.user_id == user.id,
+            WebAuthnCredential.is_active == True
+        ).all()
+        if not credentials:
+            raise HTTPException(status_code=400, detail="No passkeys available for this user")
+    else:
+        # 兼容未填 username 的情境：提供所有 active 憑證（原行為）
+        credentials = db.query(WebAuthnCredential).filter(
+            WebAuthnCredential.is_active == True
+        ).all()
+        if not credentials:
+            raise HTTPException(status_code=400, detail="No passkeys available")
     
-    if not credentials:
-        raise HTTPException(status_code=400, detail="No passkeys available for this user")
-
     # 生成認證選項
     options = generate_authentication_options(
         rp_id=RP_ID,
@@ -368,7 +375,11 @@ async def authenticate_start(
             ],
             "userVerification": "preferred",
         },
-        "challenge_token": generate_challenge_token(bytes_to_base64url(options.challenge), user.id, "authenticate")
+        "challenge_token": generate_challenge_token(
+            bytes_to_base64url(options.challenge),
+            user.id if user else None,
+            "authenticate"
+        )
     }
 
 @router.post("/authenticate/finish")
