@@ -207,23 +207,34 @@ def verify_id_token(id_token: str, expected_nonce: Optional[str]) -> dict:
         header = jwt.get_unverified_header(id_token)
         kid = header.get("kid")
         alg = header.get("alg")
-        if alg != "RS256":
-            raise HTTPException(status_code=400, detail="Unsupported alg")
-        jwks = fetch_jwks()
-        key_dict = next((k for k in jwks if k.get("kid") == kid), None)
-        if not key_dict and jwks:
-            # 某些情況 kid 可能缺失，若只提供單一 key 則回退第一把
-            key_dict = jwks[0]
-        if not key_dict:
-            raise HTTPException(status_code=400, detail="No matching JWK")
+        logger.debug("LINE id_token header: %s", header)
 
-        claims = jwt.decode(
-            id_token,
-            key_dict,
-            algorithms=["RS256"],
-            audience=settings.LINE_CHANNEL_ID,
-            issuer="https://access.line.me",
-        )
+        if alg == "RS256":
+            jwks = fetch_jwks()
+            key_dict = next((k for k in jwks if k.get("kid") == kid), None)
+            if not key_dict and jwks:
+                key_dict = jwks[0]
+            if not key_dict:
+                raise HTTPException(status_code=400, detail="No matching JWK")
+            claims = jwt.decode(
+                id_token,
+                key_dict,
+                algorithms=["RS256"],
+                audience=settings.LINE_CHANNEL_ID,
+                issuer="https://access.line.me",
+            )
+        elif alg == "HS256":
+            # 若 LINE 後台設定為 HS256，使用 channel secret 驗簽
+            claims = jwt.decode(
+                id_token,
+                settings.LINE_CHANNEL_SECRET,
+                algorithms=["HS256"],
+                audience=settings.LINE_CHANNEL_ID,
+                issuer="https://access.line.me",
+            )
+        else:
+            raise HTTPException(status_code=400, detail=f"Unsupported alg {alg}")
+
         if expected_nonce and claims.get("nonce") != expected_nonce:
             raise HTTPException(status_code=400, detail="Nonce mismatch")
         return claims
