@@ -4,6 +4,8 @@ import time
 from typing import Optional
 
 import httpx
+from jose import jwk
+from jose.utils import base64url_decode
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from jose import jwt
@@ -185,24 +187,47 @@ async def exchange_token(code: str) -> dict:
         return resp.json()
 
 
+_jwks_cache = {"keys": None, "ts": 0}
+
+
+def fetch_jwks():
+    now = time.time()
+    if _jwks_cache["keys"] and now - _jwks_cache["ts"] < 3600:
+        return _jwks_cache["keys"]
+    resp = httpx.get(settings.LINE_CERTS_URL, timeout=10)
+    resp.raise_for_status()
+    data = resp.json()
+    _jwks_cache["keys"] = data["keys"]
+    _jwks_cache["ts"] = now
+    return _jwks_cache["keys"]
+
+
 def verify_id_token(id_token: str, expected_nonce: Optional[str]) -> dict:
     try:
+        header = jwt.get_unverified_header(id_token)
+        kid = header.get("kid")
+        jwks = fetch_jwks()
+        key_dict = next((k for k in jwks if k.get("kid") == kid), None)
+        if not key_dict:
+            raise HTTPException(status_code=400, detail="No matching JWK")
+
+        # 驗簽
+        message, encoded_signature = id_token.rsplit(".", 1)
+        decoded_signature = base64url_decode(encoded_signature.encode())
+        public_key = jwk.construct(key_dict)
+        if not public_key.verify(message.encode(), decoded_signature):
+            raise HTTPException(status_code=400, detail="Invalid signature")
+
         claims = jwt.get_unverified_claims(id_token)
         if expected_nonce and claims.get("nonce") != expected_nonce:
             raise HTTPException(status_code=400, detail="Nonce mismatch")
         if claims.get("aud") != settings.LINE_CHANNEL_ID:
             raise HTTPException(status_code=400, detail="Audience mismatch")
-        # 簽章驗證：簡化使用 JWK 下載；生產建議快取 JWKS
-        jwks_client = jwt.PyJWKClient("https://api.line.me/oauth2/v2.1/certs")
-        signing_key = jwks_client.get_signing_key_from_jwt(id_token)
-        decoded = jwt.decode(
-            id_token,
-            signing_key.key,
-            algorithms=["RS256"],
-            audience=settings.LINE_CHANNEL_ID,
-            issuer="https://access.line.me"
-        )
-        return decoded
+        if claims.get("iss") != "https://access.line.me":
+            raise HTTPException(status_code=400, detail="Issuer mismatch")
+        return claims
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("LINE id_token verify failed")
         raise HTTPException(status_code=400, detail=f"Invalid id_token: {str(e)}")
