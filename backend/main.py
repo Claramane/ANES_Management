@@ -41,6 +41,14 @@ logging.basicConfig(
 logging.getLogger("apscheduler").setLevel(logging.INFO)
 logging.getLogger("uvicorn.error").setLevel(logging.INFO)
 logging.getLogger("uvicorn.access").setLevel(logging.INFO)
+
+# 將 uvicorn handler 也改用同一格式，避免 access log 與應用 log 格式不一致
+_fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s - %(message)s")
+for _logger_name in ("uvicorn.access", "uvicorn.error"):
+    _lg = logging.getLogger(_logger_name)
+    for _handler in _lg.handlers:
+        _handler.setFormatter(_fmt)
+
 logger = logging.getLogger(__name__)
 
 # 簡易速率限制：key=(ip,path)，default 10 req / 60s

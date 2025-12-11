@@ -162,7 +162,7 @@ class DoctorScheduleService:
             updated_count = 0
             meeting_cleared_count = 0
             
-            logger.info(f"開始檢查醫師自動狀態更新，當前時間: {current_time}")
+            logger.debug(f"開始檢查醫師自動狀態更新，當前時間: {current_time}")
             
             # 檢查每個醫師的狀態
             for doctor in today_schedule.day_shift_doctors:
@@ -231,9 +231,9 @@ class DoctorScheduleService:
             
             if updated_count > 0 or meeting_cleared_count > 0:
                 db.commit()
-                logger.info(f"自動狀態更新完成，已更新 {updated_count} 位醫師的狀態，清除 {meeting_cleared_count} 個過期開會行程")
+                logger.debug(f"自動狀態更新完成，已更新 {updated_count} 位醫師的狀態，清除 {meeting_cleared_count} 個過期開會行程")
             else:
-                logger.info("自動狀態更新完成，無需更新醫師狀態")
+                logger.debug("自動狀態更新完成，無需更新醫師狀態")
             
         except Exception as e:
             logger.error(f"自動更新醫師狀態失敗: {str(e)}")
