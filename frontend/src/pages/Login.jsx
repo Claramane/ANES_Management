@@ -341,10 +341,10 @@ function Login() {
 
               <Button
                 fullWidth
-                variant="text"
+                variant="contained"
                 onClick={handleLineLogin}
                 disabled={isLoading || isLineLoading}
-                sx={{ mt: 1.5, py: 1.2 }}
+                sx={{ mt: 1.5, py: 1.2, backgroundColor: '#06C755', ':hover': { backgroundColor: '#06b84f' } }}
               >
                 {isLineLoading ? <CircularProgress size={24} /> : '使用LINE登入'}
               </Button>
