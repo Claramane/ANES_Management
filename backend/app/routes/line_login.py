@@ -50,7 +50,11 @@ def pop_temp(request: Request, key: str, ttl: int = 600) -> Optional[str]:
 
 
 @router.get("/login", response_model=LineLoginStartResponse)
-async def line_login_start(request: Request, redirect: Optional[str] = None):
+async def line_login_start(
+    request: Request,
+    redirect: Optional[str] = None,
+    force_consent: bool = False
+):
     """
     產生 LINE 授權網址，前端可直接 redirect。
     """
@@ -68,8 +72,9 @@ async def line_login_start(request: Request, redirect: Optional[str] = None):
         "state": state,
         "scope": "profile openid",
         "nonce": nonce,
-        "prompt": "consent",
     }
+    if force_consent:
+        params["prompt"] = "consent"
     auth_url = settings.LINE_LOGIN_BASE_URL + "?" + "&".join(f"{k}={httpx.QueryParams({k: v})[k]}" for k, v in params.items())
     return LineLoginStartResponse(auth_url=auth_url, state=state)
 

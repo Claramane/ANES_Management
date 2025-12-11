@@ -200,7 +200,7 @@ const Settings = () => {
     setLineMessage('');
     try {
       const redirect = `${window.location.origin}/settings`;
-      const resp = await api.get('/auth/line/login', { params: { redirect } });
+      const resp = await api.get('/auth/line/login', { params: { redirect, force_consent: true } });
       if (resp.data?.auth_url) {
         window.location.href = resp.data.auth_url;
       } else {
