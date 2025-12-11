@@ -10,5 +10,6 @@ routers = [
     formula_schedules.router,
     shift_swap.router,
     webauthn.router,
-    doctor_schedule.router
+    doctor_schedule.router,
+    line_login.router
 ] 
