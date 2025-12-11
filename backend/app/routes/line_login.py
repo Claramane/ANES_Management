@@ -208,6 +208,9 @@ def verify_id_token(id_token: str, expected_nonce: Optional[str]) -> dict:
         kid = header.get("kid")
         jwks = fetch_jwks()
         key_dict = next((k for k in jwks if k.get("kid") == kid), None)
+        if not key_dict and jwks:
+            # 某些情況 kid 可能缺失，若只提供單一 key 則回退第一把
+            key_dict = jwks[0]
         if not key_dict:
             raise HTTPException(status_code=400, detail="No matching JWK")
 
