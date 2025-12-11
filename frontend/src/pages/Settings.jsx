@@ -211,7 +211,9 @@ const Settings = () => {
         setLineBindDialogOpen(false);
       }
     } catch (err) {
-      setLineBindError(err.response?.data?.detail || err.message || '綁定失敗');
+      const detail = err.response?.data?.detail;
+      const msg = typeof detail === 'object' ? JSON.stringify(detail) : detail;
+      setLineBindError(msg || err.message || '綁定失敗');
     }
   };
 
@@ -445,7 +447,7 @@ const Settings = () => {
 
         {lineMessage && (
           <Alert severity="info" sx={{ mb: 2 }}>
-            {lineMessage}
+            {typeof lineMessage === 'object' ? JSON.stringify(lineMessage) : lineMessage}
           </Alert>
         )}
 
@@ -466,7 +468,11 @@ const Settings = () => {
       <Dialog open={lineBindDialogOpen} onClose={() => setLineBindDialogOpen(false)}>
         <DialogTitle>完成 LINE 綁定</DialogTitle>
         <DialogContent>
-          {lineBindError && <Alert severity="error" sx={{ mb: 2 }}>{lineBindError}</Alert>}
+          {lineBindError && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {typeof lineBindError === 'object' ? JSON.stringify(lineBindError) : lineBindError}
+            </Alert>
+          )}
           <TextField
             margin="dense"
             label="員工編號"
