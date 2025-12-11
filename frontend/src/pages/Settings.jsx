@@ -102,11 +102,6 @@ const Settings = () => {
     }
   }, [user]);
 
-  // 加載Passkey列表
-  useEffect(() => {
-    loadPasskeys();
-  }, [loadPasskeys]);
-
   // 若從 LINE callback 返回帶參數，提示綁定
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -124,6 +119,11 @@ const Settings = () => {
       setPasskeyError('獲取Passkey列表失敗');
     }
   }, [getPasskeys]);
+
+  // 加載Passkey列表
+  useEffect(() => {
+    loadPasskeys();
+  }, [loadPasskeys]);
 
   const handlePasskeyRegister = async () => {
     setIsRegistering(true);
