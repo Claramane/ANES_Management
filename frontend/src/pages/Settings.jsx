@@ -38,7 +38,7 @@ import {
   AccessTime as AccessTimeIcon
 } from '@mui/icons-material';
 import { useSettingsStore } from '../store/settingsStore';
-import apiService from '../utils/api';
+import apiService, { api } from '../utils/api';
 import { useAuthStore } from '../store/authStore';
 
 const Settings = () => {
@@ -172,7 +172,7 @@ const Settings = () => {
     setLineMessage('');
     try {
       const redirect = `${window.location.origin}/settings`;
-      const resp = await apiService.get('/auth/line/login', { params: { redirect } });
+      const resp = await api.get('/auth/line/login', { params: { redirect } });
       if (resp.data?.auth_url) {
         window.location.href = resp.data.auth_url;
       } else {
