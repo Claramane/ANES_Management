@@ -76,6 +76,8 @@ const Settings = () => {
   const [selectedPasskey, setSelectedPasskey] = useState(null);
   const [passkeyError, setPasskeyError] = useState('');
   const [expandedPasskey, setExpandedPasskey] = useState(null);
+  const [lineLoading, setLineLoading] = useState(false);
+  const [lineMessage, setLineMessage] = useState('');
 
   // 加載設定
   useEffect(() => {
@@ -162,6 +164,25 @@ const Settings = () => {
       setDeleteDialogOpen(false);
     } catch (error) {
       setPasskeyError('刪除Passkey失敗');
+    }
+  };
+
+  const handleLineBind = async () => {
+    setLineLoading(true);
+    setLineMessage('');
+    try {
+      const redirect = `${window.location.origin}/settings`;
+      const resp = await apiService.get('/auth/line/login', { params: { redirect } });
+      if (resp.data?.auth_url) {
+        window.location.href = resp.data.auth_url;
+      } else {
+        throw new Error('未取得 LINE 綁定網址');
+      }
+    } catch (err) {
+      console.error('LINE 綁定啟動失敗:', err);
+      setLineMessage(err.response?.data?.detail || err.message || 'LINE 綁定啟動失敗');
+    } finally {
+      setLineLoading(false);
     }
   };
 
@@ -387,6 +408,35 @@ const Settings = () => {
             {profileLoading ? <CircularProgress size={24} /> : '更新資料'}
           </Button>
         </Box>
+      </Paper>
+
+      {/* LINE 綁定區塊 */}
+      <Paper sx={{ padding: 3, marginBottom: 3, boxShadow: 'none', border: '1px solid #e0e0e0' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+          <Typography variant="h6">
+            綁定 LINE
+          </Typography>
+        </Box>
+
+        <Divider sx={{ my: 2 }} />
+
+        {lineMessage && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            {lineMessage}
+          </Alert>
+        )}
+
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          綁定後可使用 LINE 直接登入。系統會開啟 LINE 授權頁完成綁定流程。
+        </Typography>
+
+        <Button
+          variant="contained"
+          onClick={handleLineBind}
+          disabled={lineLoading}
+        >
+          {lineLoading ? <CircularProgress size={24} /> : '開始綁定 LINE'}
+        </Button>
       </Paper>
       
       {/* Passkey管理區塊 */}

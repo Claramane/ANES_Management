@@ -25,6 +25,7 @@ function Login() {
   const [password, setPassword] = useState('');
   const [formError, setFormError] = useState('');
   const [isPasskeyLoading, setIsPasskeyLoading] = useState(false);
+  const [isLineLoading, setIsLineLoading] = useState(false);
 
   useEffect(() => {
     const savedUsername = localStorage.getItem('lastUsername');
@@ -217,6 +218,27 @@ function Login() {
     }
   };
 
+  const handleLineLogin = async () => {
+    setIsLineLoading(true);
+    setFormError('');
+    try {
+      const redirect = `${window.location.origin}/dashboard`;
+      const resp = await api.get('/auth/line/login', {
+        params: { redirect }
+      });
+      if (resp.data?.auth_url) {
+        window.location.href = resp.data.auth_url;
+      } else {
+        throw new Error('未取得 LINE 登入網址');
+      }
+    } catch (e) {
+      console.error('LINE 登入啟動失敗', e);
+      setFormError(e.response?.data?.detail || e.message || 'LINE 登入啟動失敗');
+    } finally {
+      setIsLineLoading(false);
+    }
+  };
+
   return (
     <Container component="main" maxWidth="xs">
       <Box
@@ -316,6 +338,16 @@ function Login() {
                   {isPasskeyLoading ? <CircularProgress size={24} /> : '使用Passkey登入'}
                 </Button>
               </Tooltip>
+
+              <Button
+                fullWidth
+                variant="text"
+                onClick={handleLineLogin}
+                disabled={isLoading || isLineLoading}
+                sx={{ mt: 1.5, py: 1.2 }}
+              >
+                {isLineLoading ? <CircularProgress size={24} /> : '使用LINE登入'}
+              </Button>
             </Box>
           </Box>
         </Paper>
