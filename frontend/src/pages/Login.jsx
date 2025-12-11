@@ -27,6 +27,11 @@ function Login() {
   const [isPasskeyLoading, setIsPasskeyLoading] = useState(false);
 
   useEffect(() => {
+    const savedUsername = localStorage.getItem('lastUsername');
+    if (savedUsername) {
+      setUsername(savedUsername);
+    }
+
     // 檢查是否已有有效的認證狀態，如果有則跳轉到儀表板
     // 只在組件首次掛載時檢查，避免在登入過程中重複觸發
     const timeoutId = setTimeout(() => {
@@ -55,6 +60,10 @@ function Login() {
     // 執行登入
     const success = await login(username, password);
     if (success) {
+      const trimmed = username.trim();
+      if (trimmed) {
+        localStorage.setItem('lastUsername', trimmed);
+      }
       // 設置登入方式標記
       localStorage.setItem('loginMethod', 'password');
       navigate('/dashboard');
@@ -67,9 +76,10 @@ function Login() {
 
     try {
       console.log('開始Passkey登入流程...');
+      const rememberedUsername = username.trim() || localStorage.getItem('lastUsername') || '';
       // 開始WebAuthn認證流程
       const startResponse = await api.post('/webauthn/authenticate/start', {
-        username: username.trim() || undefined
+        username: rememberedUsername || undefined
       });
       console.log('收到認證選項:', startResponse.data);
       
@@ -170,7 +180,10 @@ function Login() {
       // 使用返回的用戶資料進行登入
       const { setAuth } = useAuthStore.getState();
       setAuth(finishResponse.data.access_token, finishResponse.data.user);
-      
+
+      if (finishResponse.data?.user?.username) {
+        localStorage.setItem('lastUsername', finishResponse.data.user.username);
+      }
       // 設置登入方式標記
       localStorage.setItem('loginMethod', 'passkey');
       
