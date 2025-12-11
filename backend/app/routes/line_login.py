@@ -214,20 +214,17 @@ def verify_id_token(id_token: str, expected_nonce: Optional[str]) -> dict:
         if not key_dict:
             raise HTTPException(status_code=400, detail="No matching JWK")
 
-        # 驗簽
-        message, encoded_signature = id_token.rsplit(".", 1)
-        decoded_signature = base64url_decode(encoded_signature.encode())
         public_key = jwk.construct(key_dict)
-        if not public_key.verify(message.encode(), decoded_signature):
-            raise HTTPException(status_code=400, detail="Invalid signature")
-
-        claims = jwt.get_unverified_claims(id_token)
+        pem = public_key.to_pem().decode("utf-8")
+        claims = jwt.decode(
+            id_token,
+            pem,
+            algorithms=["RS256"],
+            audience=settings.LINE_CHANNEL_ID,
+            issuer="https://access.line.me"
+        )
         if expected_nonce and claims.get("nonce") != expected_nonce:
             raise HTTPException(status_code=400, detail="Nonce mismatch")
-        if claims.get("aud") != settings.LINE_CHANNEL_ID:
-            raise HTTPException(status_code=400, detail="Audience mismatch")
-        if claims.get("iss") != "https://access.line.me":
-            raise HTTPException(status_code=400, detail="Issuer mismatch")
         return claims
     except HTTPException:
         raise
