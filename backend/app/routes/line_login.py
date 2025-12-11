@@ -5,7 +5,7 @@ from typing import Optional
 
 import httpx
 from jose import jwk
-from jose.utils import base64url_decode
+from jose.exceptions import JWTError, JWTClaimsError
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from jose import jwt
@@ -206,6 +206,9 @@ def verify_id_token(id_token: str, expected_nonce: Optional[str]) -> dict:
     try:
         header = jwt.get_unverified_header(id_token)
         kid = header.get("kid")
+        alg = header.get("alg")
+        if alg != "RS256":
+            raise HTTPException(status_code=400, detail="Unsupported alg")
         jwks = fetch_jwks()
         key_dict = next((k for k in jwks if k.get("kid") == kid), None)
         if not key_dict and jwks:
@@ -214,20 +217,21 @@ def verify_id_token(id_token: str, expected_nonce: Optional[str]) -> dict:
         if not key_dict:
             raise HTTPException(status_code=400, detail="No matching JWK")
 
-        public_key = jwk.construct(key_dict)
-        pem = public_key.to_pem().decode("utf-8")
         claims = jwt.decode(
             id_token,
-            pem,
+            key_dict,
             algorithms=["RS256"],
             audience=settings.LINE_CHANNEL_ID,
-            issuer="https://access.line.me"
+            issuer="https://access.line.me",
         )
         if expected_nonce and claims.get("nonce") != expected_nonce:
             raise HTTPException(status_code=400, detail="Nonce mismatch")
         return claims
     except HTTPException:
         raise
+    except (JWTError, JWTClaimsError) as e:
+        logger.error("LINE id_token claims error: %s", e)
+        raise HTTPException(status_code=400, detail=f"Invalid id_token: {str(e)}")
     except Exception as e:
         logger.exception("LINE id_token verify failed")
         raise HTTPException(status_code=400, detail=f"Invalid id_token: {str(e)}")
