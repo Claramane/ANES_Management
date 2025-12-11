@@ -78,6 +78,7 @@ function Login() {
       console.log('收到認證選項:', startResponse.data);
       
       const options = startResponse.data.publicKey;
+      const challengeToken = startResponse.data.challenge_token;
       
       if (!options) {
         throw new Error('伺服器未返回有效的認證選項');
@@ -164,7 +165,8 @@ function Login() {
             ? arrayBufferToBase64Url(credential.response.userHandle)
             : null
         },
-        type: credential.type
+        type: credential.type,
+        challenge_token: challengeToken
       });
 
       console.log('認證完成，設置用戶狀態...');

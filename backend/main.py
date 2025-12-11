@@ -7,6 +7,7 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 import logging
 import time
 from collections import defaultdict, deque
+from fastapi import HTTPException
 import uvicorn
 from starlette.middleware.sessions import SessionMiddleware
 from sqlalchemy import text
@@ -72,10 +73,31 @@ def rate_limited(request):
     bucket.append(now)
     return len(bucket) > limit
 
+def security_boot_checks():
+    """啟動時檢查 RP/Origin/HTTPS 設定，避免生產環境錯置"""
+    if not settings.ENFORCE_WEB_SECURITY_CHECKS:
+        logger.info("跳過 Web 安全設定檢查（ENFORCE_WEB_SECURITY_CHECKS=false）")
+        return
+
+    errors = []
+    if settings.IS_PRODUCTION:
+        if not settings.HTTPS_ONLY:
+            errors.append("IS_PRODUCTION=true 但 HTTPS_ONLY 未啟用")
+        if not settings.WEBAUTHN_RP_ID or settings.WEBAUTHN_RP_ID == "localhost":
+            errors.append("IS_PRODUCTION=true 但 WEBAUTHN_RP_ID 未正確設定")
+        if not settings.WEBAUTHN_EXPECTED_ORIGIN.startswith("https://"):
+            errors.append("IS_PRODUCTION=true 但 WEBAUTHN_EXPECTED_ORIGIN 未使用 https")
+    if errors:
+        for e in errors:
+            logger.error(e)
+        raise RuntimeError("安全檢查未通過，請修正環境設定後再啟動")
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 啟動時執行
     logger.info("🚀 正在啟動醫師班表管理系統...")
+    # 安全設定檢查
+    security_boot_checks()
     
     # 記錄時區資訊
     timezone_info = get_timezone_info()

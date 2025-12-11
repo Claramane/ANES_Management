@@ -64,6 +64,9 @@ class Settings(BaseSettings):
     IS_PRODUCTION: bool = False
     HTTPS_ONLY: bool = False
 
+    # 安全檢查開關
+    ENFORCE_WEB_SECURITY_CHECKS: bool = True
+
     @field_validator("BACKEND_CORS_ORIGINS", mode="before")
     def assemble_cors_origins(cls, v: Union[str, List[str]], info) -> List[str]:
         if not v or v == []:

@@ -19,6 +19,8 @@ import json
 from sqlalchemy.sql import func
 import base64
 import hashlib
+import hmac
+import time
 
 from ..core.database import get_db
 from ..models.user import User
@@ -35,6 +37,8 @@ logger = logging.getLogger(__name__)
 RP_NAME = "ANES Management System"
 RP_ID = settings.WEBAUTHN_RP_ID  # 改為讀取環境變數
 
+CHALLENGE_TOKEN_TTL = 300  # 5分鐘
+
 def safe_base64url_to_bytes(s):
     if isinstance(s, bytes):
         s = s.decode('utf-8')
@@ -42,13 +46,14 @@ def safe_base64url_to_bytes(s):
     from webauthn.helpers import base64url_to_bytes as _b2b
     return _b2b(s)
 
-def generate_device_fingerprint(user_agent: str, client_data_json: str = None) -> str:
+def generate_device_fingerprint(user_agent: str, client_data_json: str = None, headers: dict = None) -> str:
     """
     生成設備指紋，用於識別唯一設備
     只使用穩定的設備特徵，不使用每次註冊都會變化的credential_id和public_key
     """
     import re
     import json
+    headers = headers or {}
     
     # 簡化用戶代理，移除版本號等變動較大的資訊
     ua_simplified = re.sub(r'\d+\.\d+\.\d+', 'x.x.x', user_agent.lower())
@@ -64,6 +69,9 @@ def generate_device_fingerprint(user_agent: str, client_data_json: str = None) -
     browser_pattern = r'(chrome|firefox|safari|edge|opera)'
     browser_match = re.search(browser_pattern, ua_simplified)
     browser_info = browser_match.group(1) if browser_match else 'unknown'
+
+    ch_ua = headers.get("sec-ch-ua", "unknown")
+    ch_platform = headers.get("sec-ch-ua-platform", "unknown")
     
     # 如果有client_data_json，可以提取更多穩定的設備信息
     origin = 'unknown'
@@ -75,11 +83,43 @@ def generate_device_fingerprint(user_agent: str, client_data_json: str = None) -
             pass
     
     # 生成基於穩定設備特徵的指紋
-    # 不使用credential_id和public_key，因為它們每次註冊都不同
-    device_signature = f"{os_info}:{browser_info}:{origin}:{ua_simplified[:100]}"
+    device_signature = f"{os_info}:{browser_info}:{origin}:{ch_ua}:{ch_platform}:{RP_ID}:{ua_simplified[:100]}"
     
     # 生成SHA256哈希作為設備指紋
     return hashlib.sha256(device_signature.encode()).hexdigest()
+
+def generate_challenge_token(challenge_b64: str, user_id: int, purpose: str) -> str:
+    ts = int(time.time())
+    payload = f"{challenge_b64}|{user_id}|{purpose}|{ts}"
+    mac = hmac.new(settings.SECRET_KEY.encode(), payload.encode(), hashlib.sha256).digest()
+    token_bytes = json.dumps({
+        "c": challenge_b64,
+        "u": user_id,
+        "p": purpose,
+        "t": ts,
+        "m": bytes_to_base64url(mac)
+    }).encode()
+    return bytes_to_base64url(token_bytes)
+
+def verify_challenge_token(token: str, expected_user_id: int, purpose: str, ttl: int = CHALLENGE_TOKEN_TTL) -> str:
+    try:
+        data = json.loads(base64url_to_bytes(token))
+        challenge_b64 = data.get("c")
+        user_id = data.get("u")
+        token_purpose = data.get("p")
+        ts = data.get("t")
+        mac_b64 = data.get("m")
+        if token_purpose != purpose or user_id != expected_user_id:
+            raise ValueError("purpose or user mismatch")
+        if ts is None or int(time.time()) - int(ts) > ttl:
+            raise ValueError("token expired")
+        payload = f"{challenge_b64}|{user_id}|{token_purpose}|{ts}"
+        expected_mac = hmac.new(settings.SECRET_KEY.encode(), payload.encode(), hashlib.sha256).digest()
+        if not hmac.compare_digest(expected_mac, base64url_to_bytes(mac_b64)):
+            raise ValueError("invalid signature")
+        return challenge_b64
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid challenge token: {str(e)}")
 
 @router.post("/register/start")
 async def register_start(
@@ -150,7 +190,8 @@ async def register_start(
         },
         # 添加challenge到響應中，讓前端可以暫存
         "challenge_b64": challenge_b64,
-        "user_id": current_user.id  # 用於驗證
+        "user_id": current_user.id,  # 用於驗證
+        "challenge_token": generate_challenge_token(challenge_b64, current_user.id, "register")
     }
     
     return response_data
@@ -159,8 +200,7 @@ async def register_start(
 async def register_finish(
     request: Request,
     credential: WebAuthnRegistrationCredential,
-    challenge_b64: str = None,  # 添加可選的challenge參數
-    user_id: int = None,  # 添加可選的user_id參數用於驗證
+    challenge_token: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -171,40 +211,16 @@ async def register_finish(
                     request.headers.get('user-agent', 'Unknown'),
                     request.headers.get('origin', 'Unknown'))
         
-        # 首先嘗試從session中獲取challenge
         session_challenge = request.session.get("webauthn_challenge")
-        
-        # 如果session中沒有challenge，嘗試使用前端傳來的challenge
-        if not session_challenge and challenge_b64:
-            # 驗證用戶身份
-            if user_id != current_user.id:
-                raise HTTPException(
-                    status_code=400,
-                    detail="用戶身份驗證失敗"
-                )
-            logger.debug("webauthn register_finish use challenge from frontend prefix=%s...", challenge_b64[:10])
-            challenge_b64_to_use = challenge_b64
-        elif session_challenge:
-            logger.debug("webauthn register_finish use challenge from session prefix=%s...", session_challenge[:10])
+        if session_challenge:
             challenge_b64_to_use = session_challenge
+            logger.debug("webauthn register_finish use session challenge prefix=%s...", session_challenge[:10])
+        elif challenge_token:
+            challenge_b64_to_use = verify_challenge_token(challenge_token, current_user.id, "register")
+            logger.debug("webauthn register_finish use token challenge prefix=%s...", challenge_b64_to_use[:10])
         else:
-            debug_info = {
-                'session_keys': list(request.session.keys()),
-                'session_id': getattr(request.session, '_session_id', 'No session ID'),
-                'user_id': current_user.id,
-                'user_agent': request.headers.get('user-agent', 'Unknown'),
-                'cookies': dict(request.cookies),
-                'origin': request.headers.get('origin', 'Unknown'),
-                'host': request.headers.get('host', 'Unknown'),
-                'frontend_challenge': bool(challenge_b64),
-                'frontend_user_id': user_id
-            }
-            error_msg = f"No challenge in session. Debug info: {debug_info}"
-            raise HTTPException(
-                status_code=400,
-                detail=f"Passkey registration failed: {error_msg}"
-            )
-            
+            raise HTTPException(status_code=400, detail="Missing challenge token")
+
         logger.debug("webauthn register_finish using challenge prefix=%s...", challenge_b64_to_use[:10])
         expected_challenge = base64url_to_bytes(challenge_b64_to_use)
 
@@ -307,24 +323,22 @@ async def authenticate_start(
     payload: Optional[dict] = Body(default=None),
     db: Session = Depends(get_db)
 ):
-    """開始WebAuthn認證流程"""
+    """開始WebAuthn認證流程（需指定 username）"""
     username = None
     if payload and isinstance(payload, dict):
         username = payload.get("username")
 
-    # 若提供 username，僅回傳該用戶的 passkey；否則回傳全部 active 憑證（兼容舊客戶端）
-    if username:
-        user = db.query(User).filter(User.username == username).first()
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
-        credentials = db.query(WebAuthnCredential).filter(
-            WebAuthnCredential.user_id == user.id,
-            WebAuthnCredential.is_active == True
-        ).all()
-    else:
-        credentials = db.query(WebAuthnCredential).filter(
-            WebAuthnCredential.is_active == True
-        ).all()
+    if not username:
+        raise HTTPException(status_code=400, detail="Username is required for passkey authentication")
+
+    user = db.query(User).filter(User.username == username).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    credentials = db.query(WebAuthnCredential).filter(
+        WebAuthnCredential.user_id == user.id,
+        WebAuthnCredential.is_active == True
+    ).all()
     
     if not credentials:
         raise HTTPException(status_code=400, detail="No passkeys available for this user")
@@ -353,13 +367,15 @@ async def authenticate_start(
                 } for cred in credentials
             ],
             "userVerification": "preferred",
-        }
+        },
+        "challenge_token": generate_challenge_token(bytes_to_base64url(options.challenge), user.id, "authenticate")
     }
 
 @router.post("/authenticate/finish")
 async def authenticate_finish(
     request: Request,
     credential: AuthenticationCredential,
+    challenge_token: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     """完成WebAuthn認證流程"""
@@ -391,6 +407,11 @@ async def authenticate_finish(
 
         client_data = json.loads(client_data_json_bytes.decode('utf-8'))
         challenge_b64 = client_data['challenge']
+
+        if challenge_token:
+            verified_challenge_b64 = verify_challenge_token(challenge_token, stored_credential.user_id, "authenticate")
+            if verified_challenge_b64 != challenge_b64:
+                raise HTTPException(status_code=400, detail="Challenge mismatch")
         expected_challenge = safe_base64url_to_bytes(challenge_b64)
         
         raw_id_bytes = safe_base64url_to_bytes(credential.raw_id if isinstance(credential.raw_id, str) else credential.raw_id.decode('utf-8'))
