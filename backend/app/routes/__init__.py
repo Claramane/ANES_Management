@@ -1,5 +1,5 @@
 # 初始化路由文件夾 
-from . import users, schedules, announcements, overtime, formula_schedules, shift_swap, webauthn, doctor_schedule
+from . import users, schedules, announcements, overtime, formula_schedules, shift_swap, webauthn, doctor_schedule, line_login
 
 # 匯出所有路由
 routers = [

@@ -67,6 +67,17 @@ class Settings(BaseSettings):
     # 安全檢查開關
     ENFORCE_WEB_SECURITY_CHECKS: bool = True
 
+    # LINE Login
+    LINE_CHANNEL_ID: str = ""
+    LINE_CHANNEL_SECRET: str = ""
+    LINE_REDIRECT_URI: str = "http://localhost:8000/api/auth/line/callback"
+    LINE_LOGIN_BASE_URL: str = "https://access.line.me/oauth2/v2.1/authorize"
+    LINE_TOKEN_URL: str = "https://api.line.me/oauth2/v2.1/token"
+    LINE_CERTS_URL: str = "https://api.line.me/oauth2/v2.1/certs"
+    LINE_STATE_TTL_SECONDS: int = 600
+    LINE_NONCE_TTL_SECONDS: int = 600
+    FRONTEND_REDIRECT_AFTER_LOGIN: str = "http://localhost:3000/dashboard"
+
     @field_validator("BACKEND_CORS_ORIGINS", mode="before")
     def assemble_cors_origins(cls, v: Union[str, List[str]], info) -> List[str]:
         if not v or v == []:

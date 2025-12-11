@@ -55,6 +55,7 @@
 - `LINE_USERINFO_URL`（可選，若需額外 profile）
 - `LINE_NONCE_TTL_SECONDS`（預設 600）
 - `LINE_STATE_TTL_SECONDS`（預設 600）
+- `FRONTEND_REDIRECT_AFTER_LOGIN`（登入成功後導向，預設 `http://localhost:3000/dashboard`）
 
 ## 安全考量
 - 必驗證 state / nonce，防 CSRF/重放。  
