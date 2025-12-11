@@ -271,7 +271,7 @@ function Login() {
                 required
                 fullWidth
                 id="username"
-                label="用戶名"
+                label="員工編號"
                 name="username"
                 autoComplete="username"
                 autoFocus
