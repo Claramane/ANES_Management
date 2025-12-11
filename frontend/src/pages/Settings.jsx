@@ -381,12 +381,6 @@ const Settings = () => {
         </Alert>
       )}
       
-      {success && (
-        <Alert severity="success" sx={{ mb: 2 }}>
-          設定已成功保存！
-        </Alert>
-      )}
-      
       {/* 個人資料修改區塊 */}
       <Paper sx={{ padding: 3, marginBottom: 3, boxShadow: 'none', border: '1px solid #e0e0e0' }}>
         <Typography variant="h6" gutterBottom>
