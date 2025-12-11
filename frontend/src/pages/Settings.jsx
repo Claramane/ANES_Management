@@ -79,6 +79,7 @@ const Settings = () => {
   const [lineBindDialogOpen, setLineBindDialogOpen] = useState(false);
   const [lineBindForm, setLineBindForm] = useState({ employeeId: '', password: '' });
   const [lineBindError, setLineBindError] = useState('');
+  const [lineStatus, setLineStatus] = useState({ bound: false });
 
   // 加載設定
   useEffect(() => {
@@ -106,9 +107,25 @@ const Settings = () => {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('line_status') === 'need_binding') {
-      setLineMessage('LINE 授權成功，請輸入員工編號與密碼完成綁定');
+      setLineMessage('LINE 授權成功，請確認綁定');
       setLineBindDialogOpen(true);
     }
+  }, []);
+
+  // 取得 LINE 綁定狀態
+  useEffect(() => {
+    const fetchLineStatus = async () => {
+      try {
+        const resp = await api.get('/auth/line/status');
+        setLineStatus(resp.data);
+        if (resp.data?.picture_url) {
+          localStorage.setItem('line_avatar_url', resp.data.picture_url);
+        }
+      } catch (err) {
+        // 未綁定時忽略
+      }
+    };
+    fetchLineStatus();
   }, []);
 
   const loadPasskeys = React.useCallback(async () => {
@@ -199,16 +216,22 @@ const Settings = () => {
   const handleLineBindSubmit = async () => {
     setLineBindError('');
     try {
-      const resp = await api.post('/auth/line/bind', {
-        employee_id: lineBindForm.employeeId,
-        password: lineBindForm.password,
-      });
+      const resp = await api.post('/auth/line/bind');
       if (resp.data?.token && resp.data?.message) {
         setLineMessage(resp.data.message);
         // 綁定成功後直接登入
         const userResp = await api.get('/users/me');
         setAuth(resp.data.token, userResp.data);
         setLineBindDialogOpen(false);
+        if (resp.data?.picture_url) {
+          localStorage.setItem('line_avatar_url', resp.data.picture_url);
+        }
+        setLineStatus({
+          bound: true,
+          display_name: resp.data.display_name || userResp.data.full_name,
+          line_user_id: resp.data.line_user_id,
+          picture_url: resp.data.picture_url,
+        });
       }
     } catch (err) {
       const detail = err.response?.data?.detail;
@@ -451,16 +474,28 @@ const Settings = () => {
           </Alert>
         )}
 
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          綁定後可使用 LINE 直接登入。系統會開啟 LINE 授權頁完成綁定流程。
-        </Typography>
+        {lineStatus.bound ? (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+            <Avatar src={lineStatus.picture_url} alt="LINE avatar" />
+            <Box>
+              <Typography variant="body2">已綁定 LINE</Typography>
+              <Typography variant="body2" color="text.secondary">{lineStatus.display_name}</Typography>
+              <Typography variant="caption" color="text.secondary">{lineStatus.line_user_id}</Typography>
+            </Box>
+          </Box>
+        ) : (
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            綁定後可使用 LINE 直接登入。系統會開啟 LINE 授權頁完成綁定流程。
+          </Typography>
+        )}
 
         <Button
           variant="contained"
-          onClick={handleLineBind}
+          onClick={lineStatus.bound ? handleLineUnbind : handleLineBind}
           disabled={lineLoading}
+          sx={{ backgroundColor: '#06C755', ':hover': { backgroundColor: '#06b84f' } }}
         >
-          {lineLoading ? <CircularProgress size={24} /> : '開始綁定 LINE'}
+          {lineLoading ? <CircularProgress size={24} /> : (lineStatus.bound ? '解除綁定' : '開始綁定 LINE')}
         </Button>
       </Paper>
 
