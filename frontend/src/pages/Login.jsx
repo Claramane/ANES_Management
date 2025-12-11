@@ -20,7 +20,7 @@ import { api } from '../utils/api';
 
 function Login() {
   const navigate = useNavigate();
-  const { login, checkAuthStatus, isLoading, error } = useAuthStore();
+  const { login, checkAuthStatus, isLoading, error, setAuth } = useAuthStore();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [formError, setFormError] = useState('');
@@ -32,6 +32,38 @@ function Login() {
     if (savedUsername) {
       setUsername(savedUsername);
     }
+
+    // 處理 LINE callback：帶 token 則直接登入；帶 line_status 則提示綁定
+    const params = new URLSearchParams(window.location.search);
+    const tokenFromLine = params.get('token');
+    const lineStatus = params.get('line_status');
+    const cleanupUrl = () => {
+      params.delete('token');
+      params.delete('line_status');
+      const newUrl = `${window.location.pathname}${params.toString() ? '?' + params.toString() : ''}`;
+      window.history.replaceState(null, '', newUrl);
+    };
+    const handleLineCallback = async () => {
+      if (tokenFromLine) {
+        try {
+          const userResp = await api.get('/users/me', {
+            headers: { Authorization: `Bearer ${tokenFromLine}` }
+          });
+          setAuth(tokenFromLine, userResp.data);
+          localStorage.setItem('lastUsername', userResp.data.username);
+          localStorage.setItem('loginMethod', 'line');
+          navigate('/dashboard');
+        } catch (e) {
+          setFormError('LINE 登入驗證失敗，請再試一次');
+        } finally {
+          cleanupUrl();
+        }
+      } else if (lineStatus === 'need_binding') {
+        setFormError('此 LINE 帳號尚未綁定，請先以密碼登入並至設定頁綁定。');
+        cleanupUrl();
+      }
+    };
+    handleLineCallback();
 
     // 檢查是否已有有效的認證狀態，如果有則跳轉到儀表板
     // 只在組件首次掛載時檢查，避免在登入過程中重複觸發
@@ -222,7 +254,7 @@ function Login() {
     setIsLineLoading(true);
     setFormError('');
     try {
-      const redirect = `${window.location.origin}/dashboard`;
+      const redirect = `${window.location.origin}/login`;
       const resp = await api.get('/auth/line/login', {
         params: { redirect }
       });
