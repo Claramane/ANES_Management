@@ -241,6 +241,23 @@ const Settings = () => {
     }
   };
 
+  const handleLineUnbind = async () => {
+    setLineLoading(true);
+    setLineMessage('');
+    try {
+      await api.delete('/auth/line/unbind');
+      setLineStatus({ bound: false });
+      localStorage.removeItem('line_avatar_url');
+      setLineMessage('LINE 已解除綁定');
+    } catch (err) {
+      const detail = err.response?.data?.detail;
+      const msg = typeof detail === 'object' ? JSON.stringify(detail) : detail;
+      setLineMessage(msg || err.message || '解除綁定失敗');
+    } finally {
+      setLineLoading(false);
+    }
+  };
+
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleString('zh-TW', {
       year: 'numeric',
@@ -476,13 +493,22 @@ const Settings = () => {
         )}
 
         {lineStatus.bound ? (
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-            <Avatar src={lineStatus.picture_url} alt="LINE avatar" />
-            <Box>
-              <Typography variant="body2">已綁定 LINE</Typography>
-              <Typography variant="body2" color="text.secondary">{lineStatus.display_name}</Typography>
-              <Typography variant="caption" color="text.secondary">{lineStatus.line_user_id}</Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2, justifyContent: 'space-between' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <Avatar src={lineStatus.picture_url} alt="LINE avatar" />
+              <Box>
+                <Typography variant="body2">已綁定 LINE</Typography>
+                <Typography variant="body2" color="text.secondary">{lineStatus.display_name}</Typography>
+              </Box>
             </Box>
+            <Button
+              variant="contained"
+              color="error"
+              onClick={handleLineUnbind}
+              disabled={lineLoading}
+            >
+              {lineLoading ? <CircularProgress size={24} /> : '解除綁定'}
+            </Button>
           </Box>
         ) : (
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
@@ -490,14 +516,16 @@ const Settings = () => {
           </Typography>
         )}
 
-        <Button
-          variant="contained"
-          onClick={lineStatus.bound ? handleLineUnbind : handleLineBind}
-          disabled={lineLoading}
-          sx={{ backgroundColor: '#06C755', ':hover': { backgroundColor: '#06b84f' } }}
-        >
-          {lineLoading ? <CircularProgress size={24} /> : (lineStatus.bound ? '解除綁定' : '開始綁定 LINE')}
-        </Button>
+        {!lineStatus.bound && (
+          <Button
+            variant="contained"
+            onClick={handleLineBind}
+            disabled={lineLoading}
+            sx={{ backgroundColor: '#06C755', ':hover': { backgroundColor: '#06b84f' } }}
+          >
+            {lineLoading ? <CircularProgress size={24} /> : '開始綁定 LINE'}
+          </Button>
+        )}
       </Paper>
 
       {/* LINE 綁定對話框 */}

@@ -204,8 +204,12 @@ function Layout() {
             onClick={handleProfileMenuOpen}
             color="inherit"
           >
-            <Avatar sx={{ width: 32, height: 32 }}>
-              {user?.full_name?.charAt(0) || user?.username?.charAt(0) || 'U'}
+            <Avatar
+              sx={{ width: 32, height: 32 }}
+              src={localStorage.getItem('line_avatar_url') || undefined}
+            >
+              {!localStorage.getItem('line_avatar_url') &&
+                (user?.full_name?.charAt(0) || user?.username?.charAt(0) || 'U')}
             </Avatar>
           </IconButton>
           <Menu
