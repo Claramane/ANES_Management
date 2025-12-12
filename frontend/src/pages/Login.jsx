@@ -11,7 +11,12 @@ import {
   Alert,
   CircularProgress,
   Tooltip,
-  Collapse
+  Collapse,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Divider
 } from '@mui/material';
 import { Fingerprint } from '@mui/icons-material';
 import { useAuthStore } from '../store/authStore';
@@ -26,6 +31,9 @@ function Login() {
   const [isPasskeyLoading, setIsPasskeyLoading] = useState(false);
   const [isLineLoading, setIsLineLoading] = useState(false);
   const [isPasswordMode, setIsPasswordMode] = useState(false);
+  const [qrModalOpen, setQrModalOpen] = useState(false);
+  const [qrAuthUrl, setQrAuthUrl] = useState('');
+  const [isLineQrLoading, setIsLineQrLoading] = useState(false);
 
   useEffect(() => {
     const savedUsername = localStorage.getItem('lastUsername');
@@ -277,6 +285,28 @@ function Login() {
     }
   };
 
+  const handleLineQrLogin = async () => {
+    setIsLineQrLoading(true);
+    setFormError('');
+    try {
+      const redirect = `${window.location.origin}/login`;
+      const resp = await api.get('/auth/line/login', {
+        params: { redirect, mode: 'qr' }
+      });
+      if (resp.data?.auth_url) {
+        setQrAuthUrl(resp.data.auth_url);
+        setQrModalOpen(true);
+      } else {
+        throw new Error('未取得 LINE 授權網址');
+      }
+    } catch (e) {
+      console.error('LINE 掃碼登入啟動失敗', e);
+      setFormError(e.response?.data?.detail || e.message || 'LINE 掃碼登入啟動失敗');
+    } finally {
+      setIsLineQrLoading(false);
+    }
+  };
+
   return (
     <Container component="main" maxWidth="xs">
       <Box
@@ -403,6 +433,16 @@ function Login() {
                   </Button>
 
                   <Button
+                    fullWidth
+                    variant="outlined"
+                    onClick={handleLineQrLogin}
+                    disabled={isLoading || isLineQrLoading}
+                    sx={{ py: 1.2, borderColor: '#06C755', color: '#06C755', ':hover': { borderColor: '#06b84f', backgroundColor: '#e9f9ef' } }}
+                  >
+                    {isLineQrLoading ? <CircularProgress size={24} /> : '使用LINE掃碼登入'}
+                  </Button>
+
+                  <Button
                     type="button"
                     fullWidth
                     variant="text"
@@ -424,6 +464,45 @@ function Login() {
           v0.9.5 beta | 最後更新: 2025-10-01
         </Typography>
       </Box>
+
+      <Dialog open={qrModalOpen} onClose={() => setQrModalOpen(false)} fullWidth maxWidth="xs">
+        <DialogTitle>使用 LINE 掃碼登入</DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, pt: 2 }}>
+          {qrAuthUrl ? (
+            <>
+              <img
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(qrAuthUrl)}`}
+                alt="LINE 授權 QR code"
+                style={{ width: 260, height: 260 }}
+              />
+              <Typography variant="body2" color="text.secondary" align="center">
+                使用手機 LINE 掃描 QR 碼完成登入。若 QR 過期，可點擊重新產生。
+              </Typography>
+              <Divider flexItem />
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={() => window.open(qrAuthUrl, '_blank', 'noopener')}
+              >
+                無法掃描？改用連結開啟
+              </Button>
+            </>
+          ) : (
+            <Typography>正在產生 QR Code...</Typography>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setQrModalOpen(false)}>關閉</Button>
+          <Button
+            onClick={handleLineQrLogin}
+            disabled={isLineQrLoading}
+            variant="contained"
+            sx={{ backgroundColor: '#06C755', ':hover': { backgroundColor: '#06b84f' } }}
+          >
+            {isLineQrLoading ? <CircularProgress size={20} /> : '重新產生'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 }

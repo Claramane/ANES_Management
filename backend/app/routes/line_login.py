@@ -53,7 +53,8 @@ def pop_temp(request: Request, key: str, ttl: int = 600) -> Optional[str]:
 async def line_login_start(
     request: Request,
     redirect: Optional[str] = None,
-    force_consent: bool = False
+    force_consent: bool = False,
+    mode: Optional[str] = None
 ):
     """
     產生 LINE 授權網址，前端可直接 redirect。
