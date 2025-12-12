@@ -1,7 +1,7 @@
 import logging
 import secrets
 import time
-from typing import Optional
+from typing import Optional, Dict
 
 import httpx
 from jose import jwk
@@ -22,6 +22,10 @@ from ..core.security import verify_password, get_current_user
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth/line", tags=["LINE Login"])
 
+# 簡易的記憶體暫存，用於 QR 掃碼輪詢（低並發場景）
+QR_SESSION_TTL = 600  # 秒
+qr_sessions: Dict[str, dict] = {}
+
 
 def generate_state() -> str:
     return secrets.token_urlsafe(16)
@@ -29,6 +33,10 @@ def generate_state() -> str:
 
 def generate_nonce() -> str:
     return secrets.token_urlsafe(16)
+
+
+def generate_session_id() -> str:
+    return secrets.token_urlsafe(20)
 
 
 def store_temp(request: Request, key: str, value: str):
@@ -66,18 +74,31 @@ async def line_login_start(
     if redirect:
         store_temp(request, "line_redirect", redirect)
 
+    session_id = None
+    if mode == "qr":
+        session_id = generate_session_id()
+        qr_sessions[session_id] = {
+            "state": state,
+            "nonce": nonce,
+            "redirect": redirect,
+            "status": "pending",
+            "token": None,
+            "created_at": time.time(),
+            "message": None,
+        }
+
     params = {
         "response_type": "code",
         "client_id": settings.LINE_CHANNEL_ID,
         "redirect_uri": settings.LINE_REDIRECT_URI,
-        "state": state,
+        "state": state if not session_id else f"{state}:{session_id}",
         "scope": "profile openid",
         "nonce": nonce,
     }
     if force_consent:
         params["prompt"] = "consent"
     auth_url = settings.LINE_LOGIN_BASE_URL + "?" + "&".join(f"{k}={httpx.QueryParams({k: v})[k]}" for k, v in params.items())
-    return LineLoginStartResponse(auth_url=auth_url, state=state)
+    return LineLoginStartResponse(auth_url=auth_url, state=state, session_id=session_id)
 
 
 @router.get("/callback")
@@ -85,6 +106,10 @@ async def line_login_callback(request: Request, code: str, state: str, db: Sessi
     """
     LINE 授權回調：交換 token -> 驗證 id_token -> 發 JWT 或要求綁定。
     """
+    session_id = None
+    if ":" in state:
+        state, session_id = state.split(":", 1)
+
     saved_state = pop_temp(request, "line_state")
     nonce = pop_temp(request, "line_nonce")
     redirect_override = pop_temp(request, "line_redirect")
@@ -116,6 +141,10 @@ async def line_login_callback(request: Request, code: str, state: str, db: Sessi
         account.last_login_at = time.strftime('%Y-%m-%d %H:%M:%S%z')
         db.commit()
         jwt_token = issue_jwt(user)
+        if session_id and session_id in qr_sessions:
+            qr_sessions[session_id]["status"] = "success"
+            qr_sessions[session_id]["token"] = jwt_token
+            qr_sessions[session_id]["message"] = None
         target = redirect_override or settings.FRONTEND_REDIRECT_AFTER_LOGIN
         return RedirectResponse(f"{target}?token={jwt_token}")
 
@@ -126,6 +155,10 @@ async def line_login_callback(request: Request, code: str, state: str, db: Sessi
 
     # 導向前端設定頁提示綁定
     target = redirect_override or settings.FRONTEND_LINE_BIND_URL or settings.FRONTEND_REDIRECT_AFTER_LOGIN
+    if session_id and session_id in qr_sessions:
+        qr_sessions[session_id]["status"] = "need_binding"
+        qr_sessions[session_id]["token"] = None
+        qr_sessions[session_id]["message"] = "LINE 帳號尚未綁定"
     return RedirectResponse(f"{target}?line_status=need_binding")
 
 
@@ -246,6 +279,26 @@ def issue_jwt(user: User) -> str:
     from datetime import timedelta
     expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     return create_access_token(data={"sub": user.username}, expires_delta=expires)
+
+
+def _cleanup_qr_sessions():
+    now = time.time()
+    expired = [k for k, v in qr_sessions.items() if now - v.get("created_at", 0) > QR_SESSION_TTL]
+    for k in expired:
+        qr_sessions.pop(k, None)
+
+
+@router.get("/qr/status")
+async def line_qr_status(session_id: str):
+    _cleanup_qr_sessions()
+    data = qr_sessions.get(session_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="QR session not found or expired")
+    return {
+        "status": data.get("status", "pending"),
+        "token": data.get("token"),
+        "message": data.get("message"),
+    }
 
 
 @router.get("/status")

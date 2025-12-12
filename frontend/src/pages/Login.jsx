@@ -35,6 +35,45 @@ function Login() {
   const [qrModalOpen, setQrModalOpen] = useState(false);
   const [qrAuthUrl, setQrAuthUrl] = useState('');
   const [isLineQrLoading, setIsLineQrLoading] = useState(false);
+  const [qrSessionId, setQrSessionId] = useState('');
+
+  useEffect(() => {
+    let timer;
+    if (qrModalOpen && qrSessionId) {
+      const poll = async () => {
+        try {
+          const resp = await api.get('/auth/line/qr/status', {
+            params: { session_id: qrSessionId }
+          });
+          const status = resp.data?.status;
+          if (status === 'success' && resp.data?.token) {
+            const token = resp.data.token;
+            const userResp = await api.get('/users/me', {
+              headers: { Authorization: `Bearer ${token}` }
+            });
+            setAuth(token, userResp.data);
+            localStorage.setItem('lastUsername', userResp.data.username);
+            localStorage.setItem('loginMethod', 'line');
+            setQrModalOpen(false);
+            navigate('/dashboard');
+            return; // stop further polling
+          }
+          if (status === 'need_binding') {
+            setFormError('此 LINE 帳號尚未綁定，請先以密碼登入並至設定頁綁定。');
+            setQrModalOpen(false);
+            return;
+          }
+        } catch (err) {
+          console.error('輪詢 LINE 掃碼狀態失敗', err);
+        }
+        timer = setTimeout(poll, 2000);
+      };
+      poll();
+    }
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, [qrModalOpen, qrSessionId, navigate, setAuth]);
 
   useEffect(() => {
     const savedUsername = localStorage.getItem('lastUsername');
@@ -296,6 +335,9 @@ function Login() {
       });
       if (resp.data?.auth_url) {
         setQrAuthUrl(resp.data.auth_url);
+        if (resp.data?.session_id) {
+          setQrSessionId(resp.data.session_id);
+        }
         setQrModalOpen(true);
       } else {
         throw new Error('未取得 LINE 授權網址');
