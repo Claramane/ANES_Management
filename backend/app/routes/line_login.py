@@ -2,12 +2,13 @@ import logging
 import secrets
 import time
 from typing import Optional, Dict
+from pathlib import Path
 
 import httpx
 from jose import jwk
 from jose.exceptions import JWTError, JWTClaimsError
 from fastapi import APIRouter, Depends, HTTPException, Request, Body
-from fastapi.responses import JSONResponse, RedirectResponse, HTMLResponse
+from fastapi.responses import JSONResponse, RedirectResponse, FileResponse
 from jose import jwt
 from sqlalchemy.orm import Session
 
@@ -25,6 +26,8 @@ router = APIRouter(prefix="/auth/line", tags=["LINE Login"])
 # 簡易的記憶體暫存，用於 QR 掃碼輪詢（低並發場景）
 QR_SESSION_TTL = 600  # 秒
 qr_sessions: Dict[str, dict] = {}
+
+TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates"
 
 
 def generate_state() -> str:
@@ -155,17 +158,8 @@ async def line_login_callback(request: Request, code: str, state: str, db: Sessi
             qr_sessions[session_id]["message"] = None
         if qr_ctx:
             # 掃碼裝置（手機）回應簡短訊息即可，桌機靠輪詢拿 token
-            html = """
-            <html>
-              <head><meta charset="utf-8"><title>登入成功</title></head>
-              <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; text-align: center; padding: 40px;">
-                <h2>登入成功</h2>
-                <p>請回到您的桌機畫面，已自動完成登入。</p>
-                <button onclick="window.close();" style="padding:10px 18px;margin-top:16px;">關閉此頁</button>
-              </body>
-            </html>
-            """
-            return HTMLResponse(content=html)
+            success_path = TEMPLATE_DIR / "line_qr_success.html"
+            return FileResponse(success_path)
         target = redirect_override or settings.FRONTEND_REDIRECT_AFTER_LOGIN
         return RedirectResponse(f"{target}?token={jwt_token}")
 
@@ -181,17 +175,8 @@ async def line_login_callback(request: Request, code: str, state: str, db: Sessi
         qr_sessions[session_id]["token"] = None
         qr_sessions[session_id]["message"] = "LINE 帳號尚未綁定"
     if qr_ctx:
-        html = """
-        <html>
-          <head><meta charset="utf-8"><title>需綁定</title></head>
-          <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; text-align: center; padding: 40px;">
-            <h2>尚未綁定 LINE</h2>
-            <p>請回到桌機，以帳密登入後到「設定」頁完成 LINE 綁定。</p>
-            <button onclick="window.close();" style="padding:10px 18px;margin-top:16px;">關閉此頁</button>
-          </body>
-        </html>
-        """
-        return HTMLResponse(content=html)
+        need_binding_path = TEMPLATE_DIR / "line_qr_need_binding.html"
+        return FileResponse(need_binding_path)
     return RedirectResponse(f"{target}?line_status=need_binding")
 
 
