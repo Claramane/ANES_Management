@@ -4,7 +4,7 @@
 
 ## 必遵守
 - **Python 套件**：後端強制使用 `uv`，禁止 `pip install`（除安裝 uv 本身）；更新依賴後以 `uv pip freeze > requirements.txt`。
-- **前端套件**：使用 `pnpm`。
+- **前端套件**：使用 `pnpm` 管理所有 Node 依賴（請勿改用 npm/yarn）。
 - **版本號一致性**：修改版本號時必須同步 5 處：`CLAUDE.md`、`README.md`、`frontend/src/pages/Settings.jsx`、`frontend/src/pages/Login.jsx`、`docs/USAGE.md`。
 - **Git 提交**：依 `docs/GIT_WORKFLOW.md`；完成一個功能/修復就提交；訊息勿提及 AI 名稱；保持簡短標題+條列描述。
 - **安全操作**：避免破壞性指令；不 revert 使用者現有更動；新增/修改資料庫或權限邏輯時同步更新對應 docs（`DATABASE_ARCHITECTURE.md`、`PERMISSIONS.md`、`SECURITY.md`、`ROUND_ALLOCATION_LOGIC.md`、`USAGE.md`）。

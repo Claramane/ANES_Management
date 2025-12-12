@@ -64,8 +64,63 @@ ANES_Management/
 **生產環境部署**：專案在生產環境中只包含這兩個資料夾，所有服務都在這個結構內運行。
 
 **套件管理工具**：
-- **前端**：使用 `pnpm` 進行更快的 Node.js 依賴管理
-- **後端**：使用 `uv` 進行更快的 Python 套件安裝
+- **前端**：使用 `pnpm` 進行 Node.js 依賴管理（請勿改用 npm 或 yarn）
+- **後端**：⚠️ **必須使用 `uv` 進行 Python 套件管理** - `uv` 是 Rust 編寫的極速 Python 套件安裝工具，比傳統 pip 快 10-100 倍
+
+### ⚠️ Python 套件管理重要規範
+
+**本專案後端強制使用 `uv` 管理 Python 套件，禁止使用傳統 pip！**
+
+**為什麼使用 uv？**
+- **速度極快**：比 pip 快 10-100 倍，使用 Rust 編寫
+- **更可靠**：更好的依賴解析和鎖定機制
+- **生產環境一致**：與部署環境（Zeabur）使用相同工具
+- **向後兼容**：完全兼容 requirements.txt 格式
+
+**安裝 uv：**
+```bash
+# macOS/Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Windows
+powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+
+# 使用 pip 安裝（不推薦但可用）
+pip install uv
+```
+
+**使用 uv 的標準流程：**
+```bash
+cd backend
+
+# 1. 建立虛擬環境（僅第一次）
+python -m venv venv
+
+# 2. 啟動虛擬環境
+source venv/bin/activate    # Linux/macOS
+# 或
+venv\Scripts\activate       # Windows
+
+# 3. 使用 uv 安裝套件（極速安裝）
+uv pip install -r requirements.txt
+
+# 4. 新增套件時也使用 uv
+uv pip install 套件名稱
+
+# 5. 更新 requirements.txt
+uv pip freeze > requirements.txt
+```
+
+**⚠️ 嚴格禁止的操作：**
+- ❌ 使用 `pip install` 安裝套件（除非安裝 uv 本身）
+- ❌ 混用 pip 和 uv 管理同一個環境
+- ❌ 直接修改 requirements.txt 而不通過 uv
+
+**正確做法：**
+- ✅ 所有套件安裝都使用 `uv pip install`
+- ✅ 更新套件使用 `uv pip install --upgrade`
+- ✅ 移除套件使用 `uv pip uninstall`
+- ✅ 生成依賴列表使用 `uv pip freeze`
 
 ## 常用開發指令
 
@@ -88,17 +143,25 @@ source venv/bin/activate    # Linux/macOS
 # 或
 venv\Scripts\activate       # Windows
 
-# 使用 uv 進行更快的套件安裝 (推薦)
-pip install uv
+# ⚠️ 必須使用 uv 安裝套件（禁止使用 pip）
 uv pip install -r requirements.txt
 
-# 或使用傳統 pip
-pip install -r requirements.txt
+# 啟動開發伺服器和資料庫操作
 python main.py      # 啟動開發伺服器 (port 8000)
 python init_db.py   # 初始化資料庫
+
+# 套件管理操作（全部使用 uv）
+uv pip install 套件名稱                    # 安裝新套件
+uv pip install --upgrade 套件名稱          # 更新套件
+uv pip uninstall 套件名稱                  # 移除套件
+uv pip freeze > requirements.txt          # 更新依賴列表
+uv pip list                               # 列出已安裝套件
 ```
 
-**重要提醒**：在開發環境中進行後端測試時，必須先啟動虛擬環境 (venv) 才能正確運行後端服務和測試。
+**⚠️ 重要提醒**：
+1. **虛擬環境必須啟動**：開發環境中進行後端測試時，必須先啟動虛擬環境 (venv)
+2. **強制使用 uv**：所有套件安裝操作都必須使用 `uv pip`，不可使用傳統 `pip`
+3. **避免套件衝突**：不要在同一環境混用 pip 和 uv
 
 ### 資料庫操作
 
@@ -139,7 +202,9 @@ PGPASSWORD=anes_password psql -h localhost -U anes_user -d anes_db -c "UPDATE us
 
 ### 技術堆疊
 - **前端**: React 18, Material-UI, Zustand (狀態管理), React Router
+- **前端套件管理**: pnpm (快速 Node.js 套件管理)
 - **後端**: FastAPI, SQLAlchemy, JWT 認證, WebAuthn/Passkey 支援
+- **後端套件管理**: ⚠️ **uv (強制使用，Rust 編寫的極速 Python 套件管理工具)**
 - **資料庫**: PostgreSQL/SQLite 配合 SQLAlchemy ORM
 - **排程系統**: APScheduler 自動化任務
 - **認證系統**: JWT + WebAuthn/Passkey 生物辨識認證
