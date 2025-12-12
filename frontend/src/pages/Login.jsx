@@ -19,6 +19,7 @@ import {
   Divider
 } from '@mui/material';
 import { Fingerprint } from '@mui/icons-material';
+import { QRCodeCanvas } from 'qrcode.react';
 import { useAuthStore } from '../store/authStore';
 import { api } from '../utils/api';
 
@@ -470,10 +471,11 @@ function Login() {
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, pt: 2 }}>
           {qrAuthUrl ? (
             <>
-              <img
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(qrAuthUrl)}`}
-                alt="LINE 授權 QR code"
-                style={{ width: 260, height: 260 }}
+              <QRCodeCanvas
+                value={qrAuthUrl}
+                size={260}
+                includeMargin
+                level="M"
               />
               <Typography variant="body2" color="text.secondary" align="center">
                 使用手機 LINE 掃描 QR 碼完成登入。若 QR 過期，可點擊重新產生。
