@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.staticfiles import StaticFiles
 import logging
 import time
 from collections import defaultdict, deque
@@ -15,6 +16,7 @@ from contextlib import asynccontextmanager
 import os
 import pytz
 from datetime import datetime
+from pathlib import Path
 
 from app.core.config import settings
 from app.core.database import engine, Base, create_tables
@@ -221,6 +223,14 @@ app.add_middleware(
 # 註冊所有路由
 for router in routers:
     app.include_router(router, prefix="/api")
+
+# 掛載前端靜態資源（favicon等）- 掛載到 /static 路徑避免與 API 路由衝突
+frontend_public_path = Path(__file__).parent.parent / "frontend" / "public"
+if frontend_public_path.exists():
+    app.mount("/static", StaticFiles(directory=str(frontend_public_path)), name="static")
+    logger.info(f"✅ 已掛載前端靜態資源: {frontend_public_path}")
+else:
+    logger.warning(f"⚠️ 前端靜態資源目錄不存在: {frontend_public_path}")
 
 # 添加調試中間件（僅在生產環境用於調試）
 @app.middleware("http")
