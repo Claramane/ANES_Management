@@ -19,16 +19,8 @@
       align-items: center;
       justify-content: center;
       padding: 16px;
-    }
-
-    .container {
-      background: white;
-      border-radius: 4px;
-      border: 1px solid #e0e0e0;
-      max-width: 400px;
-      width: 100%;
-      padding: 40px 32px;
       text-align: center;
+      color: #212121;
     }
 
     h2 {
@@ -45,45 +37,7 @@
       margin-bottom: 24px;
     }
 
-    .steps {
-      background: #fafafa;
-      border: 1px solid #e0e0e0;
-      border-radius: 4px;
-      padding: 16px;
-      margin-bottom: 24px;
-      text-align: left;
-    }
-
-    .step {
-      display: flex;
-      align-items: flex-start;
-      margin-bottom: 10px;
-      font-size: 13px;
-      color: #424242;
-    }
-
-    .step:last-child {
-      margin-bottom: 0;
-    }
-
-    .step-number {
-      background: #e0e0e0;
-      color: #757575;
-      width: 20px;
-      height: 20px;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 11px;
-      font-weight: 500;
-      flex-shrink: 0;
-      margin-right: 10px;
-      margin-top: 1px;
-    }
-
     .button {
-      width: 100%;
       padding: 10px 16px;
       background: #f5f5f5;
       color: #616161;
@@ -94,10 +48,6 @@
       cursor: pointer;
       transition: background 0.2s;
       box-shadow: none;
-    }
-
-    .button:hover {
-      background: #eeeeee;
     }
 
     /* 行動裝置優化 */
@@ -135,31 +85,13 @@
   </style>
 </head>
 <body>
-  <div class="container">
+  <div>
     <h2>尚未綁定 LINE 帳號</h2>
 
     <p class="message">
-      您的帳號尚未綁定 LINE，無法使用 QR Code 快速登入。
+      您的帳號尚未綁定 LINE，無法使用 QR Code 快速登入。<br>
+      請回到桌機，用帳密登入並在「設定」頁完成 LINE 綁定。
     </p>
-
-    <div class="steps">
-      <div class="step">
-        <span class="step-number">1</span>
-        <span>返回桌機使用帳號密碼登入系統</span>
-      </div>
-      <div class="step">
-        <span class="step-number">2</span>
-        <span>進入「設定」頁面</span>
-      </div>
-      <div class="step">
-        <span class="step-number">3</span>
-        <span>完成 LINE 帳號綁定</span>
-      </div>
-      <div class="step">
-        <span class="step-number">4</span>
-        <span>下次即可使用 QR Code 快速登入</span>
-      </div>
-    </div>
 
     <button class="button" onclick="window.close();">關閉此頁面</button>
   </div>

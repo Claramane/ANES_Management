@@ -110,6 +110,10 @@ const Settings = () => {
     if (params.get('line_status') === 'need_binding') {
       setLineMessage('LINE 授權成功，請確認綁定');
       setLineBindDialogOpen(true);
+      // 清掉參數，避免後續刷新還看到 need_binding
+      params.delete('line_status');
+      const newUrl = `${window.location.pathname}${params.toString() ? '?' + params.toString() : ''}`;
+      window.history.replaceState(null, '', newUrl);
     }
   }, []);
 
@@ -235,6 +239,8 @@ const Settings = () => {
           line_user_id: resp.data.line_user_id,
           picture_url: resp.data.picture_url,
         });
+        // 綁定成功後回到乾淨的 /settings，避免殘留參數
+        window.history.replaceState(null, '', '/settings');
       }
     } catch (err) {
       const detail = err.response?.data?.detail;
