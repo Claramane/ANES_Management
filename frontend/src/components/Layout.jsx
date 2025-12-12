@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
   AppBar,
@@ -44,8 +44,22 @@ function Layout() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [desktopOpen, setDesktopOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);
+  const [lineAvatarUrl, setLineAvatarUrl] = useState(null);
 
   const isHeadNurse = user?.role === 'head_nurse' || user?.role === 'admin';
+
+  useEffect(() => {
+    const syncAvatar = () => {
+      setLineAvatarUrl(localStorage.getItem('line_avatar_url') || null);
+    };
+    syncAvatar();
+    window.addEventListener('storage', syncAvatar);
+    window.addEventListener('line-avatar-updated', syncAvatar);
+    return () => {
+      window.removeEventListener('storage', syncAvatar);
+      window.removeEventListener('line-avatar-updated', syncAvatar);
+    };
+  }, []);
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
@@ -202,16 +216,16 @@ function Layout() {
             aria-controls="menu-appbar"
             aria-haspopup="true"
             onClick={handleProfileMenuOpen}
-            color="inherit"
+          color="inherit"
+        >
+          <Avatar
+            sx={{ width: 32, height: 32 }}
+            src={lineAvatarUrl || undefined}
           >
-            <Avatar
-              sx={{ width: 32, height: 32 }}
-              src={localStorage.getItem('line_avatar_url') || undefined}
-            >
-              {!localStorage.getItem('line_avatar_url') &&
-                (user?.full_name?.charAt(0) || user?.username?.charAt(0) || 'U')}
-            </Avatar>
-          </IconButton>
+            {!lineAvatarUrl &&
+              (user?.full_name?.charAt(0) || user?.username?.charAt(0) || 'U')}
+          </Avatar>
+        </IconButton>
           <Menu
             id="menu-appbar"
             anchorEl={anchorEl}

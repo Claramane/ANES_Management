@@ -117,15 +117,16 @@ const Settings = () => {
   useEffect(() => {
     const fetchLineStatus = async () => {
       try {
-        const resp = await api.get('/auth/line/status');
-        setLineStatus(resp.data);
-        if (resp.data?.picture_url) {
-          localStorage.setItem('line_avatar_url', resp.data.picture_url);
-        }
-      } catch (err) {
-        // 未綁定時忽略
+      const resp = await api.get('/auth/line/status');
+      setLineStatus(resp.data);
+      if (resp.data?.picture_url) {
+        localStorage.setItem('line_avatar_url', resp.data.picture_url);
+        window.dispatchEvent(new Event('line-avatar-updated'));
       }
-    };
+    } catch (err) {
+      // 未綁定時忽略
+    }
+  };
     fetchLineStatus();
   }, []);
 
@@ -226,6 +227,7 @@ const Settings = () => {
         setLineBindDialogOpen(false);
         if (resp.data?.picture_url) {
           localStorage.setItem('line_avatar_url', resp.data.picture_url);
+          window.dispatchEvent(new Event('line-avatar-updated'));
         }
         setLineStatus({
           bound: true,
@@ -245,11 +247,12 @@ const Settings = () => {
     setLineLoading(true);
     setLineMessage('');
     try {
-      await api.delete('/auth/line/unbind');
-      setLineStatus({ bound: false });
-      localStorage.removeItem('line_avatar_url');
-      setLineMessage('LINE 已解除綁定');
-    } catch (err) {
+    await api.delete('/auth/line/unbind');
+    setLineStatus({ bound: false });
+    localStorage.removeItem('line_avatar_url');
+    window.dispatchEvent(new Event('line-avatar-updated'));
+    setLineMessage('LINE 已解除綁定');
+  } catch (err) {
       const detail = err.response?.data?.detail;
       const msg = typeof detail === 'object' ? JSON.stringify(detail) : detail;
       setLineMessage(msg || err.message || '解除綁定失敗');
