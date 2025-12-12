@@ -14,6 +14,8 @@ class UserBase(BaseModel):
     hire_date: Optional[date] = None  # 入職日期
     is_active: Optional[bool] = True  # 是否啟用
     deactivated_at: Optional[datetime] = None  # 停權時間
+    picture_url: Optional[str] = None  # LINE 頭像或其他頭像來源
+    line_avatar_url: Optional[str] = None  # 對前端一致性的別名
 
 # 用於創建用戶
 class UserCreate(UserBase):

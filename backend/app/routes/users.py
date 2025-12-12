@@ -204,8 +204,19 @@ async def get_online_users(
             User.last_activity_time.desc().nulls_last(),
             User.last_login_time.desc().nulls_last()
         ).all()
-        
-        return online_users
+
+        # 注入 LINE 頭像
+        result = []
+        for u in online_users:
+            item = u.__dict__.copy()
+            line_avatar = None
+            if getattr(u, "line_account", None) and u.line_account.picture_url:
+                line_avatar = u.line_account.picture_url
+            item["line_avatar_url"] = line_avatar
+            item["picture_url"] = line_avatar
+            result.append(item)
+
+        return result
         
     except Exception as e:
         logger.error(f"獲取在線用戶時發生錯誤: {str(e)}")

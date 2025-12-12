@@ -78,6 +78,7 @@ const Settings = () => {
   const [lineLoading, setLineLoading] = useState(false);
   const [lineMessage, setLineMessage] = useState('');
   const [lineBindDialogOpen, setLineBindDialogOpen] = useState(false);
+  const [lineUnbindDialogOpen, setLineUnbindDialogOpen] = useState(false);
   const [lineBindForm, setLineBindForm] = useState({ employeeId: '', password: '' });
   const [lineBindError, setLineBindError] = useState('');
   const [lineStatus, setLineStatus] = useState({ bound: false });
@@ -249,16 +250,21 @@ const Settings = () => {
     }
   };
 
-  const handleLineUnbind = async () => {
+  const handleLineUnbindClick = () => {
+    setLineUnbindDialogOpen(true);
+  };
+
+  const handleLineUnbindConfirm = async () => {
     setLineLoading(true);
     setLineMessage('');
+    setLineUnbindDialogOpen(false);
     try {
-    await api.delete('/auth/line/unbind');
-    setLineStatus({ bound: false });
-    localStorage.removeItem('line_avatar_url');
-    window.dispatchEvent(new Event('line-avatar-updated'));
-    setLineMessage('LINE 已解除綁定');
-  } catch (err) {
+      await api.delete('/auth/line/unbind');
+      setLineStatus({ bound: false });
+      localStorage.removeItem('line_avatar_url');
+      window.dispatchEvent(new Event('line-avatar-updated'));
+      setLineMessage('LINE 已解除綁定');
+    } catch (err) {
       const detail = err.response?.data?.detail;
       const msg = typeof detail === 'object' ? JSON.stringify(detail) : detail;
       setLineMessage(msg || err.message || '解除綁定失敗');
@@ -513,7 +519,7 @@ const Settings = () => {
             <Button
               variant="contained"
               color="error"
-              onClick={handleLineUnbind}
+              onClick={handleLineUnbindClick}
               disabled={lineLoading}
             >
               {lineLoading ? <CircularProgress size={24} /> : '解除綁定'}
@@ -855,7 +861,7 @@ const Settings = () => {
           </Grid>
           <Grid item xs={12} sm={6}>
             <Typography variant="body1">
-              最後更新: 2025-10-01
+              最後更新: 2025-12-12
             </Typography>
           </Grid>
         </Grid>
@@ -904,6 +910,48 @@ const Settings = () => {
           </Button>
           <Button onClick={handlePasskeyDeleteConfirm} color="error" variant="contained">
             確認刪除
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* LINE 解除綁定確認對話框 */}
+      <Dialog
+        open={lineUnbindDialogOpen}
+        onClose={() => setLineUnbindDialogOpen(false)}
+      >
+        <DialogTitle sx={{ color: 'error.main', fontWeight: 'bold' }}>
+          確認解除 LINE 綁定
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            您即將解除 LINE 帳號的綁定：
+          </DialogContentText>
+          {lineStatus.bound && (
+            <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.100', borderRadius: 1, display: 'flex', alignItems: 'center', gap: 2 }}>
+              <Avatar src={lineStatus.picture_url} alt="LINE avatar" />
+              <Box>
+                <Typography variant="body2">
+                  <strong>{lineStatus.display_name}</strong>
+                </Typography>
+              </Box>
+            </Box>
+          )}
+          <Alert severity="warning" icon={false} sx={{ mt: 2 }}>
+            <Typography variant="body2">
+              <strong>重要提醒：</strong>
+              <br />• 解除綁定後將無法使用 LINE 快速登入
+              <br />• 此操作無法撤銷
+              <br />• 您仍可使用密碼或 Passkey 登入系統
+              <br />• 如需再次使用 LINE 登入，需要重新綁定
+            </Typography>
+          </Alert>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setLineUnbindDialogOpen(false)}>
+            取消
+          </Button>
+          <Button onClick={handleLineUnbindConfirm} color="error" variant="contained">
+            確認解除綁定
           </Button>
         </DialogActions>
       </Dialog>

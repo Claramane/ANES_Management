@@ -1769,11 +1769,12 @@ function Dashboard() {
                                   width: 32, 
                                   height: 32, 
                                   fontSize: '0.8rem',
-                                  backgroundColor: onlineUser.isWorking ? '#f44336' : '#9e9e9e', // 上班時間顯示紅色
+                                  backgroundColor: onlineUser.line_avatar_url ? 'transparent' : (onlineUser.isWorking ? '#f44336' : '#9e9e9e'), // 上班時間顯示紅色
                                   color: 'white'
                                 }}
+                                src={onlineUser.line_avatar_url || undefined}
                               >
-                                {onlineUser.full_name?.charAt(0) || onlineUser.username?.charAt(0) || '?'}
+                                {!onlineUser.line_avatar_url && (onlineUser.full_name?.charAt(0) || onlineUser.username?.charAt(0) || '?')}
                               </Avatar>
                             </ListItemAvatar>
                             <ListItemText
@@ -1782,24 +1783,26 @@ function Dashboard() {
                                   <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
                                     {onlineUser.full_name || onlineUser.username}
                                   </Typography>
-                                  <Chip 
-                                    label={onlineUser.todayShift || 'O'} 
-                                    size="small" 
-                                    sx={{ 
-                                      backgroundColor: SHIFT_COLORS[onlineUser.todayShift] || '#9e9e9e', // 手機版班表顏色 Chip
-                                      color: onlineUser.todayShift === 'O' ? 'black' : 'white',
-                                      height: '18px',
-                                      minWidth: '18px',
-                                      fontSize: '10px',
-                                      '& .MuiChip-label': {
-                                        padding: '0 4px',
+                                  {onlineUser.role !== 'doctor' && onlineUser.role !== 'admin' && (
+                                    <Chip
+                                      label={onlineUser.todayShift || 'O'}
+                                      size="small"
+                                      sx={{
+                                        backgroundColor: SHIFT_COLORS[onlineUser.todayShift] || '#9e9e9e', // 手機版班表顏色 Chip
+                                        color: onlineUser.todayShift === 'O' ? 'black' : 'white',
+                                        height: '18px',
+                                        minWidth: '18px',
                                         fontSize: '10px',
-                                        fontWeight: 'bold'
-                                      }
-                                    }}
-                                  />
+                                        '& .MuiChip-label': {
+                                          padding: '0 4px',
+                                          fontSize: '10px',
+                                          fontWeight: 'bold'
+                                        }
+                                      }}
+                                    />
+                                  )}
                                   {/* 只對非admin和非麻醉科醫師顯示工作時間狀態 */}
-                                  {onlineUser.role !== 'admin' && !onlineUser.identity?.includes('麻醉科醫師') && (
+                                  {onlineUser.role !== 'admin' && !onlineUser.identity?.includes('麻醉科醫師') && onlineUser.role !== 'doctor' && (
                                   <Chip 
                                     label={onlineUser.isWorking ? '上班中' : '非上班時間'} 
                                     size="small" 
@@ -1885,11 +1888,12 @@ function Dashboard() {
                                   width: 32, 
                                   height: 32, 
                                   fontSize: '0.8rem',
-                                  backgroundColor: onlineUser.isWorking ? '#f44336' : '#9e9e9e', // 上班時間顯示紅色
+                                  backgroundColor: onlineUser.line_avatar_url ? 'transparent' : (onlineUser.isWorking ? '#f44336' : '#9e9e9e'), // 上班時間顯示紅色
                                   color: 'white'
                                 }}
+                                src={onlineUser.line_avatar_url || undefined}
                               >
-                                {onlineUser.full_name?.charAt(0) || onlineUser.username?.charAt(0) || '?'}
+                                {!onlineUser.line_avatar_url && (onlineUser.full_name?.charAt(0) || onlineUser.username?.charAt(0) || '?')}
                               </Avatar>
                             </ListItemAvatar>
                             <ListItemText
@@ -1898,24 +1902,26 @@ function Dashboard() {
                                   <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
                                     {onlineUser.full_name || onlineUser.username}
                                   </Typography>
-                                  <Chip 
-                                    label={onlineUser.todayShift || 'O'} 
-                                    size="small" 
-                                    sx={{ 
-                                      backgroundColor: SHIFT_COLORS[onlineUser.todayShift] || '#9e9e9e', // 桌面版班表顏色 Chip
-                                      color: onlineUser.todayShift === 'O' ? 'black' : 'white',
-                                      height: '18px',
-                                      minWidth: '18px',
-                                      fontSize: '10px',
-                                      '& .MuiChip-label': {
-                                        padding: '0 4px',
+                                  {onlineUser.role !== 'doctor' && onlineUser.role !== 'admin' && (
+                                    <Chip
+                                      label={onlineUser.todayShift || 'O'}
+                                      size="small"
+                                      sx={{
+                                        backgroundColor: SHIFT_COLORS[onlineUser.todayShift] || '#9e9e9e', // 桌面版班表顏色 Chip
+                                        color: onlineUser.todayShift === 'O' ? 'black' : 'white',
+                                        height: '18px',
+                                        minWidth: '18px',
                                         fontSize: '10px',
-                                        fontWeight: 'bold'
-                                      }
-                                    }}
-                                  />
+                                        '& .MuiChip-label': {
+                                          padding: '0 4px',
+                                          fontSize: '10px',
+                                          fontWeight: 'bold'
+                                        }
+                                      }}
+                                    />
+                                  )}
                                   {/* 只對非admin和非麻醉科醫師顯示工作時間狀態 */}
-                                  {onlineUser.role !== 'admin' && !onlineUser.identity?.includes('麻醉科醫師') && (
+                                  {onlineUser.role !== 'admin' && !onlineUser.identity?.includes('麻醉科醫師') && onlineUser.role !== 'doctor' && (
                                   <Chip 
                                     label={onlineUser.isWorking ? '上班中' : '非上班時間'} 
                                     size="small" 

@@ -177,27 +177,27 @@ python backend/scripts/reset_logs.py         # 重設應用程式日誌
 #### 直接使用 psql 操作 PostgreSQL
 ```bash
 # 連接到本地 PostgreSQL 資料庫
-PGPASSWORD=anes_password psql -h localhost -U anes_user -d anes_db
+PGPASSWORD=postgres psql -h 127.0.0.1 -U jasmac -d anes_dev
 
 # 執行單行 SQL 查詢
-PGPASSWORD=anes_password psql -h localhost -U anes_user -d anes_db -c "SELECT * FROM users LIMIT 10;"
+PGPASSWORD=postgres psql -h 127.0.0.1 -U jasmac -d anes_dev -c "SELECT * FROM users LIMIT 10;"
 
 # 常用查詢範例
 # 查看表格結構
-PGPASSWORD=anes_password psql -h localhost -U anes_user -d anes_db -c "\d users"
+PGPASSWORD=postgres psql -h 127.0.0.1 -U jasmac -d anes_dev -c "\d users"
 
 # 查詢特定用戶
-PGPASSWORD=anes_password psql -h localhost -U anes_user -d anes_db -c "SELECT id, username, full_name, identity, role FROM users WHERE username = '02003';"
+PGPASSWORD=postgres psql -h 127.0.0.1 -U jasmac -d anes_dev -c "SELECT id, username, full_name, identity, role FROM users WHERE username = '02003';"
 
 # 更新用戶資料
-PGPASSWORD=anes_password psql -h localhost -U anes_user -d anes_db -c "UPDATE users SET identity = '麻醉科醫師', role = 'admin' WHERE username = '02003';"
+PGPASSWORD=postgres psql -h 127.0.0.1 -U jasmac -d anes_dev -c "UPDATE users SET identity = '麻醉科醫師', role = 'admin' WHERE username = '02003';"
 ```
 
-**資料庫連線資訊**:
-- Host: localhost
-- User: anes_user
-- Password: anes_password
-- Database: anes_db
+**本地資料庫連線資訊**:
+- Host: 127.0.0.1
+- User: jasmac
+- Password: postgres
+- Database: anes_dev
 
 ## 架構概覽
 

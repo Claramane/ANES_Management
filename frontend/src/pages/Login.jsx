@@ -281,10 +281,10 @@ function Login() {
       navigate('/dashboard');
     } catch (error) {
       console.error('Passkey登入失敗:', error);
-      
+
       // 更詳細的錯誤處理
       let errorMessage = 'Passkey登入失敗';
-      
+
       if (error.name === 'NotAllowedError') {
         errorMessage = '用戶取消了認證或認證失敗';
       } else if (error.name === 'InvalidStateError') {
@@ -296,11 +296,21 @@ function Login() {
       } else if (error.name === 'AbortError') {
         errorMessage = '認證過程被中止';
       } else if (error.response?.data?.detail) {
-        errorMessage = error.response.data.detail;
+        const detail = error.response.data.detail;
+        // 翻譯常見的英文錯誤訊息
+        if (detail.includes('No passkeys available')) {
+          errorMessage = '此帳號尚未在本設備註冊 Passkey，請先使用密碼登入後至設定頁面註冊';
+        } else if (detail.includes('User not found')) {
+          errorMessage = '找不到此用戶';
+        } else if (detail.includes('Invalid credential')) {
+          errorMessage = 'Passkey 憑證無效';
+        } else {
+          errorMessage = detail;
+        }
       } else if (error.message) {
         errorMessage = error.message;
       }
-      
+
       setFormError(errorMessage);
     } finally {
       setIsPasskeyLoading(false);
@@ -488,6 +498,15 @@ function Login() {
                   >
                     密碼登入
                   </Button>
+
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    align="center"
+                    sx={{ mt: 1.5 }}
+                  >
+                    使用Passkey登入請先輸入員工編號
+                  </Typography>
                 </Box>
               </Collapse>
             </Box>
