@@ -506,7 +506,7 @@ function Login() {
           © {new Date().getFullYear()} 恩主公麻醉科班表小查查
         </Typography>
         <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
-          v0.9.5 beta | 最後更新: 2025-10-01
+          v0.10.0 beta | 最後更新: 2025-12-12
         </Typography>
       </Box>
 
