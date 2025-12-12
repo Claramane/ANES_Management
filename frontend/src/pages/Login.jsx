@@ -16,9 +16,10 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  Divider
+  Divider,
+  IconButton
 } from '@mui/material';
-import { Fingerprint } from '@mui/icons-material';
+import { Fingerprint, Refresh } from '@mui/icons-material';
 import { QRCodeCanvas } from 'qrcode.react';
 import { useAuthStore } from '../store/authStore';
 import { api } from '../utils/api';
@@ -501,11 +502,16 @@ function Login() {
       </Box>
 
       <Dialog open={qrModalOpen} onClose={() => setQrModalOpen(false)} fullWidth maxWidth="xs">
-        <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
           使用 LINE 掃碼登入
-          <Button onClick={() => setQrModalOpen(false)} sx={{ minWidth: 0, padding: '4px' }}>
-            ×
-          </Button>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+            <IconButton size="medium" onClick={handleLineQrLogin} disabled={isLineQrLoading}>
+              <Refresh />
+            </IconButton>
+            <IconButton size="medium" onClick={() => setQrModalOpen(false)}>
+              ×
+            </IconButton>
+          </Box>
         </DialogTitle>
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, pt: 2 }}>
           {qrAuthUrl ? (
@@ -517,23 +523,13 @@ function Login() {
                 level="M"
               />
               <Typography variant="body2" color="text.secondary" align="center">
-                使用手機 LINE 掃描 QR 碼完成登入。若 QR 過期，可點擊重新產生。
+                使用手機 LINE 掃描 QR 碼完成登入。
               </Typography>
             </>
           ) : (
             <Typography>正在產生 QR Code...</Typography>
           )}
         </DialogContent>
-        <DialogActions>
-          <Button
-            onClick={handleLineQrLogin}
-            disabled={isLineQrLoading}
-            variant="contained"
-            sx={{ backgroundColor: '#06C755', ':hover': { backgroundColor: '#06b84f' } }}
-          >
-            {isLineQrLoading ? <CircularProgress size={20} /> : '重新產生'}
-          </Button>
-        </DialogActions>
       </Dialog>
     </Container>
   );
