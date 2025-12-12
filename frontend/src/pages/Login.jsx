@@ -10,9 +10,8 @@ import {
   Avatar,
   Alert,
   CircularProgress,
-  Divider,
-  IconButton,
-  Tooltip
+  Tooltip,
+  Collapse
 } from '@mui/material';
 import { Fingerprint } from '@mui/icons-material';
 import { useAuthStore } from '../store/authStore';
@@ -26,6 +25,7 @@ function Login() {
   const [formError, setFormError] = useState('');
   const [isPasskeyLoading, setIsPasskeyLoading] = useState(false);
   const [isLineLoading, setIsLineLoading] = useState(false);
+  const [isPasswordMode, setIsPasswordMode] = useState(false);
 
   useEffect(() => {
     const savedUsername = localStorage.getItem('lastUsername');
@@ -80,9 +80,13 @@ function Login() {
     e.preventDefault();
     setFormError('');
 
-    // 表單驗證
+    if (!isPasswordMode) {
+      setIsPasswordMode(true);
+      return;
+    }
+
     if (!username.trim()) {
-      setFormError('請輸入用戶名');
+      setFormError('請輸入員工編號');
       return;
     }
     if (!password) {
@@ -90,14 +94,12 @@ function Login() {
       return;
     }
 
-    // 執行登入
     const success = await login(username, password);
     if (success) {
       const trimmed = username.trim();
       if (trimmed) {
         localStorage.setItem('lastUsername', trimmed);
       }
-      // 設置登入方式標記
       localStorage.setItem('loginMethod', 'password');
       navigate('/dashboard');
     }
@@ -108,6 +110,10 @@ function Login() {
     setFormError('');
 
     try {
+      if (!username.trim()) {
+        throw new Error('請先輸入員工編號再使用 Passkey 登入');
+      }
+
       console.log('開始Passkey登入流程...');
       const rememberedUsername = username.trim() || localStorage.getItem('lastUsername') || '';
       // 開始WebAuthn認證流程
@@ -333,53 +339,81 @@ function Login() {
                 onChange={(e) => setUsername(e.target.value)}
                 disabled={isLoading || isPasskeyLoading}
               />
-              <TextField
-                margin="normal"
-                required
-                fullWidth
-                name="password"
-                label="密碼"
-                type="password"
-                id="password"
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                disabled={isLoading || isPasskeyLoading}
-              />
-              <Button
-                type="submit"
-                fullWidth
-                variant="contained"
-                sx={{ mt: 3, mb: 2, py: 1.2 }}
-                disabled={isLoading || isPasskeyLoading}
-              >
-                {isLoading ? <CircularProgress size={24} /> : '登入'}
-              </Button>
-              
-              <Divider sx={{ my: 2 }}>或</Divider>
-              
-              <Tooltip title="使用Passkey登入">
-                <Button
-                  fullWidth
-                  variant="outlined"
-                  startIcon={<Fingerprint />}
-                  onClick={handlePasskeyLogin}
-                  disabled={isLoading || isPasskeyLoading}
-                  sx={{ py: 1.2 }}
-                >
-                  {isPasskeyLoading ? <CircularProgress size={24} /> : '使用Passkey登入'}
-                </Button>
-              </Tooltip>
 
-              <Button
-                fullWidth
-                variant="contained"
-                onClick={handleLineLogin}
-                disabled={isLoading || isLineLoading}
-                sx={{ mt: 1.5, py: 1.2, backgroundColor: '#06C755', ':hover': { backgroundColor: '#06b84f' } }}
-              >
-                {isLineLoading ? <CircularProgress size={24} /> : '使用LINE登入'}
-              </Button>
+              <Collapse in={isPasswordMode} timeout={300} unmountOnExit>
+                <TextField
+                  margin="normal"
+                  required
+                  fullWidth
+                  name="password"
+                  label="密碼"
+                  type="password"
+                  id="password"
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  disabled={isLoading}
+                />
+                <Box sx={{ display: 'flex', gap: 1, mt: 2 }}>
+                  <Button
+                    type="submit"
+                    fullWidth
+                    variant="contained"
+                    disabled={isLoading}
+                  >
+                    {isLoading ? <CircularProgress size={24} /> : '登入'}
+                  </Button>
+                  <Button
+                    fullWidth
+                    variant="outlined"
+                    onClick={() => {
+                      setIsPasswordMode(false);
+                      setPassword('');
+                      setFormError('');
+                    }}
+                  >
+                    取消
+                  </Button>
+                </Box>
+              </Collapse>
+
+              <Collapse in={!isPasswordMode} timeout={300} unmountOnExit>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, mt: 2 }}>
+                  <Tooltip title="使用Passkey登入">
+                    <Button
+                      fullWidth
+                      variant="outlined"
+                      startIcon={<Fingerprint />}
+                      onClick={handlePasskeyLogin}
+                      disabled={isLoading || isPasskeyLoading}
+                      sx={{ py: 1.2 }}
+                    >
+                      {isPasskeyLoading ? <CircularProgress size={24} /> : '使用Passkey登入'}
+                    </Button>
+                  </Tooltip>
+
+                  <Button
+                    fullWidth
+                    variant="contained"
+                    onClick={handleLineLogin}
+                    disabled={isLoading || isLineLoading}
+                    sx={{ py: 1.2, backgroundColor: '#06C755', ':hover': { backgroundColor: '#06b84f' } }}
+                  >
+                    {isLineLoading ? <CircularProgress size={24} /> : '使用LINE登入'}
+                  </Button>
+
+                  <Button
+                    type="button"
+                    fullWidth
+                    variant="text"
+                    disabled={isLoading}
+                    sx={{ py: 1.2 }}
+                    onClick={() => setIsPasswordMode(true)}
+                  >
+                    密碼登入
+                  </Button>
+                </Box>
+              </Collapse>
             </Box>
           </Box>
         </Paper>

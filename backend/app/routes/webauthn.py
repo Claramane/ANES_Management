@@ -325,30 +325,24 @@ async def authenticate_start(
     payload: Optional[dict] = Body(default=None),
     db: Session = Depends(get_db)
 ):
-    """開始WebAuthn認證流程（可選 username，提供則僅列該用戶憑證）"""
+    """開始WebAuthn認證流程（需指定 username，僅回傳該用戶憑證）"""
     username = None
     if payload and isinstance(payload, dict):
         username = payload.get("username")
 
-    user = None
-    credentials = []
-    if username:
-        user = db.query(User).filter(User.username == username).first()
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
-        credentials = db.query(WebAuthnCredential).filter(
-            WebAuthnCredential.user_id == user.id,
-            WebAuthnCredential.is_active == True
-        ).all()
-        if not credentials:
-            raise HTTPException(status_code=400, detail="No passkeys available for this user")
-    else:
-        # 兼容未填 username 的情境：提供所有 active 憑證（原行為）
-        credentials = db.query(WebAuthnCredential).filter(
-            WebAuthnCredential.is_active == True
-        ).all()
-        if not credentials:
-            raise HTTPException(status_code=400, detail="No passkeys available")
+    if not username:
+        raise HTTPException(status_code=400, detail="Username is required for passkey authentication")
+
+    user = db.query(User).filter(User.username == username).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    credentials = db.query(WebAuthnCredential).filter(
+        WebAuthnCredential.user_id == user.id,
+        WebAuthnCredential.is_active == True
+    ).all()
+    if not credentials:
+        raise HTTPException(status_code=400, detail="No passkeys available for this user")
     
     # 生成認證選項
     options = generate_authentication_options(
