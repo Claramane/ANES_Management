@@ -457,7 +457,7 @@ function Login() {
                   <Tooltip title="使用Passkey登入">
                     <Button
                       fullWidth
-                      variant="outlined"
+                      variant="contained"
                       startIcon={<Fingerprint />}
                       onClick={handlePasskeyLogin}
                       disabled={isLoading || isPasskeyLoading}
@@ -470,19 +470,9 @@ function Login() {
                   <Button
                     fullWidth
                     variant="contained"
-                    onClick={handleLineLogin}
-                    disabled={isLoading || isLineLoading}
-                    sx={{ py: 1.2, backgroundColor: '#06C755', ':hover': { backgroundColor: '#06b84f' } }}
-                  >
-                    {isLineLoading ? <CircularProgress size={24} /> : '使用LINE登入'}
-                  </Button>
-
-                  <Button
-                    fullWidth
-                    variant="outlined"
                     onClick={handleLineQrLogin}
                     disabled={isLoading || isLineQrLoading}
-                    sx={{ py: 1.2, borderColor: '#06C755', color: '#06C755', ':hover': { borderColor: '#06b84f', backgroundColor: '#e9f9ef' } }}
+                    sx={{ py: 1.2, backgroundColor: '#06C755', color: '#fff', ':hover': { backgroundColor: '#06b84f' } }}
                   >
                     {isLineQrLoading ? <CircularProgress size={24} /> : '使用LINE掃碼登入'}
                   </Button>
@@ -511,7 +501,12 @@ function Login() {
       </Box>
 
       <Dialog open={qrModalOpen} onClose={() => setQrModalOpen(false)} fullWidth maxWidth="xs">
-        <DialogTitle>使用 LINE 掃碼登入</DialogTitle>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          使用 LINE 掃碼登入
+          <Button onClick={() => setQrModalOpen(false)} sx={{ minWidth: 0, padding: '4px' }}>
+            ×
+          </Button>
+        </DialogTitle>
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, pt: 2 }}>
           {qrAuthUrl ? (
             <>
@@ -524,21 +519,12 @@ function Login() {
               <Typography variant="body2" color="text.secondary" align="center">
                 使用手機 LINE 掃描 QR 碼完成登入。若 QR 過期，可點擊重新產生。
               </Typography>
-              <Divider flexItem />
-              <Button
-                variant="outlined"
-                size="small"
-                onClick={() => window.open(qrAuthUrl, '_blank', 'noopener')}
-              >
-                無法掃描？改用連結開啟
-              </Button>
             </>
           ) : (
             <Typography>正在產生 QR Code...</Typography>
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setQrModalOpen(false)}>關閉</Button>
           <Button
             onClick={handleLineQrLogin}
             disabled={isLineQrLoading}
