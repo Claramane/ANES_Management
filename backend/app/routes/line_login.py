@@ -107,15 +107,23 @@ async def line_login_callback(request: Request, code: str, state: str, db: Sessi
     LINE 授權回調：交換 token -> 驗證 id_token -> 發 JWT 或要求綁定。
     """
     session_id = None
+    qr_ctx = None
     if ":" in state:
         state, session_id = state.split(":", 1)
+        qr_ctx = qr_sessions.get(session_id)
 
-    saved_state = pop_temp(request, "line_state")
-    nonce = pop_temp(request, "line_nonce")
-    redirect_override = pop_temp(request, "line_redirect")
-
-    if not saved_state or state != saved_state:
-        raise HTTPException(status_code=400, detail="Invalid state")
+    if qr_ctx:
+        # QR 模式：使用記憶體暫存驗證 state/nonce，避免跨裝置 session 失效
+        if state != qr_ctx.get("state"):
+            raise HTTPException(status_code=400, detail="Invalid state")
+        nonce = qr_ctx.get("nonce")
+        redirect_override = qr_ctx.get("redirect")
+    else:
+        saved_state = pop_temp(request, "line_state")
+        nonce = pop_temp(request, "line_nonce")
+        redirect_override = pop_temp(request, "line_redirect")
+        if not saved_state or state != saved_state:
+            raise HTTPException(status_code=400, detail="Invalid state")
 
     # 交換 token
     token_resp = await exchange_token(code)
@@ -145,6 +153,9 @@ async def line_login_callback(request: Request, code: str, state: str, db: Sessi
             qr_sessions[session_id]["status"] = "success"
             qr_sessions[session_id]["token"] = jwt_token
             qr_sessions[session_id]["message"] = None
+        if qr_ctx:
+            # 掃碼裝置（手機）回應簡短訊息即可，桌機靠輪詢拿 token
+            return JSONResponse({"status": "ok", "message": "Logged in, you can close this page"})
         target = redirect_override or settings.FRONTEND_REDIRECT_AFTER_LOGIN
         return RedirectResponse(f"{target}?token={jwt_token}")
 
@@ -159,6 +170,8 @@ async def line_login_callback(request: Request, code: str, state: str, db: Sessi
         qr_sessions[session_id]["status"] = "need_binding"
         qr_sessions[session_id]["token"] = None
         qr_sessions[session_id]["message"] = "LINE 帳號尚未綁定"
+    if qr_ctx:
+        return JSONResponse({"status": "need_binding", "message": "LINE 帳號尚未綁定"})
     return RedirectResponse(f"{target}?line_status=need_binding")
 
 

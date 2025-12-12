@@ -55,12 +55,14 @@ function Login() {
             localStorage.setItem('lastUsername', userResp.data.username);
             localStorage.setItem('loginMethod', 'line');
             setQrModalOpen(false);
+            setQrSessionId('');
             navigate('/dashboard');
             return; // stop further polling
           }
           if (status === 'need_binding') {
             setFormError('此 LINE 帳號尚未綁定，請先以密碼登入並至設定頁綁定。');
             setQrModalOpen(false);
+            setQrSessionId('');
             return;
           }
         } catch (err) {
