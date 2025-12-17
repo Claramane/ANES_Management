@@ -1069,21 +1069,6 @@ const Formula = () => {
   // 批量更新護理師group_data的函數
   const batchUpdateNurseGroupData = async () => {
     try {
-      // 從localStorage獲取認證令牌
-      const authStorage = localStorage.getItem('auth-storage');
-      let token = null;
-      
-      if (authStorage) {
-        const { state } = JSON.parse(authStorage);
-        token = state.token;
-      }
-      
-      if (!token) {
-        console.error('未找到認證令牌，請先登入');
-        setError('未找到認證令牌，請先登入');
-        return;
-      }
-
       if (pendingUpdates.length === 0) {
         setTimeout(() => setSuccess(null), 3000);
         return;
@@ -1091,29 +1076,22 @@ const Formula = () => {
 
       setLoading(true);
 
-      // 創建所有更新操作的Promise
+      // 創建所有更新操作的Promise，使用 api 實例
       const updatePromises = pendingUpdates.map(update => {
         // 構建要更新的護理師資料
         const updatedNurse = {
           group_data: JSON.stringify([update.formulaType, update.groupId])
         };
         console.log('更新護理師', update.nurseId, 'group_data:', [update.formulaType, update.groupId]);
-        // 返回API請求
-        return fetch(`/api/users/${update.nurseId}`, {
-          method: 'PUT',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(updatedNurse)
-        });
+        // 使用 api.put 而不是 fetch，自動處理 baseURL 和 Authorization
+        return api.put(`/users/${update.nurseId}`, updatedNurse);
       });
 
       // 等待所有更新完成
       const results = await Promise.all(updatePromises);
 
-      // 檢查是否所有請求都成功
-      const allSuccessful = results.every(res => res.ok);
+      // 檢查是否所有請求都成功（axios 成功請求會返回 response 對象）
+      const allSuccessful = results.every(res => res.status === 200 || res.status === 204);
 
       setLoading(false);
 
