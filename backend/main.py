@@ -178,14 +178,11 @@ app = FastAPI(
 #     app.add_middleware(HTTPSRedirectMiddleware)
 
 # 添加可信主機中間件 (開發環境允許localhost)
+env_allowed_hosts = os.getenv("ALLOWED_HOSTS", "anesmanagementbackend.zeabur.app,localhost")
+allowed_hosts_list = [host.strip() for host in env_allowed_hosts.split(",")]
 app.add_middleware(
     TrustedHostMiddleware, 
-    allowed_hosts=["*"] if not settings.IS_PRODUCTION else [
-        "anesmanagementbackend.zeabur.app",
-        "eckanesmanagement.zeabur.app",
-        "localhost",
-        "127.0.0.1"
-    ]
+    allowed_hosts=["*"] if not settings.IS_PRODUCTION else allowed_hosts_list
 )
 
 # 加入 SessionMiddleware
