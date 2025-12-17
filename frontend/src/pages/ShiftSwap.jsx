@@ -113,7 +113,7 @@ const NURSE_TYPES = {
 
 // 不同班表類型的班次設定
 const SHIFT_TYPES_BY_FORMULA = {
-  [NURSE_TYPES.ANESTHESIA_SPECIALIST]: ['D', 'A', 'N', 'O'],
+  [NURSE_TYPES.ANESTHESIA_SPECIALIST]: ['D', 'A', 'N', 'C', 'O'],
   [NURSE_TYPES.RECOVERY_NURSE]: ['A', 'K', 'C', 'F', 'O'],
   [NURSE_TYPES.ANESTHESIA_LEADER]: ['A', 'E', 'O'],
   [NURSE_TYPES.ANESTHESIA_SECRETARY]: ['B', 'E', 'O'],
@@ -868,7 +868,7 @@ const ShiftSwap = () => {
   // 獲取當前用戶可用的班別選項
   const userAvailableShifts = useMemo(() => {
     // 根據用戶身份類型獲取可用班別
-    return SHIFT_TYPES_BY_FORMULA[userNurseType] || ['D', 'A', 'N', 'O'];
+    return SHIFT_TYPES_BY_FORMULA[userNurseType] || ['D', 'A', 'N', 'C', 'O'];
   }, [userNurseType]);
 
   // 檢查是否有請求換班的權限
@@ -1553,7 +1553,7 @@ const ShiftSwap = () => {
       }
       
       // 測試用的班別循環 - 確保包含用戶護理師類型的可能班別
-      const nurseShiftTypes = SHIFT_TYPES_BY_FORMULA[userNurseType] || ['D', 'A', 'N', 'O'];
+      const nurseShiftTypes = SHIFT_TYPES_BY_FORMULA[userNurseType] || ['D', 'A', 'N', 'C', 'O'];
       console.log(`根據用戶類型 ${userNurseType} 使用班別類型:`, nurseShiftTypes);
       
       // 處理月份中的每一天

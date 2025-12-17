@@ -114,7 +114,7 @@ const ShiftSwap = () => {
     
     // 根據護理師身份返回相應的班別
     if (user.identity.includes('麻醉專科') || user.identity === 'anesthesia_specialist') {
-      return ['D', 'A', 'N', 'O'];
+      return ['D', 'A', 'N', 'C', 'O'];
     } else if (user.identity.includes('恢復室') || user.identity === 'recovery_nurse') {
       return ['A', 'K', 'C', 'F', 'O'];
     } else if (user.identity.includes('Leader') || user.identity === 'anesthesia_leader') {

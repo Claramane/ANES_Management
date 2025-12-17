@@ -47,7 +47,7 @@ export const NURSE_TYPES = {
 
 // 不同班表類型的班次設定
 export const SHIFT_TYPES_BY_FORMULA = {
-  [NURSE_TYPES.ANESTHESIA_SPECIALIST]: ['D', 'A', 'N', 'O'],
+  [NURSE_TYPES.ANESTHESIA_SPECIALIST]: ['D', 'A', 'N', 'C', 'O'],
   [NURSE_TYPES.RECOVERY_NURSE]: ['A', 'K', 'C', 'F', 'O'],
   [NURSE_TYPES.ANESTHESIA_LEADER]: ['A', 'E', 'O'],
   [NURSE_TYPES.ANESTHESIA_SECRETARY]: ['B', 'E', 'O'],
