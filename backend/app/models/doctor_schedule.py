@@ -23,7 +23,7 @@ class DayShiftDoctor(Base):
     __tablename__ = "day_shift_doctors"
 
     id = Column(Integer, primary_key=True, index=True)
-    schedule_id = Column(Integer, ForeignKey('doctor_schedules.id'), nullable=False)
+    schedule_id = Column(Integer, ForeignKey('doctor_schedules.id'), nullable=False, index=True)
     name = Column(String(50), nullable=False, comment="醫師姓名")
     summary = Column(String(100), nullable=False, comment="班表摘要")
     time = Column(String(20), nullable=False, comment="工作時間")

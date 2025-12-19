@@ -146,23 +146,27 @@ class DoctorScheduleService:
     @classmethod
     def update_doctors_active_status_by_time(cls, db: Session):
         """根據工作時間和開會時間自動更新醫師的狀態"""
+        import time
+        perf_start_time = time.time()  # 開始計時
+
         try:
             # 獲取今天的所有白班醫師
             today = now().strftime('%Y%m%d')
             today_schedule = db.query(DoctorSchedule).filter(
                 DoctorSchedule.date == today
             ).first()
-            
+
             if not today_schedule:
                 logger.info("今日無班表資料，跳過自動下班檢測")
                 return
-            
+
             current_time = now_time()
             current_datetime = now()
             updated_count = 0
             meeting_cleared_count = 0
-            
-            logger.debug(f"開始檢查醫師自動狀態更新，當前時間: {current_time}")
+            total_doctors = len(today_schedule.day_shift_doctors)
+
+            logger.debug(f"開始檢查醫師自動狀態更新，當前時間: {current_time}，醫師數量: {total_doctors}")
             
             # 檢查每個醫師的狀態
             for doctor in today_schedule.day_shift_doctors:
@@ -231,12 +235,15 @@ class DoctorScheduleService:
             
             if updated_count > 0 or meeting_cleared_count > 0:
                 db.commit()
-                logger.debug(f"自動狀態更新完成，已更新 {updated_count} 位醫師的狀態，清除 {meeting_cleared_count} 個過期開會行程")
+                execution_time = time.time() - perf_start_time
+                logger.info(f"自動狀態更新完成，處理 {total_doctors} 位醫師，已更新 {updated_count} 位醫師的狀態，清除 {meeting_cleared_count} 個過期開會行程，執行時間: {execution_time:.3f}秒")
             else:
-                logger.debug("自動狀態更新完成，無需更新醫師狀態")
-            
+                execution_time = time.time() - perf_start_time
+                logger.info(f"自動狀態更新完成，處理 {total_doctors} 位醫師，無需更新醫師狀態，執行時間: {execution_time:.3f}秒")
+
         except Exception as e:
-            logger.error(f"自動更新醫師狀態失敗: {str(e)}")
+            execution_time = time.time() - perf_start_time
+            logger.error(f"自動更新醫師狀態失敗: {str(e)}，執行時間: {execution_time:.3f}秒")
             db.rollback()
     
     @classmethod
