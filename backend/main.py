@@ -151,17 +151,25 @@ async def lifespan(app: FastAPI):
         logger.error(f"啟動醫師班表定時任務失敗: {str(e)}")
     
     yield
-    
+
     # 關閉時執行
     logger.info("🛑 正在關閉醫師班表管理系統...")
-    
+
+    # 關閉所有 WebSocket 連接
+    try:
+        from app.websocket import connection_manager
+        await connection_manager.shutdown()
+        logger.info("WebSocket 連接已全部關閉")
+    except Exception as e:
+        logger.error(f"關閉 WebSocket 連接時發生錯誤: {str(e)}")
+
     # 停止醫師班表定時任務
     try:
         doctor_schedule_task_manager.stop_scheduler()
         logger.info("醫師班表定時任務已停止")
     except Exception as e:
         logger.error(f"停止定時任務時發生錯誤: {str(e)}")
-    
+
     logger.info("✅ 系統已安全關閉")
 
 app = FastAPI(

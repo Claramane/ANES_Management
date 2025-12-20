@@ -43,7 +43,7 @@ import { format, startOfToday, getDate, getMonth, getYear, eachDayOfInterval, pa
 import { zhTW } from 'date-fns/locale';
 import { cachedScheduleDetailsRequest } from '../utils/scheduleCache';
 import { SHIFT_COLORS } from '../constants/shiftSwapConstants';
-import useHeartbeat from '../hooks/useHeartbeat';
+import useWebSocket from '../hooks/useWebSocket';
 import { doctorScheduleService } from '../utils/api';
 import { formatDoctorName, getDoctorMapping } from '../utils/doctorUtils';
 import NurseCalendar from '../components/common/NurseCalendar';
@@ -282,13 +282,19 @@ const RenderDoctorCalendarCell = ({ day }) => {
 function Dashboard() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const { 
+  const {
     selectedDate, // 獲取存儲中的選定日期
     updateSelectedDate // 獲取更新日期的函數
   } = useScheduleStore();
-  
-  // 啟用心跳功能
-  useHeartbeat();
+
+  // 啟用 WebSocket 連接
+  const {
+    isConnected: wsConnected,
+    connectionError: wsError,
+    onlineUsers: wsOnlineUsers,
+    on: wsOn,
+    off: wsOff
+  } = useWebSocket();
   
   // 🗑️ 不再使用 store 的班表數據，改用 ShiftSwap 模式直接獲取
   // monthlySchedule, isLoading: scheduleLoading, fetchMonthlySchedule - 已移除
@@ -325,10 +331,9 @@ function Dashboard() {
 
   const [showPasskeyDialog, setShowPasskeyDialog] = useState(false);
 
-  // 新增在線用戶狀態
+  // 在線用戶狀態（從 WebSocket 獲取，加上班表信息處理）
   const [onlineUsers, setOnlineUsers] = useState([]);
   const [onlineUsersLoading, setOnlineUsersLoading] = useState(true);
-  const [onlineUsersError, setOnlineUsersError] = useState(null);
 
   const today = useMemo(() => startOfToday(), []);
   const todayDate = useMemo(() => getDate(today), [today]); // 日 (1-31)
@@ -836,76 +841,74 @@ function Dashboard() {
     }
   };
 
-  // 獲取在線用戶的函數
-  const fetchOnlineUsers = async () => {
-    if (!user) return;
-    
+  // 處理從 WebSocket 接收的在線用戶數據（加上班表信息）
+  const processOnlineUsersData = useCallback(async (wsUsers) => {
+    if (!user || !wsUsers) {
+      setOnlineUsersLoading(false);
+      return;
+    }
+
     try {
       setOnlineUsersLoading(true);
-      
-      const response = await apiService.user.getOnlineUsers();
-      
-      if (response.data) {
-        // 獲取當月班表資料（用於批量獲取所有用戶班表）
-        const year = today.getFullYear();
-        const month = today.getMonth() + 1;
-        const dayIndex = getDate(today) - 1;
-        
-        let scheduleData = null;
+
+      // 獲取當月班表資料（用於批量獲取所有用戶班表）
+      const year = today.getFullYear();
+      const month = today.getMonth() + 1;
+      const dayIndex = getDate(today) - 1;
+
+      let scheduleData = null;
+      try {
+        const scheduleResponse = await apiService.schedule.getMonthlySchedule(year, month);
+        if (scheduleResponse.data && scheduleResponse.data.data &&
+            scheduleResponse.data.data[year] && scheduleResponse.data.data[year][month]) {
+          scheduleData = scheduleResponse.data.data[year][month].schedule || [];
+        }
+      } catch (error) {
+        console.log('無法獲取月班表資料，將使用默認班表:', error);
+      }
+
+      // 處理所有在線用戶的班表信息
+      const usersWithShifts = wsUsers.map((onlineUser) => {
+        let userShift = 'O'; // 默認休假
+
         try {
-          const scheduleResponse = await apiService.schedule.getMonthlySchedule(year, month);
-          if (scheduleResponse.data && scheduleResponse.data.data && 
-              scheduleResponse.data.data[year] && scheduleResponse.data.data[year][month]) {
-            scheduleData = scheduleResponse.data.data[year][month].schedule || [];
+          // 從班表數據中查找該用戶的今日班表
+          if (scheduleData) {
+            const userSchedule = scheduleData.find(nurse => String(nurse.id) === String(onlineUser.id));
+            if (userSchedule && userSchedule.shifts && userSchedule.shifts[dayIndex]) {
+              userShift = userSchedule.shifts[dayIndex];
+            }
+          }
+
+          // 如果是當前登入用戶，且有月曆數據，優先使用月曆數據
+          if (String(onlineUser.id) === String(user.id) && monthlyCalendarData.length > 0) {
+            const todayData = monthlyCalendarData
+              .flat()
+              .find(day => day.date && format(day.date, 'yyyy-MM-dd') === format(today, 'yyyy-MM-dd'));
+
+            if (todayData && todayData.shift) {
+              userShift = todayData.shift;
+            }
           }
         } catch (error) {
-          console.log('無法獲取月班表資料，將使用默認班表:', error);
+          console.log(`處理用戶 ${onlineUser.full_name} 的班表時出錯:`, error);
+          // 使用默認值 'O'，確保用戶仍然顯示在線狀態
         }
-        
-        // 處理所有在線用戶的班表信息
-        const usersWithShifts = response.data.map((onlineUser) => {
-          let userShift = 'O'; // 默認休假
-          
-          try {
-            // 從班表數據中查找該用戶的今日班表
-            if (scheduleData) {
-              const userSchedule = scheduleData.find(nurse => String(nurse.id) === String(onlineUser.id));
-              if (userSchedule && userSchedule.shifts && userSchedule.shifts[dayIndex]) {
-                userShift = userSchedule.shifts[dayIndex];
-              }
-            }
-            
-            // 如果是當前登入用戶，且有月曆數據，優先使用月曆數據
-            if (String(onlineUser.id) === String(user.id) && monthlyCalendarData.length > 0) {
-              const todayData = monthlyCalendarData
-                .flat()
-                .find(day => day.date && format(day.date, 'yyyy-MM-dd') === format(today, 'yyyy-MM-dd'));
-              
-              if (todayData && todayData.shift) {
-                userShift = todayData.shift;
-              }
-            }
-          } catch (error) {
-            console.log(`處理用戶 ${onlineUser.full_name} 的班表時出錯:`, error);
-            // 使用默認值 'O'，確保用戶仍然顯示在線狀態
-          }
-          
-          return {
-            ...onlineUser,
-            todayShift: userShift,
-            isWorking: isUserCurrentlyWorking(userShift)
-          };
-        });
-        
-        setOnlineUsers(usersWithShifts);
-      }
+
+        return {
+          ...onlineUser,
+          todayShift: userShift,
+          isWorking: isUserCurrentlyWorking(userShift)
+        };
+      });
+
+      setOnlineUsers(usersWithShifts);
     } catch (err) {
-      console.error("獲取在線用戶失敗:", err);
-      setOnlineUsersError(err.response?.data?.message || err.message || '無法加載在線用戶');
+      console.error("處理在線用戶數據失敗:", err);
     } finally {
       setOnlineUsersLoading(false);
     }
-  };
+  }, [user, today, monthlyCalendarData, isUserCurrentlyWorking]);
 
   // 獲取加班數據的函數
   const fetchOvertimeData = async () => {
@@ -1137,24 +1140,29 @@ function Dashboard() {
     }
   }, [user, selectedDate]); // 加入selectedDate依賴，確保月份變更時重新獲取班表數據
 
-  // 獲取在線用戶 - 初始加載
-  useEffect(() => {
-    if (user) {
-      // 立即獲取一次在線用戶，不等待月曆數據
-      fetchOnlineUsers();
-    }
-  }, [user]);
-
-  // 定時更新在線用戶狀態（每20秒）
+  // WebSocket 在線用戶更新處理
   useEffect(() => {
     if (!user) return;
 
-    const interval = setInterval(() => {
-      fetchOnlineUsers();
-    }, 20000); // 20秒更新一次，提升實時性
+    // 當收到 WebSocket 在線用戶更新時，處理班表信息
+    const handleOnlineUsersUpdate = (users) => {
+      console.log('[Dashboard] 收到在線用戶更新:', users);
+      processOnlineUsersData(users);
+    };
 
-    return () => clearInterval(interval);
-  }, [user]); // 移除monthlyCalendarData依賴，避免不必要的定時器重建
+    // 註冊 WebSocket 事件處理器
+    wsOn('onlineUsersUpdate', handleOnlineUsersUpdate);
+
+    // 初始處理一次（如果 WebSocket 已有數據）
+    if (wsOnlineUsers && wsOnlineUsers.length > 0) {
+      processOnlineUsersData(wsOnlineUsers);
+    }
+
+    return () => {
+      // 清理事件處理器
+      wsOff('onlineUsersUpdate');
+    };
+  }, [user, wsOn, wsOff, wsOnlineUsers, processOnlineUsersData]);
 
   // 🗑️ 舊的複雜 Effect 和函數已被 ShiftSwap 模式替代
   // Effect 4, fetchWorkAreaAssignments, processScheduleDataWithAreaCodes - 已移除
@@ -1754,9 +1762,9 @@ function Dashboard() {
                     <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
                       <CircularProgress size={24} />
                     </Box>
-                  ) : onlineUsersError ? (
+                  ) : wsError ? (
                     <Alert severity="error" sx={{ mb: 1 }}>
-                      {onlineUsersError}
+                      WebSocket 連接錯誤: {wsError}
                     </Alert>
                   ) : onlineUsers.length > 0 ? (
                     <List sx={{ p: 0, maxHeight: 200, overflowY: 'auto' }}>
@@ -1871,9 +1879,9 @@ function Dashboard() {
                     <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
                       <CircularProgress size={24} />
                     </Box>
-                  ) : onlineUsersError ? (
+                  ) : wsError ? (
                     <Alert severity="error" sx={{ mb: 1 }}>
-                      {onlineUsersError}
+                      WebSocket 連接錯誤: {wsError}
                     </Alert>
                   ) : onlineUsers.length > 0 ? (
                     <List sx={{ 
