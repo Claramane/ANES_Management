@@ -69,12 +69,31 @@ const useWebSocket = (options = {}) => {
         lastPongTimeRef.current = Date.now();
 
         // 啟動心跳
-        startHeartbeat();
-
-        // 觸發連接成功回調
-        if (options.onConnected) {
-          options.onConnected();
+        if (heartbeatIntervalRef.current) {
+          clearInterval(heartbeatIntervalRef.current);
         }
+
+        heartbeatIntervalRef.current = setInterval(() => {
+          if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+            return;
+          }
+
+          // 檢查心跳超時
+          const timeSinceLastPong = Date.now() - lastPongTimeRef.current;
+          if (timeSinceLastPong > 60000) {
+            console.error('[WebSocket] 心跳超時，重新連接');
+            wsRef.current.close();
+            return;
+          }
+
+          // 發送 ping
+          try {
+            wsRef.current.send(JSON.stringify({ type: 'ping' }));
+            console.log('[WebSocket] 發送心跳');
+          } catch (error) {
+            console.error('[WebSocket] 發送心跳失敗:', error);
+          }
+        }, HEARTBEAT_INTERVAL);
       };
 
       // 接收訊息
@@ -83,7 +102,43 @@ const useWebSocket = (options = {}) => {
           const message = JSON.parse(event.data);
           console.log('[WebSocket] 收到訊息:', message);
 
-          handleMessage(message);
+          const { type, data } = message;
+
+          switch (type) {
+            case 'connection_established':
+              console.log('[WebSocket] 連接已建立:', data);
+              break;
+
+            case 'pong':
+              lastPongTimeRef.current = Date.now();
+              console.log('[WebSocket] 收到心跳回應');
+              break;
+
+            case 'online_users_update':
+              console.log('[WebSocket] 在線用戶更新:', data);
+              setOnlineUsers(data.users || []);
+
+              if (messageHandlersRef.current.onlineUsersUpdate) {
+                messageHandlersRef.current.onlineUsersUpdate(data.users || []);
+              }
+              break;
+
+            case 'user_status_change':
+              console.log('[WebSocket] 用戶狀態變更:', data);
+
+              if (messageHandlersRef.current.userStatusChange) {
+                messageHandlersRef.current.userStatusChange(data);
+              }
+              break;
+
+            default:
+              console.log('[WebSocket] 未處理的訊息類型:', type, data);
+
+              if (messageHandlersRef.current.message) {
+                messageHandlersRef.current.message(message);
+              }
+              break;
+          }
         } catch (error) {
           console.error('[WebSocket] 解析訊息失敗:', error);
         }
@@ -93,16 +148,29 @@ const useWebSocket = (options = {}) => {
       ws.onclose = (event) => {
         console.log('[WebSocket] 連接關閉', event.code, event.reason);
         setIsConnected(false);
-        stopHeartbeat();
+
+        // 停止心跳
+        if (heartbeatIntervalRef.current) {
+          clearInterval(heartbeatIntervalRef.current);
+          heartbeatIntervalRef.current = null;
+        }
 
         // 如果不是手動關閉，嘗試重連
         if (!manualCloseRef.current) {
-          scheduleReconnect();
-        }
+          if (reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) {
+            console.error('[WebSocket] 達到最大重連次數，停止重連');
+            setConnectionError('WebSocket 重連失敗，請刷新頁面');
+            return;
+          }
 
-        // 觸發斷開回調
-        if (options.onDisconnected) {
-          options.onDisconnected();
+          const delay = RECONNECT_DELAYS[Math.min(reconnectAttemptsRef.current, RECONNECT_DELAYS.length - 1)];
+          console.log(`[WebSocket] 將在 ${delay}ms 後重連（第 ${reconnectAttemptsRef.current + 1} 次）`);
+
+          reconnectTimeoutRef.current = setTimeout(() => {
+            reconnectAttemptsRef.current += 1;
+            manualCloseRef.current = false;
+            connect();
+          }, delay);
         }
       };
 
@@ -115,9 +183,17 @@ const useWebSocket = (options = {}) => {
     } catch (error) {
       console.error('[WebSocket] 建立連接失敗:', error);
       setConnectionError(error.message);
-      scheduleReconnect();
+
+      // 重連
+      if (reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
+        const delay = RECONNECT_DELAYS[Math.min(reconnectAttemptsRef.current, RECONNECT_DELAYS.length - 1)];
+        reconnectTimeoutRef.current = setTimeout(() => {
+          reconnectAttemptsRef.current += 1;
+          connect();
+        }, delay);
+      }
     }
-  }, [user, token, options]);
+  }, [user, token]);
 
   /**
    * 斷開連接
@@ -125,8 +201,18 @@ const useWebSocket = (options = {}) => {
   const disconnect = useCallback(() => {
     console.log('[WebSocket] 手動斷開連接');
     manualCloseRef.current = true;
-    stopHeartbeat();
-    clearReconnectTimeout();
+
+    // 停止心跳
+    if (heartbeatIntervalRef.current) {
+      clearInterval(heartbeatIntervalRef.current);
+      heartbeatIntervalRef.current = null;
+    }
+
+    // 清除重連定時器
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
 
     if (wsRef.current) {
       wsRef.current.close();
@@ -306,10 +392,14 @@ const useWebSocket = (options = {}) => {
       disconnect();
     }
 
+    // 清理函數：組件卸載時斷開
     return () => {
-      disconnect();
+      if (wsRef.current) {
+        manualCloseRef.current = true;
+        wsRef.current.close();
+      }
     };
-  }, [user, token, connect, disconnect]);
+  }, [user, token]); // 只依賴 user 和 token，避免無限循環
 
   // 清理
   useEffect(() => {
