@@ -8,9 +8,10 @@ from typing import Optional
 import logging
 import json
 from datetime import datetime
+from jose import jwt, JWTError
 
 from ..core.database import get_db
-from ..core.security import decode_access_token
+from ..core.config import settings
 from ..models.user import User
 from ..websocket.connection_manager import connection_manager
 
@@ -38,9 +39,11 @@ async def get_current_user_from_token(
 
     try:
         # 解碼 JWT token
-        payload = decode_access_token(token)
-        if not payload:
-            return None
+        payload = jwt.decode(
+            token,
+            settings.SECRET_KEY,
+            algorithms=[settings.ALGORITHM]
+        )
 
         username = payload.get("sub")
         if not username:
@@ -53,6 +56,9 @@ async def get_current_user_from_token(
 
         return user
 
+    except JWTError as e:
+        logger.error(f"JWT 驗證失敗: {str(e)}")
+        return None
     except Exception as e:
         logger.error(f"驗證 WebSocket token 時發生錯誤: {str(e)}")
         return None
