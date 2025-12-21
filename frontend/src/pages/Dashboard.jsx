@@ -1153,16 +1153,21 @@ function Dashboard() {
     // 註冊 WebSocket 事件處理器
     wsOn('onlineUsersUpdate', handleOnlineUsersUpdate);
 
-    // 初始處理一次（如果 WebSocket 已有數據）
-    if (wsOnlineUsers && wsOnlineUsers.length > 0) {
-      processOnlineUsersData(wsOnlineUsers);
-    }
-
     return () => {
       // 清理事件處理器
       wsOff('onlineUsersUpdate');
     };
-  }, [user, wsOn, wsOff, wsOnlineUsers, processOnlineUsersData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]); // processOnlineUsersData 使用最新閉包，不需要在依賴中
+
+  // 當 WebSocket 首次連接時，處理初始在線用戶數據
+  useEffect(() => {
+    if (wsOnlineUsers && wsOnlineUsers.length > 0 && !onlineUsers.length) {
+      console.log('[Dashboard] 處理初始在線用戶數據');
+      processOnlineUsersData(wsOnlineUsers);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wsOnlineUsers]); // 只在 wsOnlineUsers 首次有數據時處理一次
 
   // 🗑️ 舊的複雜 Effect 和函數已被 ShiftSwap 模式替代
   // Effect 4, fetchWorkAreaAssignments, processScheduleDataWithAreaCodes - 已移除
