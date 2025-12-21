@@ -41,15 +41,24 @@ const useWebSocket = (options = {}) => {
    * 連接 WebSocket
    */
   const connect = useCallback(() => {
+    console.log('[useWebSocket] connect() 被調用！調用堆棧:', new Error().stack);
+
     if (!user || !token) {
       console.log('[WebSocket] 未登入，跳過連接');
       return;
     }
 
-    // 如果已經連接，先關閉
-    if (wsRef.current) {
-      wsRef.current.close();
-      wsRef.current = null;
+    // 如果已經連接，先關閉（不觸發重連）
+    if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED) {
+      console.log('[WebSocket] 關閉舊連接以建立新連接');
+      const oldWs = wsRef.current;
+      wsRef.current = null; // 先清空引用，防止 onclose 觸發重連
+
+      try {
+        oldWs.close();
+      } catch (e) {
+        console.error('[WebSocket] 關閉舊連接時出錯:', e);
+      }
     }
 
     try {
@@ -385,15 +394,20 @@ const useWebSocket = (options = {}) => {
 
   // 用戶登入/登出時自動連接/斷開
   useEffect(() => {
+    console.log('[useWebSocket] useEffect 執行，user:', !!user, 'token:', !!token);
+
     if (user && token) {
       manualCloseRef.current = false;
+      console.log('[useWebSocket] 調用 connect()');
       connect();
     } else {
+      console.log('[useWebSocket] 調用 disconnect()');
       disconnect();
     }
 
     // 清理函數：組件卸載時斷開
     return () => {
+      console.log('[useWebSocket] useEffect cleanup 執行');
       if (wsRef.current) {
         manualCloseRef.current = true;
 
@@ -409,6 +423,7 @@ const useWebSocket = (options = {}) => {
           reconnectTimeoutRef.current = null;
         }
 
+        console.log('[useWebSocket] cleanup 關閉 WebSocket');
         wsRef.current.close();
       }
     };
