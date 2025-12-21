@@ -16,6 +16,8 @@ const HEARTBEAT_INTERVAL = 20000; // 心跳間隔（20秒）
 
 const useWebSocket = (options = {}) => {
   const { user, token } = useAuthStore();
+  const userId = user?.id; // 提取穩定的 ID 值，避免 user 對象引用變化導致重連
+
   const [isConnected, setIsConnected] = useState(false);
   const [connectionError, setConnectionError] = useState(null);
   const [onlineUsers, setOnlineUsers] = useState([]);
@@ -41,23 +43,23 @@ const useWebSocket = (options = {}) => {
    * 連接 WebSocket
    */
   const connect = useCallback(() => {
-    console.log('[useWebSocket] connect() 被調用！調用堆棧:', new Error().stack);
-
-    if (!user || !token) {
+    if (!userId || !token) {
       console.log('[WebSocket] 未登入，跳過連接');
       return;
     }
 
-    // 如果已經連接，先關閉（不觸發重連）
-    if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED) {
-      console.log('[WebSocket] 關閉舊連接以建立新連接');
-      const oldWs = wsRef.current;
-      wsRef.current = null; // 先清空引用，防止 onclose 觸發重連
+    // 🔒 如果已經有活躍連接或正在連接，直接返回，避免重複連接
+    if (wsRef.current) {
+      const currentState = wsRef.current.readyState;
+      if (currentState === WebSocket.CONNECTING || currentState === WebSocket.OPEN) {
+        console.log('[WebSocket] 已有活躍連接，跳過重複連接');
+        return;
+      }
 
-      try {
-        oldWs.close();
-      } catch (e) {
-        console.error('[WebSocket] 關閉舊連接時出錯:', e);
+      // 只有在 CLOSING 或 CLOSED 狀態時才關閉舊連接
+      if (currentState === WebSocket.CLOSING) {
+        console.log('[WebSocket] 連接正在關閉中，等待完成');
+        return;
       }
     }
 
@@ -202,7 +204,7 @@ const useWebSocket = (options = {}) => {
         }, delay);
       }
     }
-  }, [user, token]);
+  }, [userId, token]);
 
   /**
    * 斷開連接
@@ -394,14 +396,10 @@ const useWebSocket = (options = {}) => {
 
   // 用戶登入/登出時自動連接/斷開
   useEffect(() => {
-    console.log('[useWebSocket] useEffect 執行，user:', !!user, 'token:', !!token);
-
-    if (user && token) {
+    if (userId && token) {
       manualCloseRef.current = false;
-      console.log('[useWebSocket] 調用 connect()');
       connect();
     } else {
-      console.log('[useWebSocket] 調用 disconnect()');
       disconnect();
     }
 
@@ -427,7 +425,8 @@ const useWebSocket = (options = {}) => {
         wsRef.current.close();
       }
     };
-  }, [user, token]); // 只依賴 user 和 token，避免無限循環
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, token]); // 只依賴 userId 和 token，不依賴函數避免無限循環
 
   return {
     isConnected,

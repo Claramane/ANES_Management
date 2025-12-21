@@ -157,18 +157,8 @@ async def websocket_endpoint(
         # 廣播用戶上線事件
         await connection_manager.broadcast_user_status_change(user_id, "online")
 
-        # 發送當前在線用戶列表給新連接的用戶
+        # 廣播更新後的在線用戶列表給所有用戶（包括新連接的用戶）
         online_users = await get_online_users_data(db)
-        await connection_manager.send_personal_message({
-            "type": "online_users_update",
-            "data": {
-                "users": online_users,
-                "count": len(online_users),
-                "timestamp": datetime.now().isoformat()
-            }
-        }, user_id)
-
-        # 廣播更新後的在線用戶列表給所有用戶
         await connection_manager.broadcast_online_users_list(online_users)
 
         # 持續接收訊息
