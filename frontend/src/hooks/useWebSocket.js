@@ -396,21 +396,23 @@ const useWebSocket = (options = {}) => {
     return () => {
       if (wsRef.current) {
         manualCloseRef.current = true;
+
+        // 停止心跳
+        if (heartbeatIntervalRef.current) {
+          clearInterval(heartbeatIntervalRef.current);
+          heartbeatIntervalRef.current = null;
+        }
+
+        // 清除重連定時器
+        if (reconnectTimeoutRef.current) {
+          clearTimeout(reconnectTimeoutRef.current);
+          reconnectTimeoutRef.current = null;
+        }
+
         wsRef.current.close();
       }
     };
   }, [user, token]); // 只依賴 user 和 token，避免無限循環
-
-  // 清理
-  useEffect(() => {
-    return () => {
-      stopHeartbeat();
-      clearReconnectTimeout();
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
-    };
-  }, [stopHeartbeat, clearReconnectTimeout]);
 
   return {
     isConnected,
