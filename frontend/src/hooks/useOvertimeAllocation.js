@@ -16,7 +16,7 @@ export const useOvertimeAllocation = (logger = console) => {
   /**
    * 執行完整分配
    */
-  const performFullAllocation = useCallback(async (overtimeData) => {
+  const performFullAllocation = useCallback(async (overtimeData, options = {}) => {
     setIsAllocating(true);
     shouldCancelRef.current = false;
 
@@ -30,7 +30,7 @@ export const useOvertimeAllocation = (logger = console) => {
       }
 
       // 使用統一分數導向分配算法
-      const newMarkings = allocateFullOvertime(overtimeData, logger);
+      const newMarkings = allocateFullOvertime(overtimeData, logger, options);
       
       // 檢查是否被取消
       if (shouldCancelRef.current) {
@@ -41,14 +41,14 @@ export const useOvertimeAllocation = (logger = console) => {
       return { 
         success: true, 
         markings: newMarkings,
-        message: '統一分數導向分配完成！所有班別都按分數最低優先原則分配，已達到最佳平衡。請記得保存變更'
+        message: '統一分數導向自動分配完成！所有班別都按分數最低優先原則分配，已達到最佳平衡。請記得保存變更'
       };
       
     } catch (error) {
-      logger.error('統一分數導向分配失敗:', error);
+      logger.error('統一分數導向自動分配失敗:', error);
       return { 
         success: false, 
-        message: `統一分數導向分配時發生錯誤: ${error.message || '未知錯誤'}` 
+        message: `統一分數導向自動分配時發生錯誤: ${error.message || '未知錯誤'}` 
       };
     } finally {
       setIsAllocating(false);
@@ -59,7 +59,7 @@ export const useOvertimeAllocation = (logger = console) => {
   /**
    * 執行部分分配（保留現有）
    */
-  const performPartialAllocation = useCallback(async (overtimeData, existingMarkings) => {
+  const performPartialAllocation = useCallback(async (overtimeData, existingMarkings, options = {}) => {
     setIsAllocating(true);
     shouldCancelRef.current = false;
 
@@ -73,7 +73,7 @@ export const useOvertimeAllocation = (logger = console) => {
       }
 
       // 使用統一分數導向分配算法，但保留現有標記
-      const newMarkings = allocatePartialOvertime(overtimeData, existingMarkings, logger);
+      const newMarkings = allocatePartialOvertime(overtimeData, existingMarkings, logger, options);
       
       // 檢查是否被取消
       if (shouldCancelRef.current) {
@@ -84,14 +84,14 @@ export const useOvertimeAllocation = (logger = console) => {
       return { 
         success: true, 
         markings: newMarkings,
-        message: '統一分數導向部分分配完成！未分配的班別已按分數最低優先原則補齊。請記得保存變更'
+        message: '統一分數導向自動部分分配完成！未分配的班別已按分數最低優先原則補齊。請記得保存變更'
       };
       
     } catch (error) {
-      logger.error('統一分數導向部分分配失敗:', error);
+      logger.error('統一分數導向自動部分分配失敗:', error);
       return { 
         success: false, 
-        message: `統一分數導向部分分配時發生錯誤: ${error.message || '未知錯誤'}` 
+        message: `統一分數導向自動部分分配時發生錯誤: ${error.message || '未知錯誤'}` 
       };
     } finally {
       setIsAllocating(false);
@@ -104,7 +104,7 @@ export const useOvertimeAllocation = (logger = console) => {
    */
   const cancelAllocation = useCallback(() => {
     shouldCancelRef.current = true;
-    logger.info('用戶請求取消智能分配');
+    logger.info('用戶請求取消自動分配');
   }, [logger]);
 
   /**

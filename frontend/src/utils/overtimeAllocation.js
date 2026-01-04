@@ -147,6 +147,13 @@ export class UnifiedScoreAllocation {
     this.logger = logger;
   }
 
+  _isAutoAllocationEligible(user) {
+    if (!user) return false;
+    if (user.identity === '麻醉科Leader') return false;
+    if (user.isCc || user.areaCode === 'CC') return false;
+    return true;
+  }
+
   /**
    * 執行統一分數導向分配
    * @param {Object} overtimeData - 加班數據 {date: {staffList: []}}
@@ -154,7 +161,11 @@ export class UnifiedScoreAllocation {
    * @returns {Object} 分配結果 {dateKey: {userId: shift}}
    */
   allocate(overtimeData, options = {}) {
-    const { preserveExisting = false, existingMarkings = {} } = options;
+    const { 
+      preserveExisting = false, 
+      existingMarkings = {}, 
+      includeZeroScoreShifts = true 
+    } = options;
 
     if (!overtimeData || Object.keys(overtimeData).length === 0) {
       throw new Error('沒有足夠的排班資料來生成加班人選');
@@ -173,7 +184,13 @@ export class UnifiedScoreAllocation {
     this.logger.info(`總共${allUsers.length}人參與分配`);
 
     // 執行分配
-    this._performAllocation(overtimeData, userScores, newAllocations, preserveExisting);
+    this._performAllocation(
+      overtimeData, 
+      userScores, 
+      newAllocations, 
+      preserveExisting, 
+      includeZeroScoreShifts
+    );
 
     // 轉換為前端需要的格式
     const newMarkings = this._convertToMarkingsFormat(newAllocations);
@@ -192,10 +209,10 @@ export class UnifiedScoreAllocation {
     const userScores = {};
     const allUsers = [];
     
-    // 收集所有用戶（排除麻醉科Leader，因為他們不參與自動分配）
+    // 收集所有用戶（排除麻醉科Leader與當日CC，因為他們不參與自動分配）
     Object.values(overtimeData).forEach(dayData => {
       dayData.staffList.forEach(staff => {
-        if (staff && staff.id && staff.identity !== '麻醉科Leader' && !allUsers.find(u => u.id === staff.id)) {
+        if (staff && staff.id && this._isAutoAllocationEligible(staff) && !allUsers.find(u => u.id === staff.id)) {
           allUsers.push(staff);
         }
       });
@@ -250,12 +267,19 @@ export class UnifiedScoreAllocation {
    * 執行分配邏輯 - 使用輪次分配確保公平性
    * @private
    */
-  _performAllocation(overtimeData, userScores, newAllocations, preserveExisting) {
+  _performAllocation(overtimeData, userScores, newAllocations, preserveExisting, includeZeroScoreShifts) {
     // 收集所有需要分配的日期和班別
-    const allShiftDemands = this._collectShiftDemands(overtimeData, newAllocations, preserveExisting);
+    const allShiftDemands = this._collectShiftDemands(
+      overtimeData, 
+      newAllocations, 
+      preserveExisting, 
+      includeZeroScoreShifts
+    );
     
     // 按班別重要性順序進行輪次分配
-    const shiftOrder = ['A', 'B', 'C', 'D', 'E', 'F'];
+    const shiftOrder = includeZeroScoreShifts 
+      ? SHIFT_ALLOCATION_ORDER 
+      : SHIFT_ALLOCATION_ORDER.filter(shift => shift !== 'E' && shift !== 'F');
     
     for (const shiftType of shiftOrder) {
       this._allocateShiftInRounds(shiftType, allShiftDemands, userScores, newAllocations, overtimeData);
@@ -266,8 +290,11 @@ export class UnifiedScoreAllocation {
    * 收集所有班別需求
    * @private
    */
-  _collectShiftDemands(overtimeData, newAllocations, preserveExisting) {
+  _collectShiftDemands(overtimeData, newAllocations, preserveExisting, includeZeroScoreShifts) {
     const demands = { A: [], B: [], C: [], D: [], E: [], F: [] };
+    const shiftOrder = includeZeroScoreShifts 
+      ? SHIFT_ALLOCATION_ORDER 
+      : SHIFT_ALLOCATION_ORDER.filter(shift => shift !== 'E' && shift !== 'F');
     
     Object.keys(overtimeData).forEach(dateKey => {
       const dayData = overtimeData[dateKey];
@@ -283,20 +310,20 @@ export class UnifiedScoreAllocation {
         if (!preserveExisting || !this._hasShiftAssigned(dateKey, 'A', newAllocations)) {
           demands.A.push({ 
             date: dateKey, 
-            availableUsers: dayData.staffList.filter(staff => staff.identity !== '麻醉科Leader')
+            availableUsers: dayData.staffList.filter(staff => this._isAutoAllocationEligible(staff))
           });
         }
         return;
       }
       
       // 平日需要A-F班
-      SHIFT_ALLOCATION_ORDER.forEach(shiftType => {
+      shiftOrder.forEach(shiftType => {
         if (!preserveExisting || !this._hasShiftAssigned(dateKey, shiftType, newAllocations)) {
           demands[shiftType].push({ 
             date: dateKey, 
             availableUsers: dayData.staffList.filter(staff => {
-              // 麻醉科Leader不參與自動分配
-              return staff.identity !== '麻醉科Leader';
+              // 麻醉科Leader與當日CC不參與自動分配
+              return this._isAutoAllocationEligible(staff);
             })
           });
         }
@@ -338,7 +365,7 @@ export class UnifiedScoreAllocation {
     
     // 檢查所有候選用戶是否都在 userScores 中（麻醉科Leader不參與自動分配）
     const missingUsers = eligibleUsersList.filter(user => 
-      !userScores[user.id] && user.identity !== '麻醉科Leader'
+      !userScores[user.id] && this._isAutoAllocationEligible(user)
     );
     if (missingUsers.length > 0) {
       this.logger.warn(`發現未初始化的用戶: ${missingUsers.map(u => u.name || u.id).join(', ')}`);
@@ -373,8 +400,8 @@ export class UnifiedScoreAllocation {
       
       // 獲取符合條件的候選人（分數 <= 0 或者是第一輪）
       const availableCandidates = eligibleUsersList.filter(user => {
-        // 排除麻醉科Leader
-        if (user.identity === '麻醉科Leader') {
+        // 排除麻醉科Leader與當日CC
+        if (!this._isAutoAllocationEligible(user)) {
           return false;
         }
         
@@ -594,9 +621,12 @@ export function createAllocator(logger = console) {
  * @param {Object} logger - 日誌記錄器
  * @returns {Object} 分配結果
  */
-export function allocateFullOvertime(overtimeData, logger = console) {
+export function allocateFullOvertime(overtimeData, logger = console, options = {}) {
   const allocator = createAllocator(logger);
-  return allocator.allocate(overtimeData, { preserveExisting: false });
+  return allocator.allocate(overtimeData, { 
+    preserveExisting: false, 
+    includeZeroScoreShifts: options.includeZeroScoreShifts ?? true 
+  });
 }
 
 /**
@@ -606,10 +636,11 @@ export function allocateFullOvertime(overtimeData, logger = console) {
  * @param {Object} logger - 日誌記錄器
  * @returns {Object} 分配結果
  */
-export function allocatePartialOvertime(overtimeData, existingMarkings, logger = console) {
+export function allocatePartialOvertime(overtimeData, existingMarkings, logger = console, options = {}) {
   const allocator = createAllocator(logger);
   return allocator.allocate(overtimeData, { 
     preserveExisting: true, 
-    existingMarkings 
+    existingMarkings,
+    includeZeroScoreShifts: options.includeZeroScoreShifts ?? true
   });
 }

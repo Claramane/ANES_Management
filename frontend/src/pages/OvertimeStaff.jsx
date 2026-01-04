@@ -110,8 +110,6 @@ const getDayName = (day) => {
 // 使用統一的分數計算工具
 const calculateOvertimeScore = scoreUtils.calculateOvertimeScore;
 
-// 將全局範圍的MAX_ATTEMPTS常量提取出來，避免在每個函數中重複宣告
-const MAX_OVERTIME_GENERATION_ATTEMPTS = 10000;
 
 // 新增統一的 API 請求緩存機制
 const useApiCache = () => {
@@ -244,6 +242,7 @@ const OvertimeRow = ({
               const mark = markings[dayData.date]?.[staff.id] || '';
               const chipLabel = mark ? `${staff.name}${mark}` : staff.name;
               const isLeader = staff.identity === '麻醉科Leader';
+              const isCc = staff.isCc || staff.areaCode === 'CC';
               
               return (
                 <Tooltip key={staff.id} title={canEdit ? `點擊標記排序${isLeader ? ' (Leader僅手動加班)' : ''}` : "只有護理長和系統管理員可以修改"}>
@@ -256,7 +255,10 @@ const OvertimeRow = ({
                     sx={{ 
                       ...chipStyle,
                       fontWeight: mark ? 'bold' : 'normal',
-                      border: isLeader ? '1px dashed purple' : 'none'
+                      border: isLeader ? '1px dashed purple' : (isCc ? '1px dashed' : 'none'),
+                      borderColor: isCc ? 'text.disabled' : undefined,
+                      color: isCc ? 'text.disabled' : undefined,
+                      borderRadius: isCc ? 0 : undefined
                     }}
                   />
                 </Tooltip>
@@ -387,7 +389,6 @@ const initialDataState = {
 
 const initialConfigState = {
   showUnmarkedStaff: false,
-  generationAttempts: 0,
 };
 
 // UI狀態 reducer
@@ -468,10 +469,8 @@ const configStateReducer = (state, action) => {
   switch (action.type) {
     case 'TOGGLE_UNMARKED_STAFF':
       return { ...state, showUnmarkedStaff: !state.showUnmarkedStaff };
-    case 'SET_GENERATION_ATTEMPTS':
-      return { ...state, generationAttempts: action.attempts };
-    case 'INCREMENT_ATTEMPTS':
-      return { ...state, generationAttempts: state.generationAttempts + 1 };
+    case 'SET_SHOW_UNMARKED_STAFF':
+      return { ...state, showUnmarkedStaff: action.value };
     default:
       return state;
   }
@@ -499,9 +498,7 @@ const OvertimeStaff = () => {
   const [messageState, dispatchMessage] = useReducer(messageStateReducer, initialMessageState);
   const [dataState, dispatchData] = useReducer(dataStateReducer, initialDataState);
   const [configState, dispatchConfig] = useReducer(configStateReducer, initialConfigState);
-  
-  // 使用 useRef 替代 useState 以確保同步更新
-  const shouldCancelGenerationRef = useRef(false);
+  const hasInitializedShowUnmarkedRef = useRef(false);
 
   // 🚀 從狀態中解構常用的值，提高可讀性
   const {
@@ -533,11 +530,22 @@ const OvertimeStaff = () => {
   } = dataState;
 
   const {
-    showUnmarkedStaff,
-    generationAttempts
+    showUnmarkedStaff
   } = configState;
 
   // 🚀 所有狀態現在都通過 useReducer 管理，舊的 useState 已被移除
+  useEffect(() => {
+    if (!user || hasInitializedShowUnmarkedRef.current) {
+      return;
+    }
+
+    const shouldShowAll = user.role === 'head_nurse' || user.role === 'admin';
+    if (shouldShowAll) {
+      dispatchConfig({ type: 'SET_SHOW_UNMARKED_STAFF', value: true });
+    }
+
+    hasInitializedShowUnmarkedRef.current = true;
+  }, [user]);
 
   // 🚀 創建狀態更新輔助函數，簡化調用
   const updateUI = useCallback((updates) => {
@@ -586,12 +594,6 @@ const OvertimeStaff = () => {
       case 'toggleUnmarkedStaff':
         dispatchConfig({ type: 'TOGGLE_UNMARKED_STAFF' });
         break;
-      case 'generationAttempts':
-        dispatchConfig({ type: 'SET_GENERATION_ATTEMPTS', attempts: value });
-        break;
-      case 'incrementAttempts':
-        dispatchConfig({ type: 'INCREMENT_ATTEMPTS' });
-        break;
       default:
         break;
     }
@@ -610,6 +612,7 @@ const OvertimeStaff = () => {
 
   // 🚀 新增：使用加班分配Hook
   const allocationHook = useOvertimeAllocation(logger);
+  const [includeZeroScoreShifts, setIncludeZeroScoreShifts] = useState(true);
 
   // 權限檢查 - 只有護理長和admin可以編輯
   const canEdit = useMemo(() => {
@@ -688,6 +691,7 @@ const OvertimeStaff = () => {
       
       nurse.shifts.forEach((shift, index) => {
         if (shift === 'A') {
+          const areaCode = nurse.area_codes?.[index] || null;
           const day = index + 1;
           if (day <= daysInMonth) {
             const currentDate = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), day);
@@ -699,7 +703,9 @@ const OvertimeStaff = () => {
                 id: nurse.id, 
                 name: nurse.name || nurse.full_name || '未知姓名', 
                 position: nurse.position || '一般護理師', 
-                identity: nurse.identity || '未知身份' 
+                identity: nurse.identity || '未知身份',
+                areaCode,
+                isCc: areaCode === 'CC'
               });
             }
           }
@@ -1518,7 +1524,7 @@ const OvertimeStaff = () => {
   };
 
   // 檢查日期是否符合加班規則
-  const checkDateCompliance = (dateKey, staffMarks) => {
+  const checkDateCompliance = (dateKey, staffMarks, includeZeroScoreShiftsFlag = true) => {
     if (!dateKey || !staffMarks) return false;
     
     try {
@@ -1535,515 +1541,24 @@ const OvertimeStaff = () => {
         return true;
       }
       
-      // 平日需要6位加班人員，A-F各一位
+      // 平日需要分配的班別（是否含E/F）
       const marksSet = new Set(Object.values(staffMarks));
-      const hasAllMarks = marksSet.size === 6 && 
-        ['A', 'B', 'C', 'D', 'E', 'F'].every(mark => marksSet.has(mark));
+      const requiredShifts = includeZeroScoreShiftsFlag 
+        ? ['A', 'B', 'C', 'D', 'E', 'F'] 
+        : ['A', 'B', 'C', 'D'];
+      const hasAllMarks = requiredShifts.every(mark => marksSet.has(mark));
+      const hasValidCount = includeZeroScoreShiftsFlag 
+        ? marksSet.size === requiredShifts.length 
+        : marksSet.size >= requiredShifts.length;
         
-      return hasAllMarks;
+      return hasAllMarks && hasValidCount;
     } catch (error) {
       logger.error('檢查日期合規性失敗:', error);
       return false;
     }
   };
 
-  // === 新增：統一分數導向分配算法 ===
-  
-  // 計算用戶的基礎分數（白班負分）
-  const calculateUserBaseScore = (user, workDays) => {
-    // 根據用戶ID模擬不同的出勤模式
-    const userType = user.id % 4;
-    let attendanceRate;
-    
-    if (userType === 0) {
-      attendanceRate = 0.9;  // 正常出勤 (90%)
-    } else if (userType === 1) {
-      attendanceRate = 0.95; // 高出勤 (95%)
-    } else if (userType === 2) {
-      attendanceRate = 0.7;  // 夜班人員 (70%白班)
-    } else {
-      attendanceRate = 0.85; // 偶有請假 (85%)
-    }
-    
-    const actualWhiteShifts = Math.floor(workDays * attendanceRate);
-    return actualWhiteShifts * NO_OVERTIME_PENALTY;
-  };
-
-  // 為指定班別選擇最適合的人員
-  const selectBestUserForShift = (availableUsers, userScores, shiftType, date, allocations, minIntervalDays = 7) => {
-    if (!availableUsers || availableUsers.length === 0) {
-      return null;
-    }
-
-    // 1. 按當前分數排序（分數越低越優先）
-    const candidates = [...availableUsers].sort((a, b) => 
-      userScores[a.id].currentScore - userScores[b.id].currentScore
-    );
-
-    // 2. 在分數相近的人中進行進一步篩選
-    const lowestScore = userScores[candidates[0].id].currentScore;
-    const scoreThreshold = lowestScore + 0.3; // 允許0.3分的誤差
-
-    const closeScoreCandidates = candidates.filter(u => 
-      userScores[u.id].currentScore <= scoreThreshold
-    );
-
-    // 3. 對於重要班別（A、B），考慮間隔時間
-    if ((shiftType === 'A' || shiftType === 'B') && closeScoreCandidates.length > 1) {
-      const intervalCandidates = [];
-
-      for (const user of closeScoreCandidates) {
-        // 找出該用戶該班別的所有日期
-        const userShiftDates = [];
-        Object.entries(allocations).forEach(([key, shift]) => {
-          const [userId, shiftDate] = key.split('_');
-          if (parseInt(userId) === user.id && shift === shiftType) {
-            userShiftDates.push(new Date(shiftDate));
-          }
-        });
-
-        if (userShiftDates.length === 0) {
-          // 沒有該班別，優先級最高
-          intervalCandidates.push({ user, interval: 999 });
-        } else {
-          // 計算與最近日期的間隔
-          const currentDate = new Date(date);
-          const minInterval = Math.min(...userShiftDates.map(shiftDate => 
-            Math.abs((currentDate - shiftDate) / (1000 * 60 * 60 * 24))
-          ));
-          intervalCandidates.push({ user, interval: minInterval });
-        }
-      }
-
-      // 選擇間隔最大的人（但至少要滿足最小間隔要求）
-      const validCandidates = intervalCandidates.filter(item => 
-        item.interval >= minIntervalDays || item.interval === 999
-      );
-
-      if (validCandidates.length > 0) {
-        // 有滿足間隔要求的候選人，選擇間隔最大的
-        validCandidates.sort((a, b) => b.interval - a.interval);
-        return validCandidates[0].user;
-      } else {
-        // 沒有滿足間隔要求的候選人，選擇間隔最大的（即使不滿足要求）
-        intervalCandidates.sort((a, b) => b.interval - a.interval);
-        return intervalCandidates[0].user;
-      }
-    }
-
-    // 4. 對於其他班別或單一候選人，直接選擇分數最低的
-    return candidates[0];
-  };
-
-  // 統一分數導向分配算法
-  const unifiedScoreBasedAllocation = () => {
-    if (!overtimeData || Object.keys(overtimeData).length === 0) {
-      throw new Error('沒有足夠的排班資料來生成加班人選');
-    }
-
-    logger.info('開始統一分數導向分配...');
-    
-    const newAllocations = {}; // {userId_date: shift}
-    const workDays = Object.keys(overtimeData).filter(dateKey => 
-      !isSunday(parseISO(dateKey))
-    ).length;
-
-    // 初始化用戶分數
-    const userScores = {};
-    const allUsers = [];
-    
-    // 收集所有用戶
-    Object.values(overtimeData).forEach(dayData => {
-      dayData.staffList.forEach(staff => {
-        if (staff.identity !== '麻醉科Leader' && !allUsers.find(u => u.id === staff.id)) {
-          allUsers.push(staff);
-        }
-      });
-    });
-
-    // 初始化分數
-    allUsers.forEach(user => {
-      const baseScore = calculateUserBaseScore(user, workDays);
-      userScores[user.id] = {
-        user: user,
-        baseScore: baseScore,
-        currentScore: baseScore,
-        allocations: []
-      };
-    });
-
-    logger.info(`總共${allUsers.length}人參與分配`);
-
-    // 分配策略：按班別重要性順序分配
-    const shiftAllocationOrder = ['A', 'B', 'C', 'D', 'E', 'F'];
-
-    // === 階段1：平日分配（A, B, C, D, E, F各一人）===
-    const weekdays = Object.keys(overtimeData)
-      .filter(dateKey => {
-        const date = parseISO(dateKey);
-        return !isSunday(date) && !isSaturday(date);
-      })
-      .sort();
-
-    weekdays.forEach(dateKey => {
-      const dayData = overtimeData[dateKey];
-      const availableStaff = dayData.staffList.filter(staff => 
-        staff.identity !== '麻醉科Leader'
-      );
-
-      logger.debug(`${dateKey} 班別分配：`);
-
-      shiftAllocationOrder.forEach(shiftType => {
-        // 找出當天還沒分配班別的人員
-        const availableUsers = availableStaff.filter(staff => 
-          !newAllocations[`${staff.id}_${dateKey}`]
-        );
-
-        if (availableUsers.length === 0) {
-          logger.debug(`  ${shiftType}班：無可用人員`);
-          return;
-        }
-
-        // 使用統一的選擇邏輯
-        const selectedUser = selectBestUserForShift(
-          availableUsers, userScores, shiftType, dateKey, newAllocations
-        );
-
-        if (selectedUser) {
-          // 分配班別
-          newAllocations[`${selectedUser.id}_${dateKey}`] = shiftType;
-
-          // 更新分數
-          const shiftScore = calculateOvertimeScore(shiftType);
-          userScores[selectedUser.id].currentScore += shiftScore;
-          userScores[selectedUser.id].allocations.push({ date: dateKey, shift: shiftType });
-
-          logger.debug(`  ${shiftType}班 → ${selectedUser.name} (+${shiftScore}分, 總分: ${userScores[selectedUser.id].currentScore.toFixed(2)})`);
-        }
-      });
-    });
-
-    // === 階段2：週六分配（僅A班）===
-    const saturdays = Object.keys(overtimeData)
-      .filter(dateKey => isSaturday(parseISO(dateKey)))
-      .sort();
-
-    saturdays.forEach(dateKey => {
-      const dayData = overtimeData[dateKey];
-      const availableUsers = dayData.staffList.filter(staff => 
-        staff.identity !== '麻醉科Leader'
-      );
-
-      logger.debug(`${dateKey} (週六) A班分配：`);
-
-      const selectedUser = selectBestUserForShift(
-        availableUsers, userScores, 'A', dateKey, newAllocations
-      );
-
-      if (selectedUser) {
-        // 分配A班
-        newAllocations[`${selectedUser.id}_${dateKey}`] = 'A';
-
-        // 更新分數
-        const shiftScore = calculateOvertimeScore('A');
-        userScores[selectedUser.id].currentScore += shiftScore;
-        userScores[selectedUser.id].allocations.push({ date: dateKey, shift: 'A' });
-
-        logger.debug(`  A班 → ${selectedUser.name} (+${shiftScore}分, 總分: ${userScores[selectedUser.id].currentScore.toFixed(2)})`);
-      }
-    });
-
-    // 轉換為前端需要的格式
-    const newMarkings = {};
-    Object.entries(newAllocations).forEach(([key, shift]) => {
-      const [userId, dateKey] = key.split('_');
-      if (!newMarkings[dateKey]) {
-        newMarkings[dateKey] = {};
-      }
-      newMarkings[dateKey][parseInt(userId)] = shift;
-    });
-
-    // 分析結果
-    const scores = Object.values(userScores).map(data => data.currentScore);
-    const minScore = Math.min(...scores);
-    const maxScore = Math.max(...scores);
-    const avgScore = scores.reduce((a, b) => a + b, 0) / scores.length;
-    const scoreRange = maxScore - minScore;
-    const avgDeviationFromZero = scores.reduce((sum, score) => sum + Math.abs(score), 0) / scores.length;
-
-    logger.success('統一分數導向分配完成：');
-    logger.success(`分數範圍：${scoreRange.toFixed(2)}分 (${minScore.toFixed(2)} 到 ${maxScore.toFixed(2)})`);
-    logger.success(`平均偏離零分：${avgDeviationFromZero.toFixed(2)}分`);
-
-      return newMarkings;
-  };
-
-  // 統一分數導向的全部重新生成
-  const generateFullAssignmentsWithUnifiedScore = async () => {
-    try {
-      logger.info('開始統一分數導向全部重新生成...');
-      
-      // 檢查是否被取消
-      if (shouldCancelGenerationRef.current) {
-        logger.info('生成已被用戶取消');
-        showSuccess('已成功取消分配生成');
-        updateDialog('openSnackbar', true);
-        return;
-      }
-
-      // 使用統一分數導向分配算法
-      const newMarkings = unifiedScoreBasedAllocation();
-      
-      // 檢查是否被取消
-      if (shouldCancelGenerationRef.current) {
-        logger.info('生成已被用戶取消');
-        showSuccess('已成功取消分配生成');
-        updateDialog('openSnackbar', true);
-        return;
-      }
-
-      // 更新標記狀態
-      updateData('markings', newMarkings);
-      
-      showSuccess('統一分數導向分配完成！所有班別都按分數最低優先原則分配，已達到最佳平衡。請記得保存變更');
-      updateDialog('openSnackbar', true);
-      
-    } catch (error) {
-      logger.error('統一分數導向分配失敗:', error);
-      showError(`統一分數導向分配時發生錯誤: ${error.message || '未知錯誤'}`);
-      updateDialog('openSnackbar', true);
-    } finally {
-      updateUI({ isGeneratingRandom: false });
-      shouldCancelGenerationRef.current = false;
-    }
-  };
-
-  // 統一分數導向的部分生成（保留現有分配）
-  const generatePartialAssignmentsWithUnifiedScore = async () => {
-    try {
-      logger.info('開始統一分數導向部分生成...');
-      
-      // 檢查是否被取消
-      if (shouldCancelGenerationRef.current) {
-        logger.info('生成已被用戶取消');
-        showSuccess('已成功取消分配生成');
-        updateDialog('openSnackbar', true);
-        return;
-      }
-
-      // 使用統一分數導向分配算法，但保留現有標記
-      const newMarkings = unifiedScoreBasedAllocationPartial();
-      
-      // 檢查是否被取消
-      if (shouldCancelGenerationRef.current) {
-        logger.info('生成已被用戶取消');
-        showSuccess('已成功取消分配生成');
-        updateDialog('openSnackbar', true);
-        return;
-      }
-
-      // 更新標記狀態
-      updateData('markings', newMarkings);
-      
-      showSuccess('統一分數導向部分分配完成！未分配的班別已按分數最低優先原則補齊。請記得保存變更');
-      updateDialog('openSnackbar', true);
-      
-    } catch (error) {
-      logger.error('統一分數導向部分分配失敗:', error);
-      showError(`統一分數導向部分分配時發生錯誤: ${error.message || '未知錯誤'}`);
-      updateDialog('openSnackbar', true);
-    } finally {
-      updateUI({ isGeneratingRandom: false });
-      shouldCancelGenerationRef.current = false;
-    }
-  };
-
-  // 統一分數導向分配算法 - 部分版本（保留現有標記）
-  const unifiedScoreBasedAllocationPartial = () => {
-    if (!overtimeData || Object.keys(overtimeData).length === 0) {
-      throw new Error('沒有足夠的排班資料來生成加班人選');
-    }
-
-    logger.info('開始統一分數導向部分分配（保留現有標記）...');
-    
-    // 從現有標記開始
-    const newMarkings = { ...markings };
-    const newAllocations = {}; // {userId_date: shift}
-    
-    // 將現有標記轉換為內部格式
-    Object.entries(newMarkings).forEach(([dateKey, staffMarks]) => {
-      Object.entries(staffMarks).forEach(([userId, shift]) => {
-        newAllocations[`${userId}_${dateKey}`] = shift;
-      });
-    });
-
-    const workDays = Object.keys(overtimeData).filter(dateKey => 
-      !isSunday(parseISO(dateKey))
-    ).length;
-
-    // 初始化用戶分數
-    const userScores = {};
-    const allUsers = [];
-    
-    // 收集所有用戶
-    Object.values(overtimeData).forEach(dayData => {
-      dayData.staffList.forEach(staff => {
-        if (staff.identity !== '麻醉科Leader' && !allUsers.find(u => u.id === staff.id)) {
-          allUsers.push(staff);
-        }
-      });
-    });
-
-    // 初始化分數（包含現有分配）
-    allUsers.forEach(user => {
-      const baseScore = calculateUserBaseScore(user, workDays);
-      userScores[user.id] = {
-        user: user,
-        baseScore: baseScore,
-        currentScore: baseScore,
-        allocations: []
-      };
-
-      // 加入現有分配的分數
-      Object.entries(newAllocations).forEach(([key, shift]) => {
-        const [userId, dateKey] = key.split('_');
-        if (parseInt(userId) === user.id) {
-          const shiftScore = calculateOvertimeScore(shift);
-          userScores[user.id].currentScore += shiftScore;
-          userScores[user.id].allocations.push({ date: dateKey, shift: shift });
-        }
-      });
-    });
-
-    logger.info(`總共${allUsers.length}人參與分配，保留現有${Object.keys(newAllocations).length}個分配`);
-
-    // 分配策略：按班別重要性順序分配
-    const shiftAllocationOrder = ['A', 'B', 'C', 'D', 'E', 'F'];
-
-    // === 階段1：平日分配（補齊缺少的班別）===
-    const weekdays = Object.keys(overtimeData)
-      .filter(dateKey => {
-        const date = parseISO(dateKey);
-        return !isSunday(date) && !isSaturday(date);
-      })
-      .sort();
-
-    weekdays.forEach(dateKey => {
-      const dayData = overtimeData[dateKey];
-      const availableStaff = dayData.staffList.filter(staff => 
-        staff.identity !== '麻醉科Leader'
-      );
-
-      // 找出該日期已分配的班別
-      const assignedShifts = new Set();
-      Object.entries(newAllocations).forEach(([key, shift]) => {
-        const [userId, allocDateKey] = key.split('_');
-        if (allocDateKey === dateKey) {
-          assignedShifts.add(shift);
-        }
-      });
-
-      // 找出還需要分配的班別
-      const missingShifts = shiftAllocationOrder.filter(shift => !assignedShifts.has(shift));
-
-      if (missingShifts.length > 0) {
-        logger.debug(`${dateKey} 需要補齊班別：${missingShifts.join(', ')}`);
-
-        missingShifts.forEach(shiftType => {
-          // 找出當天還沒分配班別的人員
-          const availableUsers = availableStaff.filter(staff => 
-            !newAllocations[`${staff.id}_${dateKey}`]
-          );
-
-          if (availableUsers.length === 0) {
-            logger.debug(`  ${shiftType}班：無可用人員`);
-            return;
-          }
-
-          // 使用統一的選擇邏輯
-          const selectedUser = selectBestUserForShift(
-            availableUsers, userScores, shiftType, dateKey, newAllocations
-          );
-
-          if (selectedUser) {
-            // 分配班別
-            newAllocations[`${selectedUser.id}_${dateKey}`] = shiftType;
-
-            // 更新分數
-            const shiftScore = calculateOvertimeScore(shiftType);
-            userScores[selectedUser.id].currentScore += shiftScore;
-            userScores[selectedUser.id].allocations.push({ date: dateKey, shift: shiftType });
-
-            logger.debug(`  ${shiftType}班 → ${selectedUser.name} (+${shiftScore}分, 總分: ${userScores[selectedUser.id].currentScore.toFixed(2)})`);
-          }
-        });
-      }
-    });
-
-    // === 階段2：週六分配（補齊缺少的A班）===
-    const saturdays = Object.keys(overtimeData)
-      .filter(dateKey => isSaturday(parseISO(dateKey)))
-      .sort();
-
-    saturdays.forEach(dateKey => {
-      // 檢查是否已有A班分配
-      const hasA = Object.keys(newAllocations).some(key => {
-        const [userId, allocDateKey] = key.split('_');
-        return allocDateKey === dateKey && newAllocations[key] === 'A';
-      });
-
-      if (!hasA) {
-        const dayData = overtimeData[dateKey];
-        const availableUsers = dayData.staffList.filter(staff => 
-          staff.identity !== '麻醉科Leader'
-        );
-
-        logger.debug(`${dateKey} (週六) 需要補齊A班`);
-
-        const selectedUser = selectBestUserForShift(
-          availableUsers, userScores, 'A', dateKey, newAllocations
-        );
-
-        if (selectedUser) {
-          // 分配A班
-          newAllocations[`${selectedUser.id}_${dateKey}`] = 'A';
-
-          // 更新分數
-          const shiftScore = calculateOvertimeScore('A');
-          userScores[selectedUser.id].currentScore += shiftScore;
-          userScores[selectedUser.id].allocations.push({ date: dateKey, shift: 'A' });
-
-          logger.debug(`  A班 → ${selectedUser.name} (+${shiftScore}分, 總分: ${userScores[selectedUser.id].currentScore.toFixed(2)})`);
-        }
-      }
-    });
-
-    // 轉換回前端格式
-    const finalMarkings = {};
-    Object.entries(newAllocations).forEach(([key, shift]) => {
-      const [userId, dateKey] = key.split('_');
-      if (!finalMarkings[dateKey]) {
-        finalMarkings[dateKey] = {};
-      }
-      finalMarkings[dateKey][parseInt(userId)] = shift;
-    });
-
-    // 分析結果
-    const scores = Object.values(userScores).map(data => data.currentScore);
-    const minScore = Math.min(...scores);
-    const maxScore = Math.max(...scores);
-    const avgScore = scores.reduce((a, b) => a + b, 0) / scores.length;
-    const scoreRange = maxScore - minScore;
-    const avgDeviationFromZero = scores.reduce((sum, score) => sum + Math.abs(score), 0) / scores.length;
-
-    logger.success('統一分數導向部分分配完成：');
-    logger.success(`分數範圍：${scoreRange.toFixed(2)}分 (${minScore.toFixed(2)} 到 ${maxScore.toFixed(2)})`);
-    logger.success(`平均偏離零分：${avgDeviationFromZero.toFixed(2)}分`);
-
-    return finalMarkings;
-  };
-
-  // 🚀 新的智能分配函數 - 使用Hook
+  // 🚀 新的自動分配函數 - 使用Hook
   const handleSmartAllocation = useCallback(() => {
     if (!canEdit) {
       showError('只有護理長和系統管理員可以生成加班記錄');
@@ -2059,7 +1574,9 @@ const OvertimeStaff = () => {
     updateUI({ isGeneratingRandom: true });
 
     try {
-      const result = await allocationHook.performFullAllocation(overtimeData);
+      const result = await allocationHook.performFullAllocation(overtimeData, { 
+        includeZeroScoreShifts 
+      });
       
       if (result.success) {
         updateData('markings', result.markings);
@@ -2073,7 +1590,7 @@ const OvertimeStaff = () => {
     } finally {
       updateUI({ isGeneratingRandom: false });
     }
-  }, [allocationHook, overtimeData, updateUI, updateData, showSuccess, showError]);
+  }, [allocationHook, overtimeData, includeZeroScoreShifts, updateUI, updateData, showSuccess, showError]);
 
   // 🚀 處理部分分配
   const handlePartialAllocation = useCallback(async () => {
@@ -2081,7 +1598,9 @@ const OvertimeStaff = () => {
     updateUI({ isGeneratingRandom: true });
 
     try {
-      const result = await allocationHook.performPartialAllocation(overtimeData, markings);
+      const result = await allocationHook.performPartialAllocation(overtimeData, markings, { 
+        includeZeroScoreShifts 
+      });
       
       if (result.success) {
         updateData('markings', result.markings);
@@ -2095,274 +1614,7 @@ const OvertimeStaff = () => {
     } finally {
       updateUI({ isGeneratingRandom: false });
     }
-  }, [allocationHook, overtimeData, markings, updateUI, updateData, showSuccess, showError]);
-
-  // 非阻塞的生成算法 - 全部重新生成
-  const generateFullAssignmentsAsync = async () => {
-    try {
-      // 使用全局常量
-      let attempts = 0;
-      let isBalanced = false;
-      let newMarkings = {};
-      
-      // 先檢查是否有足夠的資料來生成
-      if (!overtimeData || Object.keys(overtimeData).length === 0) {
-        throw new Error('沒有足夠的排班資料來生成加班人選');
-      }
-      
-      // 不斷嘗試生成，直到達到平衡分配或達到最大嘗試次數
-      while (!isBalanced && attempts < MAX_OVERTIME_GENERATION_ATTEMPTS && !shouldCancelGenerationRef.current) {
-        attempts++;
-        // 更新嘗試次數，確保UI更新
-        updateConfig('generationAttempts', attempts);
-        
-        // 更頻繁地檢查取消狀態並更新UI
-        if (attempts % 50 === 0) {
-          await new Promise(resolve => setTimeout(resolve, 0));
-          
-          // 再次檢查取消狀態，確保響應
-          if (shouldCancelGenerationRef.current) {
-            logger.info('檢測到取消請求，停止生成');
-            break;
-          }
-        }
-        
-        if (attempts % 1000 === 0) {
-          logger.info(`生成加班人選進度: ${attempts}/${MAX_OVERTIME_GENERATION_ATTEMPTS}`);
-        }
-        
-        // 清空所有標記，全部重新生成
-        newMarkings = {};
-        
-        // 對每一天進行處理 - 簡化的隨機分配方式
-        Object.values(overtimeData)
-          .sort((a, b) => a.day - b.day)
-          .forEach(dayData => {
-            const dateKey = dayData.date;
-            // 過濾掉麻醉科Leader，只保留普通護理師
-            const staffList = dayData.staffList.filter(staff => staff.identity !== '麻醉科Leader');
-            
-            // 檢查資料有效性
-            if (!dateKey || !staffList || !Array.isArray(staffList) || staffList.length === 0) {
-              return;
-            }
-            
-            const currentDate = parseISO(dateKey);
-            
-            // 跳過週日
-            if (isSunday(currentDate)) {
-              return;
-            }
-            
-            // 初始化該日期的標記對象
-            newMarkings[dateKey] = {};
-            
-            // 洗牌算法 - 隨機排序所有人員
-            const shuffledStaff = [...staffList].sort(() => Math.random() - 0.5);
-            
-            // 週六只分配一位A加班
-            if (isSaturday(currentDate)) {
-              // 如果有人員可分配
-              if (shuffledStaff.length > 0) {
-                const staff = shuffledStaff[0];
-                newMarkings[dateKey][staff.id] = 'A';
-              }
-            } else {
-              // 平日分配A-F六位加班人員
-              const marksToAssign = ['A', 'B', 'C', 'D', 'E', 'F'];
-              
-              // 確保人數足夠
-              const staffCount = Math.min(marksToAssign.length, shuffledStaff.length);
-              
-              // 隨機分配標記給人員
-              for (let i = 0; i < staffCount; i++) {
-                const staff = shuffledStaff[i];
-                const mark = marksToAssign[i];
-                
-                newMarkings[dateKey][staff.id] = mark;
-              }
-            }
-          });
-        
-        // 檢查分配是否平衡（月度和年度分數均不超出範圍）
-        isBalanced = checkIfAssignmentBalanced(newMarkings);
-        
-        if (isBalanced) {
-          logger.success('生成的加班人選分數已平衡，嘗試次數:', attempts);
-        }
-      }
-      
-      // 檢查是否被取消
-      if (shouldCancelGenerationRef.current) {
-        logger.info('生成已被用戶取消');
-        showSuccess('已成功取消隨機生成');
-        updateDialog('openSnackbar', true);
-        shouldCancelGenerationRef.current = false;
-        return;
-      }
-      
-      if (!isBalanced) {
-        showSuccess(`已嘗試 ${MAX_OVERTIME_GENERATION_ATTEMPTS} 次全部重新生成加班人選，但無法達到完全平衡。請嘗試分時段生成或重新設計班表。`);
-        updateDialog('openSnackbar', true);
-      } else {
-        showSuccess(`已全部重新生成加班人選！在第 ${attempts} 次嘗試達到平衡分配。請記得保存變更`);
-        updateDialog('openSnackbar', true);
-      }
-      
-      // 更新標記狀態
-      updateData('markings', newMarkings);
-      updateConfig('generationAttempts', attempts);
-      updateDialog('openSnackbar', true);
-    } catch (error) {
-      logger.error('全部重新生成加班人選失敗:', error);
-      showError(`全部重新生成加班人選時發生錯誤: ${error.message || '未知錯誤'}`);
-      updateDialog('openSnackbar', true);
-    } finally {
-      updateUI({ isGeneratingRandom: false });
-      shouldCancelGenerationRef.current = false;
-    }
-  };
-
-  // 非阻塞的生成算法 - 生成尚未指定
-  const generatePartialAssignmentsAsync = async () => {
-    try {
-      // 使用全局常量
-      let attempts = 0;
-      let isBalanced = false;
-      let newMarkings = { ...markings };  // 保留現有標記
-      
-      // 先檢查是否有足夠的資料來生成
-      if (!overtimeData || Object.keys(overtimeData).length === 0) {
-        throw new Error('沒有足夠的排班資料來生成加班人選');
-      }
-      
-      // 不斷嘗試生成，直到達到平衡分配或達到最大嘗試次數
-      while (!isBalanced && attempts < MAX_OVERTIME_GENERATION_ATTEMPTS && !shouldCancelGenerationRef.current) {
-        attempts++;
-        // 更新嘗試次數，確保UI更新
-        updateConfig('generationAttempts', attempts);
-        
-        // 更頻繁地檢查取消狀態並更新UI
-        if (attempts % 50 === 0) {
-          await new Promise(resolve => setTimeout(resolve, 0));
-          
-          // 再次檢查取消狀態，確保響應
-          if (shouldCancelGenerationRef.current) {
-            console.log('檢測到取消請求，停止生成');
-            break;
-          }
-        }
-        
-        console.log(`嘗試生成尚未指定加班人員 (第 ${attempts} 次)`);
-        
-        // 保留現有標記，重置為初始狀態
-        newMarkings = { ...markings };
-        
-        // 對每一天進行處理 - 簡化的隨機分配方式
-        Object.values(overtimeData)
-          .sort((a, b) => a.day - b.day)
-          .forEach(dayData => {
-            const dateKey = dayData.date;
-            // 過濾掉麻醉科Leader，只保留普通護理師
-            const staffList = dayData.staffList.filter(staff => staff.identity !== '麻醉科Leader');
-            
-            // 檢查資料有效性
-            if (!dateKey || !staffList || !Array.isArray(staffList) || staffList.length === 0) {
-              console.warn(`日期 ${dateKey} 缺少有效的人員列表，跳過`);
-              return;
-            }
-            
-            const currentDate = parseISO(dateKey);
-            
-            // 跳過週日
-            if (isSunday(currentDate)) {
-              return;
-            }
-            
-            // 初始化該日期的標記對象（如果不存在）
-            if (!newMarkings[dateKey]) {
-              newMarkings[dateKey] = {};
-            }
-            
-            // 找出該日期已經分配的標記
-            const assignedMarks = new Set(Object.values(newMarkings[dateKey] || {}));
-            const unassignedStaff = staffList.filter(staff => !newMarkings[dateKey][staff.id]);
-            
-            // 週六只分配一位A加班
-            if (isSaturday(currentDate)) {
-              // 檢查是否已有人被指定為A班加班
-              const hasAssignedA = assignedMarks.has('A');
-              
-              // 如果尚未有人被指定為A班加班，且有未分配的人員
-              if (!hasAssignedA && unassignedStaff.length > 0) {
-                // 洗牌算法 - 隨機排序未分配的人員
-                const shuffledStaff = [...unassignedStaff].sort(() => Math.random() - 0.5);
-                const staff = shuffledStaff[0];
-                newMarkings[dateKey][staff.id] = 'A';
-              }
-            } else {
-              // 平日分配A-F六位加班人員
-              const marksToAssign = ['A', 'B', 'C', 'D', 'E', 'F'].filter(mark => !assignedMarks.has(mark));
-              
-              if (marksToAssign.length > 0 && unassignedStaff.length > 0) {
-                // 洗牌算法 - 隨機排序未分配的人員
-                const shuffledStaff = [...unassignedStaff].sort(() => Math.random() - 0.5);
-                
-                // 確保人數足夠
-                const staffCount = Math.min(marksToAssign.length, shuffledStaff.length);
-                
-                // 隨機分配標記給人員
-                for (let i = 0; i < staffCount; i++) {
-                  const staff = shuffledStaff[i];
-                  const mark = marksToAssign[i];
-                  
-                  newMarkings[dateKey][staff.id] = mark;
-                }
-              }
-            }
-          });
-        
-        // 檢查分配是否平衡（月度和年度分數均不超出範圍）
-        isBalanced = checkIfAssignmentBalanced(newMarkings);
-        
-        if (isBalanced) {
-          console.log('生成的加班人選分數已平衡，嘗試次數:', attempts);
-        }
-      }
-      
-      // 檢查是否被取消
-      if (shouldCancelGenerationRef.current) {
-        console.log('生成已被用戶取消');
-        showSuccess('已成功取消隨機生成');
-        updateDialog('openSnackbar', true);
-        shouldCancelGenerationRef.current = false;
-        return;
-      }
-      
-      if (!isBalanced) {
-        showSuccess(`已嘗試 ${MAX_OVERTIME_GENERATION_ATTEMPTS} 次生成尚未指定加班人員，但無法達到完全平衡。請嘗試全部重新生成或手動調整。`);
-        updateDialog('openSnackbar', true);
-      } else {
-        showSuccess(`已成功生成尚未指定加班人員！在第 ${attempts} 次嘗試達到平衡分配。請記得保存變更`);
-        updateDialog('openSnackbar', true);
-      }
-      
-              // 更新標記狀態
-        updateData('markings', newMarkings);
-        updateConfig('generationAttempts', attempts);
-        updateDialog('openSnackbar', true);
-      
-      // 生成後更新統計數據
-      generateStatistics();
-    } catch (error) {
-      console.error('生成尚未指定加班人員失敗:', error);
-      showError(`生成尚未指定加班人員時發生錯誤: ${error.message || '未知錯誤'}`);
-      updateDialog('openSnackbar', true);
-    } finally {
-      updateUI({ isGeneratingRandom: false });
-      shouldCancelGenerationRef.current = false;
-    }
-  };
+  }, [allocationHook, overtimeData, markings, includeZeroScoreShifts, updateUI, updateData, showSuccess, showError]);
 
   // 重設加班表
   const resetOvertimeSchedule = () => {
@@ -2644,10 +1896,10 @@ const OvertimeStaff = () => {
   const complianceMap = useMemo(() => {
     const map = {};
     Object.keys(markings).forEach(dateKey => {
-      map[dateKey] = checkDateCompliance(dateKey, markings[dateKey]);
+      map[dateKey] = checkDateCompliance(dateKey, markings[dateKey], includeZeroScoreShifts);
     });
     return map;
-  }, [markings]);
+  }, [markings, includeZeroScoreShifts]);
 
   // 預先定義通用樣式
   const tableCellSx = useMemo(() => ({ padding: '10px 16px' }), []);
@@ -2749,8 +2001,8 @@ const OvertimeStaff = () => {
       
       {canEdit && hasSchedule && (
         <Alert severity="info" sx={{ mb: 2 }}>
-          點擊護理師姓名可標記排序 (A → B → C → D → E → F → 取消)，每個平日需要六位加班人員(A-F)，週六需要一位加班人員(A)，週日不需要加班人員。
-          「智能分配」使用統一分數導向算法，所有班別都按分數最低優先原則分配，確保最大化零分接近度。
+          點擊護理師姓名可標記排序 (A → B → C → D → E → F → 取消)，平日通常需要六位加班人員(A-F)，若自動分配選擇不安排E/F班，平日只分配A-D；週六需要一位A班，週日不需要加班人員。
+          「自動分配」使用統一分數導向算法，所有班別都按分數最低優先原則分配，確保最大化零分接近度。
           預設只顯示已安排加班的人員，可使用「顯示未加班人員」按鈕切換顯示模式。
         </Alert>
       )}
@@ -2888,15 +2140,17 @@ const OvertimeStaff = () => {
         </>
       )}
       
-      {/* 智能分配確認對話框 */}
+      {/* 自動分配確認對話框 */}
       <AllocationConfirmDialog
         open={allocationHook.showConfirmDialog}
         onClose={allocationHook.hideAllocationDialog}
         onFullAllocation={handleFullAllocation}
         onPartialAllocation={handlePartialAllocation}
+        includeZeroScoreShifts={includeZeroScoreShifts}
+        onToggleIncludeZeroScoreShifts={setIncludeZeroScoreShifts}
       />
       
-      {/* 智能分配進度對話框 */}
+      {/* 自動分配進度對話框 */}
       <AllocationProgressDialog
         open={allocationHook.isAllocating}
         onCancel={allocationHook.cancelAllocation}

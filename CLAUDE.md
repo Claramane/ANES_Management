@@ -284,16 +284,16 @@ PGPASSWORD=postgres psql -h 127.0.0.1 -U jasmac -d anes_dev -c "UPDATE users SET
 - 資料庫遷移腳本
 保持文件與實際資料庫架構同步！
 
-### 智能分配邏輯
-**重要**: 完整智能分配算法文件，包括輪次分配邏輯、計分系統和實作細節，請參考：`docs/ROUND_ALLOCATION_LOGIC.md`
+### 自動分配邏輯
+**重要**: 完整自動分配算法文件，包括輪次分配邏輯、計分系統和實作細節，請參考：`docs/ROUND_ALLOCATION_LOGIC.md`
 
-**⚠️ 重要提醒**: 對加班分配算法、計分系統或智能分配邏輯進行任何變更時，您**必須**更新 `docs/ROUND_ALLOCATION_LOGIC.md` 以反映變更。包括：
+**⚠️ 重要提醒**: 對加班分配算法、計分系統或自動分配邏輯進行任何變更時，您**必須**更新 `docs/ROUND_ALLOCATION_LOGIC.md` 以反映變更。包括：
 - 修改分配算法或輪次邏輯
 - 變更計分公式或班別數值
 - 新增分配模式或功能
 - 更新 Fisher-Yates 洗牌或候選人篩選邏輯
 - 修改與分配相關的 UI 組件或 hooks
-保持智能分配文件與實際實作同步！
+保持自動分配文件與實際實作同步！
 
 ### 安全指南
 **重要**: 完整安全指南、最佳實務和事件回應程序，請參考：`docs/SECURITY.md`

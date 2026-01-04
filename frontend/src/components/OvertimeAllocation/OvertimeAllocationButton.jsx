@@ -3,7 +3,7 @@ import { Button, CircularProgress } from '@mui/material';
 import ShuffleIcon from '@mui/icons-material/Shuffle';
 
 /**
- * 智能分配按鈕組件
+ * 自動分配按鈕組件
  */
 const OvertimeAllocationButton = ({ 
   onClick, 
@@ -22,7 +22,7 @@ const OvertimeAllocationButton = ({
       disabled={disabled || isAllocating}
       startIcon={isAllocating ? <CircularProgress size={20} color="inherit" /> : <ShuffleIcon />}
     >
-      {isAllocating ? '分配中...' : '智能分配'}
+      {isAllocating ? '分配中...' : '自動分配'}
     </Button>
   );
 };

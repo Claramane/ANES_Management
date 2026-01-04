@@ -157,7 +157,7 @@ git merge-base feature/user-auth develop
 
 **範例**：
 ```bash
-# 大功能：班表智能分配系統
+# 大功能：班表自動分配系統
 feature/auto-schedule/algorithm        # 分配算法
 feature/auto-schedule/ui               # UI 介面
 feature/auto-schedule/integration      # 系統整合
