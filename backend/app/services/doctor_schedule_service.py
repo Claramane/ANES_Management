@@ -30,7 +30,7 @@ class DoctorScheduleService:
         'A': '控台醫師',
         'B': '手術室', 
         'C': '外圍(3F)',
-        'D': '手術室',  # D的變體歸類到手術室
+        'D': '外圍(高階)',  # 修改: 與精確匹配一致
         'E': '手術室',
         'F': '外圍(TAE)',
     }
@@ -290,6 +290,11 @@ class DoctorScheduleService:
                 name = summary.split('/')[0].strip()
                 area_part = summary.split('/')[1].strip()
                 
+                # 特例: 如果包含 "oncall",歸類為手術室
+                if 'oncall' in area_part.lower():
+                    logger.debug(f"Oncall 特例: {summary} -> 手術室")
+                    return name, '手術室'
+                
                 # 先嘗試精確匹配（移除括號內容）
                 area_letter = area_part.split('(')[0].strip()
                 
@@ -327,6 +332,18 @@ class DoctorScheduleService:
             return 1 <= weekday <= 4
         except Exception as e:
             logger.error(f"判斷日期 {date_str} 星期幾時發生錯誤: {str(e)}")
+            return False
+    
+    @classmethod
+    def is_wednesday(cls, date_str: str) -> bool:
+        """判斷是否為週三"""
+        try:
+            # 將YYYYMMDD格式轉換為datetime對象
+            date_obj = datetime.strptime(date_str, '%Y%m%d')
+            # weekday(): 2=Wednesday
+            return date_obj.weekday() == 2
+        except Exception as e:
+            logger.error(f"判斷日期 {date_str} 是否為週三時發生錯誤: {str(e)}")
             return False
     
     @classmethod
@@ -443,6 +460,11 @@ class DoctorScheduleService:
                     
                     if summary:
                         name, area_code_from_api = cls.extract_name_and_area_from_summary(summary)
+                        
+                        # 特例: 週三的陳柏羽/D 判定為疼痛門診
+                        if cls.is_wednesday(date) and name == '陳柏羽' and summary.strip() == '陳柏羽/D':
+                            area_code_from_api = '疼痛門診'
+                            logger.info(f"週三特例: {date} {summary} -> 疼痛門診")
                         
                         # 檢查是否有手動設置的資料
                         if name in existing_doctors:
