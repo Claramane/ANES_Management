@@ -428,9 +428,11 @@ class DoctorScheduleService:
                     # 保存現有醫師的手動設置資料
                     existing_doctors = {}
                     for doctor in existing_schedule.day_shift_doctors:
-                        # 用醫師姓名做為key保存手動設置的資料
+                        # 計算若從舊 summary 自動轉換，area_code 應該是什麼
+                        _, auto_area_code = cls.extract_name_and_area_from_summary(doctor.summary)
                         existing_doctors[doctor.name] = {
                             'area_code': doctor.area_code,
+                            'auto_area_code': auto_area_code,
                             'status': doctor.status,
                             'meeting_time': doctor.meeting_time
                         }
@@ -468,12 +470,21 @@ class DoctorScheduleService:
                         
                         # 檢查是否有手動設置的資料
                         if name in existing_doctors:
-                            # 使用手動設置的資料，保護不被覆蓋
                             preserved_data = existing_doctors[name]
-                            area_code = preserved_data['area_code']
+                            stored_area_code = preserved_data['area_code']
+                            auto_area_code = preserved_data['auto_area_code']
+
+                            if stored_area_code == auto_area_code:
+                                # area_code 與自動計算一致，代表未手動修改，使用新 API 值
+                                area_code = area_code_from_api
+                                logger.debug(f"醫師 {name} 的 area_code 更新為 API 新值：{area_code_from_api}（舊值：{stored_area_code}）")
+                            else:
+                                # area_code 與自動計算不同，代表有手動修改，保留
+                                area_code = stored_area_code
+                                logger.debug(f"保護醫師 {name} 的手動 area_code：{stored_area_code}（API 值：{area_code_from_api}）")
+
                             status = preserved_data['status']
                             meeting_time = preserved_data['meeting_time']
-                            logger.debug(f"保護醫師 {name} 的手動設置：area_code={area_code}, status={status}")
                         else:
                             # 使用API資料
                             area_code = area_code_from_api
