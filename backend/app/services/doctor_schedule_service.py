@@ -399,119 +399,81 @@ class DoctorScheduleService:
     
     @classmethod
     def save_schedule_data(cls, db: Session, schedules_data: List[Dict]) -> int:
-        """將班表資料儲存到資料庫，保護手動設置的area_code"""
+        """將班表資料儲存到資料庫"""
         saved_count = 0
-        
+
         for schedule_item in schedules_data:
             try:
                 date = schedule_item.get('date')
                 if not date:
                     continue
-                
-                # 檢查是否已存在該日期的資料
-                existing_schedule = db.query(DoctorSchedule).filter(
-                    DoctorSchedule.date == date
-                ).first()
-                
+
                 # 如果是今天的資料，跳過更新以保護手動管理
                 today = now().strftime('%Y%m%d')
                 if date == today:
                     logger.info(f"跳過今天({date})的班表更新，保護手動管理的資料")
                     continue
-                
+
+                # 檢查是否已存在該日期的資料
+                existing_schedule = db.query(DoctorSchedule).filter(
+                    DoctorSchedule.date == date
+                ).first()
+
                 if existing_schedule:
-                    # 更新現有資料
                     existing_schedule.duty_doctor = schedule_item.get('值班')
                     existing_schedule.schedule_notes = schedule_item.get('排班注記', [])
                     existing_schedule.updated_at = now()
-                    
-                    # 保存現有醫師的手動設置資料
-                    existing_doctors = {}
-                    for doctor in existing_schedule.day_shift_doctors:
-                        # 計算若從舊 summary 自動轉換，area_code 應該是什麼
-                        _, auto_area_code = cls.extract_name_and_area_from_summary(doctor.summary)
-                        existing_doctors[doctor.name] = {
-                            'area_code': doctor.area_code,
-                            'auto_area_code': auto_area_code,
-                            'status': doctor.status,
-                            'meeting_time': doctor.meeting_time
-                        }
-                    
+
                     # 刪除舊的白班醫師資料
                     db.query(DayShiftDoctor).filter(
                         DayShiftDoctor.schedule_id == existing_schedule.id
                     ).delete()
-                    
+
                     schedule = existing_schedule
                 else:
-                    # 創建新的班表記錄
                     schedule = DoctorSchedule(
                         date=date,
                         duty_doctor=schedule_item.get('值班'),
                         schedule_notes=schedule_item.get('排班注記', [])
                     )
                     db.add(schedule)
-                    db.flush()  # 確保獲得ID
-                    existing_doctors = {}  # 新記錄沒有現有醫師資料
-                
-                # 處理白班醫師
+                    db.flush()
+
+                # 處理白班醫師，area_code 直接由 API summary 決定
                 white_shifts = schedule_item.get('白班', [])
                 for shift in white_shifts:
                     summary = shift.get('summary', '')
                     time = shift.get('time', '')
-                    
+
                     if summary:
-                        name, area_code_from_api = cls.extract_name_and_area_from_summary(summary)
-                        
+                        name, area_code = cls.extract_name_and_area_from_summary(summary)
+
                         # 特例: 週三的陳柏羽/D 判定為疼痛門診
                         if cls.is_wednesday(date) and name == '陳柏羽' and summary.strip() == '陳柏羽/D':
-                            area_code_from_api = '疼痛門診'
+                            area_code = '疼痛門診'
                             logger.info(f"週三特例: {date} {summary} -> 疼痛門診")
-                        
-                        # 檢查是否有手動設置的資料
-                        if name in existing_doctors:
-                            preserved_data = existing_doctors[name]
-                            stored_area_code = preserved_data['area_code']
-                            auto_area_code = preserved_data['auto_area_code']
 
-                            if stored_area_code == auto_area_code:
-                                # area_code 與自動計算一致，代表未手動修改，使用新 API 值
-                                area_code = area_code_from_api
-                                logger.debug(f"醫師 {name} 的 area_code 更新為 API 新值：{area_code_from_api}（舊值：{stored_area_code}）")
-                            else:
-                                # area_code 與自動計算不同，代表有手動修改，保留
-                                area_code = stored_area_code
-                                logger.debug(f"保護醫師 {name} 的手動 area_code：{stored_area_code}（API 值：{area_code_from_api}）")
-
-                            status = preserved_data['status']
-                            meeting_time = preserved_data['meeting_time']
-                        else:
-                            # 使用API資料
-                            area_code = area_code_from_api
-                            status = 'on_duty'  # 新醫師預設狀態
-                            meeting_time = None
-                        
                         day_shift_doctor = DayShiftDoctor(
                             schedule_id=schedule.id,
                             name=name,
                             summary=summary,
                             time=time,
                             area_code=area_code,
-                            status=status,
-                            meeting_time=meeting_time
+                            status='on_duty',
+                            meeting_time=None
                         )
                         db.add(day_shift_doctor)
-                
-                # 新增邏輯：如果是週二到週五，自動新增范守仁醫師到手術室
+
+                # 如果是週二到週五，自動新增范守仁醫師到手術室
                 if cls.is_weekday_tuesday_to_friday(date):
                     cls.add_fan_shouwen_to_or(db, schedule.id)
-                
+
                 saved_count += 1
-                
+
             except Exception as e:
                 logger.error(f"儲存日期 {schedule_item.get('date')} 的班表時發生錯誤: {str(e)}")
                 continue
-        
+
         db.commit()
         logger.info(f"成功儲存 {saved_count} 天的班表資料")
         return saved_count
@@ -580,40 +542,17 @@ class DoctorScheduleService:
             
             result = []
             for schedule in schedules:
-                # 獲取白班醫師資料 - 返回所有醫師（包括active=false的）
                 day_shifts = []
                 for doctor in schedule.day_shift_doctors:
-                    # 檢查是否在開會中
                     is_in_meeting = cls.is_doctor_in_meeting(doctor.meeting_time) if doctor.meeting_time else False
-                    
-                    # 修復：優先使用手動設定的area_code，只有當area_code為空或與summary不符時才重新解析
-                    display_area_code = doctor.area_code
-                    
-                    # 只有在以下情況才重新解析summary：
-                    # 1. area_code為空
-                    # 2. area_code與summary中的原始區域字串相同（表示尚未手動修改過）
-                    if doctor.summary and not doctor.area_code:
-                        # 如果沒有area_code，從summary解析
-                        _, resolved_area_code = cls.extract_name_and_area_from_summary(doctor.summary)
-                        display_area_code = resolved_area_code
-                    elif doctor.summary and doctor.area_code:
-                        # 如果有area_code，檢查是否是原始的（未手動修改的）
-                        original_area_part = doctor.summary.split('/')[1].strip() if '/' in doctor.summary else ''
-                        if doctor.area_code == original_area_part:
-                            # 如果area_code與原始區域字串相同，說明可能需要模糊匹配處理
-                            _, resolved_area_code = cls.extract_name_and_area_from_summary(doctor.summary)
-                            display_area_code = resolved_area_code
-                        else:
-                            # 如果area_code與原始字串不同，說明已經手動修改過，保持不變
-                            display_area_code = doctor.area_code
-                    
+
                     day_shifts.append({
                         'id': doctor.id,
                         'name': doctor.name,
                         'summary': doctor.summary,
                         'time': doctor.time,
-                        'area_code': display_area_code,  # 使用修復後的area_code邏輯
-                        'status': doctor.status,  # 使用新的status字段
+                        'area_code': doctor.area_code,
+                        'status': doctor.status,
                         'meeting_time': doctor.meeting_time,
                         'is_in_meeting': is_in_meeting
                     })
