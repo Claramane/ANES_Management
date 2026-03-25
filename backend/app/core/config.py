@@ -79,6 +79,17 @@ class Settings(BaseSettings):
     FRONTEND_REDIRECT_AFTER_LOGIN: str = "http://localhost:3000/dashboard"
     FRONTEND_LINE_BIND_URL: str = "http://localhost:3000/settings"
 
+    # LLM 設定（AI 排班助手）
+    LLM_PROVIDER: str = "gemini"  # gemini 或 claude
+    GEMINI_API_KEY: Optional[str] = None
+    GEMINI_MODEL: str = "gemini-1.5-flash"
+    CLAUDE_API_KEY: Optional[str] = None
+    CLAUDE_MODEL: str = "claude-3-5-sonnet-20241022"
+    LLM_TIMEOUT: int = 30  # 秒
+    LLM_MAX_TOKENS: int = 1024
+    LLM_DAILY_LIMIT: int = 1000  # 每日最大請求數
+    LLM_ENABLE_CACHE: bool = True
+
     @field_validator("BACKEND_CORS_ORIGINS", mode="before")
     def assemble_cors_origins(cls, v: Union[str, List[str]], info) -> List[str]:
         if not v or v == []:
@@ -114,7 +125,7 @@ class Settings(BaseSettings):
     ADMIN_PASSWORD: str = "changeme"
     
     # 外部API設置
-    EXTERNAL_API_BASE: str = "https://docdutyapi.zeabur.app"
+    EXTERNAL_API_BASE: str = "https://docdutyapi.claramane.com"
 
     class Config:
         case_sensitive = True
