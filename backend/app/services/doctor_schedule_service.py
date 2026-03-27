@@ -208,20 +208,22 @@ class DoctorScheduleService:
                         
                         # 2b. 如果開會結束且在工作時間內且不是請假狀態，自動恢復上班狀態並刪除開會行程
                         elif not is_in_meeting and is_in_working_hours and doctor.status != 'off':
-                            # 記錄原開會時間（在刪除前）
-                            original_meeting_time = doctor.meeting_time
-                            
-                            # 檢查是否應該恢復上班狀態
-                            if doctor.status == 'off_duty':
-                                doctor.status = 'on_duty'
-                                updated_count += 1
-                                logger.info(f"醫師 {doctor.name} 開會結束，已自動恢復上班狀態（開會時間: {original_meeting_time}）")
-                            
-                            # 刪除過期的開會行程
-                            doctor.meeting_time = None
-                            doctor.updated_at = current_datetime
-                            meeting_cleared_count += 1
-                            logger.info(f"醫師 {doctor.name} 的過期開會行程已自動刪除（原開會時間: {original_meeting_time}）")
+                            # 只有當已過開會結束時間才清除，避免誤刪預先設定的未來開會
+                            if current_time > meeting_end:
+                                # 記錄原開會時間（在刪除前）
+                                original_meeting_time = doctor.meeting_time
+
+                                # 檢查是否應該恢復上班狀態
+                                if doctor.status == 'off_duty':
+                                    doctor.status = 'on_duty'
+                                    updated_count += 1
+                                    logger.info(f"醫師 {doctor.name} 開會結束，已自動恢復上班狀態（開會時間: {original_meeting_time}）")
+
+                                # 刪除過期的開會行程
+                                doctor.meeting_time = None
+                                doctor.updated_at = current_datetime
+                                meeting_cleared_count += 1
+                                logger.info(f"醫師 {doctor.name} 的過期開會行程已自動刪除（原開會時間: {original_meeting_time}）")
                         
                         # 2c. 如果開會結束但已過下班時間，只刪除開會行程，保持下班狀態
                         elif not is_in_meeting and is_past_work_time:
