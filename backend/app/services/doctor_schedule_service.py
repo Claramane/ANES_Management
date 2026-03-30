@@ -421,10 +421,24 @@ class DoctorScheduleService:
                     DoctorSchedule.date == date
                 ).first()
 
+                # 備份手動狀態（請假、開會時間），避免 API 更新時覆蓋
+                manual_statuses = {}
+
                 if existing_schedule:
                     existing_schedule.duty_doctor = schedule_item.get('值班')
                     existing_schedule.schedule_notes = schedule_item.get('排班注記', [])
                     existing_schedule.updated_at = now()
+
+                    # 備份需要保留的手動狀態（請假或預先設定的開會時間）
+                    existing_doctors = db.query(DayShiftDoctor).filter(
+                        DayShiftDoctor.schedule_id == existing_schedule.id
+                    ).all()
+                    for doc in existing_doctors:
+                        if doc.status == 'off' or doc.meeting_time:
+                            manual_statuses[doc.name] = {
+                                'status': doc.status,
+                                'meeting_time': doc.meeting_time
+                            }
 
                     # 刪除舊的白班醫師資料
                     db.query(DayShiftDoctor).filter(
@@ -455,14 +469,16 @@ class DoctorScheduleService:
                             area_code = '疼痛門診'
                             logger.info(f"週三特例: {date} {summary} -> 疼痛門診")
 
+                        # 還原手動設定的狀態（請假或預先設定的開會時間）
+                        saved = manual_statuses.get(name, {})
                         day_shift_doctor = DayShiftDoctor(
                             schedule_id=schedule.id,
                             name=name,
                             summary=summary,
                             time=time,
                             area_code=area_code,
-                            status='on_duty',
-                            meeting_time=None
+                            status=saved.get('status', 'on_duty'),
+                            meeting_time=saved.get('meeting_time')
                         )
                         db.add(day_shift_doctor)
 
