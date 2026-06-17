@@ -1,0 +1,11 @@
+name = "anes-worker"
+main = "src/index.ts"
+compatibility_date = "2025-06-17"
+
+[vars]
+SUPABASE_URL = "https://mruruchxdnyvltqsmskj.supabase.co"
+# SUPABASE_SERVICE_ROLE_KEY = set via `wrangler secret put`
+
+[[crons]]
+# 醫師班表同步：每天凌晨 2 點（Asia/Taipei = UTC+8，即 UTC 18:00 前一天）
+crons = ["0 18 * * *"]
