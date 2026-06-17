@@ -1,0 +1,17 @@
+# 依賴
+node_modules/
+
+# 建置輸出
+dist/
+dist-ssr/
+
+# 環境變數（含金鑰，禁止提交）
+.env
+.env.local
+.env.*.local
+
+# 編輯器 / 系統
+.DS_Store
+*.local
+.vscode/*
+!.vscode/extensions.json
