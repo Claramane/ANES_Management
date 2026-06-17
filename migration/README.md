@@ -26,6 +26,7 @@ Supabase (PostgreSQL + Auth + Realtime)
 
 | 檔案 | 內容 |
 |------|------|
+| [`00-conversation-log.md`](./00-conversation-log.md) | 對話與決策紀錄：評估脈絡、決策總結、結論 |
 | [`01-current-backend.md`](./01-current-backend.md) | 現況盤點：技術棧、模組規模、依賴清單 |
 | [`02-target-architecture.md`](./02-target-architecture.md) | 目標技術選型與專案結構 |
 | [`03-decisions.md`](./03-decisions.md) | 關鍵決策記錄（ADR） |
