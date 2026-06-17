@@ -42,13 +42,34 @@
 
 ---
 
-## Phase 3 — 核心寫入邏輯
+## Phase 3 — 版本控制 + 排班生成（schema 破壞性改動，最重）
 
-- [ ] 排班生成（先寫純函式 + 對舊系統輸出做回歸測試 → 再接 API）。
-- [ ] 班表版本控制（版本 / diff / publish）。
-- [ ] 加班 CRUD + 批次整月重建。
+> 進入此階段前必須完成：Phase 1（認證）+ Phase 2（唯讀模組），以及 `09-dsm-reference.md` 的 schema 對照確認。
 
-> 進入此階段前需完成：**參考 DoctorShiftManagement 的版本控制與換班邏輯**。
+**3a — branch 模型 schema**（DSM migration SQL 為模板）：
+- [ ] 新增 `schedule_branches`、`merge_requests`、`schedule_commits`、`schedule_heads`、`schedule_changes`（含 `branch_id` 欄）。
+- [ ] 建立 bootstrap：將現有 `schedule_versions` 最新版本轉成每月的 initial main commit + schedule_heads。
+- [ ] `monthly_schedules` 從 source of truth 改為物化 cache（新增 update trigger 在 merge 時刷新）。
+
+**3b — branch RPC**（照搬 DSM，調整 ANES 欄位名稱）：
+- [ ] `open_branch` / `write_to_branch` / `get_branch_state` / `close_branch`（fast-forward only 先）
+- [ ] `merge_branch`（含 3-way merge + conflict detection）
+- [ ] `restore_to_commit`
+
+**3c — 排班生成（與 branch 整合）**：
+- [ ] `generate_monthly_schedule` 翻成 TS 純函式（`scheduleGenerator.ts`）。
+- [ ] 先寫單元測試：輸入 nurses + formulas + 月份，輸出 schedule rows，對比舊 FastAPI 輸出。
+- [ ] 生成後直接寫進 `monthly_schedules`（main），並建一筆 `kind='manual'` commit 做快照。
+- [ ] 此步驟走 **Cloudflare Worker**（純運算量大，不適合 PL/pgSQL）。
+
+**3d — 加班 CRUD + 批次整月重建**：
+- [ ] `overtime_records` / `overtime_monthly_scores` CRUD（純 Supabase RLS，前端直連）。
+- [ ] 批次整月重建（走 Worker，注意 CPU 限制）。
+
+**3e — 前端護理長介面**：
+- [ ] `/admin/schedule` 路由加 BranchRibbon 組件（參考 DSM `BranchRibbon.jsx`）。
+- [ ] 編輯模式：改寫 `write_to_branch` 路徑；main 唯讀顯示。
+- [ ] 版本歷史頁（commit timeline + restore）。
 
 ---
 

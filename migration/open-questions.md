@@ -1,43 +1,40 @@
 # 待確認問題 (Open Questions)
 
-開始實作前需要你拍板或補資訊的項目。
-
-## 🔴 需參考 DoctorShiftManagement 專案
-
-> 目前這個 session 的 GitHub 權限只含 `anes_management`，無法讀取 `Claramane/DoctorShiftManagement`。
-> 加入方式見下方「如何讓我讀到該專案」。需要從該專案確認：
-
-- [ ] **登入**：DoctorShiftManagement 怎麼做 Supabase Google Auth？email ↔ 員工對應怎麼處理？有無白名單 / 後門帳號？是否有可直接沿用的 auth middleware / 前端整合。
-- [ ] **換班**：換班的資料模型與成立流程？接受換班時如何連動更新班表？
-- [ ] **班表版本控制**：版本 / diff 的結構與比較邏輯？每次存檔開新版本還是覆蓋？base version 規則？換班是否產生新版本？
-- [ ] 是否已有可重用的 Hono / Drizzle / wrangler 設定範本可直接抄。
-
-## 🟠 認證（Phase 1 卡點）
-
-- [ ] 所有員工都有可用的公司 Google 帳號嗎？沒有的人怎麼登入？
-- [ ] 是否需要保留一組本地管理員後門（Google 服務中斷時不被鎖死）？
-- [ ] `webauthn_credentials` / `line_accounts` 歷史資料要保留還是直接廢棄？
-
-## 🟠 醫師班表（精簡範圍）
-
-- [ ] 自動下班偵測確定整組移除（ADR-001）。那**手動**操作（set-status / area-code / meeting-time / toggle-leave）還要由本系統提供嗎，還是也移到另一個專案？
-- [ ] 外部 API 同步後「保留手動狀態覆蓋」與特殊業務規則（週三疼痛門診、週二~五自動加入特定醫師）還需要嗎？
-- [ ] Cron 更新頻率與範圍（未來幾個月）維持現況即可嗎？
-
-## 🟡 資料 / 其他
-
-- [ ] 現有資料量級（users / monthly_schedules / overtime 筆數）→ 影響搬遷與批次策略。
-- [ ] `logs`（操作日誌）是否續用？還是改用 Supabase 內建 log / 不記錄。
-- [ ] 線上狀態改 Realtime presence 後，是否仍要把上線記錄寫回 DB 做歷史？
+> 更新於 2026-06-17：本 session 已讀取 `DoctorShiftManagement`，主要卡點已解決。
 
 ---
 
-## 如何讓我讀到 DoctorShiftManagement
+## 已解決
 
-本 session 鎖定在 `anes_management`，中途無法自助加 repo。三選一：
+- [x] **登入 / email 對應**：DSM 以 `user_profiles.email` 為業務主鍵，admin 預先建帳號，首次 Google OAuth 後由 DB trigger 自動連結 `auth.users.id`。無自助註冊。→ ANES 照抄。（見 `09-dsm-reference.md` §認證）
+- [x] **權限模型**：DSM 已從 role-only 演進為 `permissions[]` capability-based，RLS 靠 `app_private.has_permission()`。ANES 應跟進，不繼續綁死 role/identity。
+- [x] **版本控制架構**：已決定採 DSM branch/PR 模型（ADR-006），`schedule_versions + schedule_version_diffs` 廢棄。
+- [x] **換班連動**：已決定採 DSM 三階段審核 + branch merge 模型（ADR-007）。
+- [x] **前端架構**：單一 SPA + `/admin/*` / `/app/*` 路由切分（ADR-008），不分兩個 repo。
+- [x] **WebAuthn 後門**：DSM 驗證 TOTP 能用（break-glass），Passkey 因 WebView 限制暫停。ANES 不需要本地密碼後門，走 Google + TOTP 即可。
+- [x] **Hono/Drizzle/Worker 範本**：DSM 有多個 Cloudflare Worker（passkey / notification / shift / doc_dutyAPI），可直接當結構範本。但主流程不走 Worker gateway，改走 Supabase RPC + RLS（見 `09-dsm-reference.md`）。
 
-1. **環境設多 repo（推薦）**：claude.ai/code → 環境設定 → 把 `DoctorShiftManagement` 加進 repository 清單 → 用該環境重開 session。
-2. **新開 session 跑在該 repo**：直接在它上面問登入/換班/版本控制，把結論貼回。
-3. **貼檔案**：把相關檔案內容貼給我。
+---
 
-> 並確認 Claude GitHub App 的安裝範圍涵蓋該 private repo（GitHub → Settings → Applications → Claude → Configure）。
+## 🟠 仍需你拍板（認證 Phase 1 卡點）
+
+- [ ] **所有護理師都有公司 Google 帳號嗎？** 如果沒有，Phase 1 會卡。沒 Google 帳號的人要怎麼登入？
+- [ ] **TOTP 要設嗎？** DSM 對 admin/supervisor 強制 TOTP；ANES 要對護理長（head_nurse）做同樣的事嗎？
+- [ ] **`webauthn_credentials` / `line_accounts` 歷史資料**：直接廢棄（不搬），還是保留唯讀備份？
+
+---
+
+## 🟠 醫師班表（精簡範圍，需確認）
+
+- [ ] 自動下班偵測確定整組移除（ADR-001）。**手動**操作（set-status / area-code / meeting-time / toggle-leave）還要由 ANES 本系統提供嗎，還是全移到另一個專案？
+- [ ] 外部 API 同步後「保留手動狀態覆蓋」與特殊業務規則（週三疼痛門診、週二~五自動加入特定醫師）還需要嗎？
+
+---
+
+## 🟡 資料 / 其他
+
+- [ ] **現有資料量級**（users / monthly_schedules / overtime 筆數）→ 影響搬遷與批次策略。
+- [ ] **`logs` 表**：是否續用，或改用 `schedule_changes` audit 取代操作日誌？
+- [ ] **Realtime presence**：線上/下線改 Supabase Realtime presence 後，是否仍要把上線記錄寫回 DB 做歷史？DSM 沒有這個功能，需要自行設計。
+- [ ] **`shift_rules` 整合**：換班驗證（`app_private.validate_swap`）要整合現有的 `shift_rules` 表（工時規則）嗎？DSM 沒有對應的工時規則表，這塊要自己設計。
+- [ ] **area_code 換班連動**：換班成立時，area_code（OR/DR/3F）要一起對調嗎？

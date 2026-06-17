@@ -58,7 +58,45 @@
 
 ---
 
-## 待補決策（移到 open-questions 追蹤）
+---
 
-- 換班 / 班表版本控制的具體規則，需參考 **DoctorShiftManagement** 專案後再定案。
-- 是否保留操作日誌（`logs` 表）寫入。
+## ADR-006：班表版本控制改用 DSM branch/PR 模型（撤銷 ADR-004 版本控制部分）
+
+- **決策**：**不**沿用現有 `schedule_versions + schedule_version_diffs`（JSON-diff）版本控制；改為採用與 `DoctorShiftManagement` 相同的 **git-style branch/PR 模型**（`schedule_branches + merge_requests + schedule_changes` audit + 3-way merge）。
+- **背景**：讀取 DSM 後確認，DSM 已完整落地此模型（EAD-94，v2.0.0），包含 30+ 支 PL/pgSQL RPC（open_branch / write_to_branch / merge_branch / get_branch_state …）和前端組件（BranchRibbon / BranchMergeConflictDialog）。換班流程（ADR-007）也依賴同一套 3-way merge 基礎設施；若保留 JSON-diff，換班就無法共用，等於兩套版本控制並存。
+- **影響**：
+  - `schedule_versions`、`schedule_version_diffs` **不遷移到 Supabase**（廢棄，僅保留歷史查閱用的唯讀備份）。
+  - 新增表：`schedule_branches`、`merge_requests`（從 DSM migration SQL 為模板調整）。
+  - `schedule_changes` audit 表保留（DSM 也有，含 `branch_id` 欄），`monthly_schedules` 角色從「source of truth」改為「main branch 物化 cache」。
+  - 現有版本控制前端（版本列表、diff 顯示）需要對應改寫（可參考 DSM `VersionHistoryPage`）。
+  - 這是 **破壞性 schema 變更**，Phase 3 前需準備資料 migration script（歷史 schedule_versions 轉成 main branch 的初始 commit）。
+  - ADR-004「保留 schema 不重新設計」仍適用於**其他 18 張表**，版本控制兩張除外。
+
+---
+
+## ADR-007：換班採用 DSM branch/PR + 兩階段審核模型
+
+- **決策**：現有 `shift_swap_requests`（pending→accepted/rejected 兩狀態）改為 DSM 的 **三狀態流**（`pending_target → pending_admin → approved`）+ per-month branch 模型。
+- **背景**：DSM `SHIFT_SWAP_DESIGN.md`（EAD-155）已設計完整，換班 = 兩人兩天整日對調、雙階段審核（被換人先同意、再到 admin）、接受時走 `merge_branch_internal`（3-way merge），與 ADR-006 的版本控制共用同一基礎設施。
+- **影響**：
+  - `shift_swap_requests` 表需新增欄位（`target_decision`、`branch_ids[]`、`merge_request_ids[]`、`swap_plan` JSONB 等）。
+  - 後端換班 RPC（`submit_swap_request` / `decide_swap_request_as_target` / `review_swap_request` / `cancel_swap_request`）以 DSM 的 PL/pgSQL 設計為模板翻寫，含前端 `validateSwap` 邏輯的後端對應版本（`app_private.validate_swap`）。
+  - 這塊**依賴 ADR-006 完成先**（branch 表存在後才能開 swap branch）。
+
+---
+
+## ADR-008：前端改用單一 SPA，以路由區分護理長 / 護理師介面
+
+- **決策**：不分兩個前端 repo；一個 React SPA，路由區分 `/admin/*`（護理長排班、版本控制）和 `/app/*`（護理師看班、換班、加班）。
+- **背景**：你的構想是護理長用電腦排班、護理師用手機換班；DSM 已驗證此模式（同一份 code + `isAdminAppPath()` / `isUserAppPath()` 路由判斷 + role gate）。共用登入狀態和 Supabase client，維護成本最低。
+- **影響**：
+  - 現有 React 前端**不需要**分成兩個 repo 或兩個部署；但路由結構需要重組。
+  - `/admin/*` 路由加 role gate（`head_nurse` / `admin` 才能進）；護理長功能集中在此。
+  - `/app/*` 為一般護理師介面，手機友好，lazy load。
+  - 護理長排班介面放 `/admin/schedule`，含 BranchRibbon 編輯模式。
+
+---
+
+## 待補決策
+
+- 是否保留操作日誌（`logs` 表）寫入，或改用 Supabase 的 `schedule_changes` audit 取代。

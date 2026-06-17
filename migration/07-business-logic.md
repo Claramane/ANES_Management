@@ -25,32 +25,74 @@
 
 ---
 
-## 2. 班表版本控制（`routes/schedules.py`）
+## 2. 班表版本控制（ADR-006：改用 DSM branch/PR 模型，不移植現有 JSON-diff）
 
-涉及表：`schedule_versions`、`schedule_version_diffs`、`monthly_schedules.version_id`。
+> **決策已定（ADR-006）**：`schedule_versions + schedule_version_diffs` 不移植。採 DSM 的 git-style branch 模型。
 
-- **產生版本**：`generate` / `saveMonth` 時建立 `ScheduleVersion`（`version_number` 如 `v1.0_YYYYMM`、`month`、`is_base_version`、`is_published`）。
-- **基準版本**：`is_base_version` 標記；diff 以 base 為基準。
-- **差異比較**：`/versions/compare` → 算兩版本差異，存 `schedule_version_diffs.diff_data`（JSON）。
-- **發布**：`/versions/{id}/publish` → 設 `is_published=true`、記錄 `published_by` / `published_at`、寫 log。
+**新模型核心概念**（直接照搬 DSM）：
+
+- `monthly_schedules` = main branch 物化 cache（一般護理師直接讀這張表，快）
+- `schedule_branches` = 草稿 / 請假 / 換班等各類 branch
+- branch state = `base_commit.snapshot` + `replay(schedule_changes WHERE branch_id=X)`，不存實體 row
+- `merge_branch()` RPC 執行 3-way merge，無衝突 fast-forward，有衝突走 conflict resolution
+
+**護理長排班編輯流程**（複製 DSM admin_edit flow）：
+1. 進 `/admin/schedule` → 預設 main 唯讀
+2. 點「開新草稿」→ `open_branch(kind='admin_edit')`
+3. 編輯格子 → `write_to_branch` RPC（樂觀更新）
+4. 「提交到 main」→ `compute_branch_merge_conflicts` 預檢 → 無衝突 merge，有衝突顯示 dialog
+
+**核心 RPC 清單**（以 DSM 為模板，欄位名稱視 ANES 資料結構微調）：
+
+| RPC | 功能 |
+|-----|------|
+| `open_branch(month, kind, name?)` | 開草稿 |
+| `write_to_branch(branch_id, date, shift_type, op, old, new)` | 寫格子變更 |
+| `get_branch_state(branch_id)` | 重建 branch 快照 |
+| `compute_branch_merge_conflicts(branch_id)` | 預檢衝突 |
+| `merge_branch(branch_id, message?, conflict_resolution?)` | 3-way merge → main |
+| `close_branch(branch_id)` | 捨棄草稿 |
+| `restore_to_commit(commit_id)` | 還原整月到某 commit |
+
+**DSM 可直接參考的 migration SQL**：`DoctorShiftManagement/supabase/migrations/` 中 `20260529*` 系列（phase 1a~3f）。
 
 **移植注意**：
-- diff 演算法需確認（目前以 JSON 存差異）→ **需參考 DoctorShiftManagement 的版本控制做法**，確認 diff 結構與比較邏輯是否要對齊。
-- 「版本 + diff」模式適合保留，但要釐清：每次存檔開新版本，還是覆蓋？base version 何時重設？
+- ANES 的 `monthly_schedules` 欄位和 DSM 的 `shift_assignments` 不同（ANES 含 area_code、SNP/LNP 等欄位），schema 要 ANES 化，但 RPC 邏輯可照搬。
+- 自動排班生成（`generate_monthly_schedule`）產生的 row 直接進 `monthly_schedules`（main），並建一筆 `kind='manual'` commit 做快照。
 
 ---
 
-## 3. 換班流程（`routes/shift_swap.py`，749 行）
+## 3. 換班流程（ADR-007：改用 DSM 三階段審核 + branch 模型）
 
-- 申請（`POST /`）→ 驗證（`/validate`，班別衝突 + 工時規則 `shift_rules`）→ 接受（`/accept`）→ 連動更新班表 / 加班。
-- `swap_type`：`shift` / `mission` / `overtime` 三種，各自更新不同欄位。
-- 接受時：更新雙方 `monthly_schedules`（shift / area / work_time）與 `overtime_records`。
-- 狀態機：`pending → accepted / rejected`（另有 cancelled / expired 概念）。
+> **決策已定（ADR-007）**：現有兩狀態（pending/accepted）升級為三階段（pending_target → pending_admin → approved），換班成立走 `merge_branch`，依賴 ADR-006 完成先。
 
-**移植注意**：
-- 連動更新需**交易**（多表一致）。Worker + postgres.js 可用 transaction；Hyperdrive transaction pool 下確認交易行為。
-- 工時規則驗證邏輯（`max_consecutive` / `min_rest_hours` / `max_weekly_shifts` …）為純運算，可移植。
-- **需參考 DoctorShiftManagement** 確認換班與版本控制如何互動（換班是否產生新班表版本？）。
+**三段狀態流**（來自 DSM `SHIFT_SWAP_DESIGN.md`）：
+
+```
+submit → pending_target → (target同意) → pending_admin → (admin核准) → approved → merge_branch
+                        → (target拒絕) → rejected_by_target → close_branch
+                                                           → (re-validate失敗) → invalidated
+                        → (requester取消) → cancelled → close_branch
+```
+
+**換班成立的連動**：
+- 換班 = 兩人兩天**整日對調**（可能 2~4 個格子），不只是單一班別互換
+- `submit_swap_request` 時先模擬完整 swap、跑衝突驗證（前端 `validateSwap` 邏輯 + 後端 PL/pgSQL 對應版本），再 per-month 開 `kind='swap_request'` branch，把 4 格變更寫進 branch
+- admin 核准 → `merge_branch_internal`（與版本控制共用 3-way merge）
+
+**`shift_swap_requests` 表新增欄位**（對照 DSM）：
+- `target_decision`、`target_decided_at`
+- `swap_plan` JSONB（4 格 final state，供 audit）
+- `branch_ids` UUID[]、`merge_request_ids` UUID[]
+
+**可直接參考的 DSM 代碼**：
+- `SHIFT_SWAP_DESIGN.md`：完整 RPC 規格（submit / decide_as_target / review / cancel / validate）
+- `src/utils/swapValidation.js`：前端驗證邏輯（移植成 ANES 版本時需調整班別定義）
+
+**ANES vs DSM 換班差異**：
+- DSM 換班對象是醫師（doctor_code A-L），ANES 是護理師（user_id + shift_type 更複雜）
+- ANES 的 `shift_rules` 表（工時規則）需要整合進後端的 `app_private.validate_swap`
+- ANES 換班可能涉及 area_code 連動（需確認）
 
 ---
 

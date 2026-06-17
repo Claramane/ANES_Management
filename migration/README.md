@@ -35,8 +35,19 @@ Supabase (PostgreSQL + Auth + Realtime)
 | [`06-api-mapping.md`](./06-api-mapping.md) | 全部 API 端點對照（去/留/改） |
 | [`07-business-logic.md`](./07-business-logic.md) | 需移植的核心商業邏輯 |
 | [`08-migration-plan.md`](./08-migration-plan.md) | 分階段執行計畫 |
-| [`open-questions.md`](./open-questions.md) | 待確認問題（含要參考 DoctorShiftManagement 的項目） |
+| [`09-dsm-reference.md`](./09-dsm-reference.md) | DoctorShiftManagement 參考摘要（認證 / 版本控制 / 換班 / 路由） |
+| [`open-questions.md`](./open-questions.md) | 待確認問題（已解決項目已標記）|
 
-## 現階段結論
+## 最新架構決策（2026-06-17 更新）
 
-砍掉「醫師自動下班偵測、WebSocket、自建認證」三項後，原本最棘手的三大平台障礙（常駐排程、長連線、WebAuthn）幾乎全部消失。**剩下的工作主力是：把排班生成 / 版本控制邏輯翻寫成 TS，以及把資料存取層從 SQLAlchemy 換成 Supabase。** 屬於工程量大但路徑清楚的遷移。
+讀取 DoctorShiftManagement 後，確認了三個重要決策：
+
+- **ADR-006**：版本控制改用 DSM 的 **git-style branch/PR 模型**（`schedule_branches + 3-way merge`），`schedule_versions + schedule_version_diffs` 廢棄。
+- **ADR-007**：換班升級為 DSM 的**三段審核流程**（pending_target → pending_admin → approved），接受時走 `merge_branch`。
+- **ADR-008**：前端為**單一 SPA**，以 `/admin/*` / `/app/*` 路由區分護理長 / 護理師介面。
+
+另一重要發現：DSM 主流程走「前端直連 Supabase + PL/pgSQL RPC」，**不經 Hono API gateway**。ANES 跟進此模式，Worker 只負責自動排班生成和醫師班表 Cron 同步兩件事。
+
+## 原始結論（仍適用）
+
+砍掉「醫師自動下班偵測、WebSocket、自建認證」三項後，最棘手的三大平台障礙幾乎消失。**剩下的工作主力是：排班生成翻成 TS（Worker）、版本控制改 branch 模型（PL/pgSQL）、認證改 Supabase Auth。** 路徑清楚，工程量大但無架構死路。

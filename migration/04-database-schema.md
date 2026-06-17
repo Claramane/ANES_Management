@@ -10,12 +10,12 @@
 | `formula_schedule_patterns` | 公式班別模式（每組每日）| ✅ 保留 |
 | `nurse_formula_assignments` | 護理師→公式 分組指派 | ✅ 保留 |
 | `pattern_nurse_assignments` | 護理師→pattern 指派 | ✅ 保留 |
-| `monthly_schedules` | 月班表分配（含 area_code / 版本）| ✅ 保留（核心）|
-| `schedule_versions` | 班表版本 | ✅ 保留（版本控制核心）|
-| `schedule_version_diffs` | 版本差異（JSON）| ✅ 保留 |
+| `monthly_schedules` | 月班表分配（含 area_code / 版本）| ✅ 保留，角色改為「main branch 物化 cache」（見 ADR-006）|
+| `schedule_versions` | 班表版本（JSON-diff 模型）| ❌ **廢棄**（ADR-006 改用 DSM branch 模型）|
+| `schedule_version_diffs` | 版本差異（JSON）| ❌ **廢棄**（ADR-006）|
 | `overtime_records` | 加班記錄 | ✅ 保留 |
 | `overtime_monthly_scores` | 加班月分數 | ✅ 保留 |
-| `shift_swap_requests` | 換班申請 | ✅ 保留（核心）|
+| `shift_swap_requests` | 換班申請 | ✅ 保留，但**需新增欄位**（ADR-007：target_decision、branch_ids[]、swap_plan JSONB 等）|
 | `shift_rules` | 班別規則 | ✅ 保留 |
 | `doctor_schedules` | 醫師班表（每日）| ✅ 保留 |
 | `day_shift_doctors` | 白班醫師明細 | ✅ 保留 |
@@ -29,8 +29,7 @@
 ## 核心關聯（保留）
 
 ```
-users 1──* monthly_schedules *──1 schedule_versions
-                                        └──* schedule_version_diffs (version_id / base_version_id 雙外鍵)
+users 1──* monthly_schedules（物化 main cache）
 users 1──* overtime_records
 users 1──* overtime_monthly_scores
 users 1──* shift_swap_requests (requestor_id / acceptor_id / target_nurse_id 三外鍵)
@@ -40,6 +39,18 @@ doctor_schedules 1──* day_shift_doctors
 announcement_categories 1──* announcements / announcement_permissions
 ```
 
+## 新增表（ADR-006 branch 模型）
+
+以下為遷移後新增，設計參考 DSM migration SQL（`SCHEDULE_BRANCHES_DESIGN.md`）：
+
+| 資料表 | 用途 |
+|--------|------|
+| `schedule_branches` | 草稿 / 請假 / 換班等各類 branch（per-month，含 base_commit_id / owner / status）|
+| `merge_requests` | 每個 branch 對應一個 PR，記錄審核狀態與 conflict_resolution |
+| `schedule_commits` | 每次 merge 到 main 的 commit snapshot（含 kind='merge' / 'restore' / 'manual'）|
+| `schedule_heads` | 每月 main 的 HEAD 指標 |
+| `schedule_changes` | audit log，含 `branch_id` 欄（NULL=main 路徑，非 NULL=branch 路徑）|
+
 ## `users` 表重點欄位（權限相關）
 
 - `role`：`head_nurse` / `nurse` / `boss` / `admin`（功能權限判定）
@@ -47,16 +58,25 @@ announcement_categories 1──* announcements / announcement_permissions
 - `group_data`：JSON（分組資料，排班生成時 `json.loads` 使用）
 - `username`：員工編號（目前登入帳號）
 
-## SQLAlchemy → Drizzle 遷移注意
+## 前端直連 Supabase vs Worker gateway
+
+採 ADR-006/007 後，版本控制與換班的核心邏輯移入 **PL/pgSQL RPC**，前端直接呼叫 `supabase.rpc()`，不經 Worker。Worker 僅負責：
+
+- 自動排班生成（純運算，避免 RPC timeout）
+- 醫師班表外部 API 同步（Cron Trigger）
+- 其他需要 service key 的衛星功能
+
+這和計畫初版（Worker 持有所有商業邏輯）不同，但符合 DSM 已驗證的落地方式。
+
+## 資料搬遷注意
 
 | 項目 | 注意 |
 |------|------|
-| JSON 欄位 | `schedule_notes` / `diff_data` / `group_data` → Drizzle `jsonb`，前端格式需保持一致 |
-| 多重外鍵到 users | `shift_swap_requests`、`schedule_version_diffs` 需明確指定 relation，Drizzle 要分別命名 |
-| 預設值 `func.now()` | → Drizzle `defaultNow()`；`onupdate` → 需用 trigger 或應用層處理 |
-| `BigInteger` 主鍵 | `line_accounts.id`（若廢棄則不需處理）|
-| 日期型別 | `Date` vs `DateTime`，注意時區（Supabase 預設 UTC，商業邏輯用 Asia/Taipei）|
-| raw SQL（如線上使用者查詢）| 改 presence 後多半不需要；保留者用 Drizzle `sql` template |
+| JSON 欄位 | `group_data` / `swap_plan` 等 → Supabase `jsonb`，格式保持一致 |
+| 多重外鍵到 users | `shift_swap_requests` 三外鍵需明確指定 relation |
+| 預設值 `func.now()` | → Supabase trigger 或 `DEFAULT NOW()` |
+| 日期型別 | `Date` vs `TIMESTAMPTZ`，注意時區（Supabase 預設 UTC，商業邏輯用 Asia/Taipei）|
+| schedule_versions 歷史資料 | 不搬遷；保留一份 pg_dump 唯讀備份，Phase 5 評估是否廢棄表 |
 
 ## Supabase 設定要點
 
